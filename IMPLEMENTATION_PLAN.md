@@ -10,18 +10,9 @@ Specs updated: `tui-layout.md`, `keybindings.md`, `tool-call-groups.md`, `stream
 
 ## Tasks
 
-### 1. Data pipeline — carry raw input and result content through the stack  ✅ DONE
+### 1–2. Data pipeline + expanded content rendering  ✅ DONE
 
-All raw input and result content now flows through the full stack: parser → executor → session → model. Tests updated in all three packages.
-
-### 2. Expanded content rendering — new file `internal/tui/expand.go`
-
-- [ ] **`maxExpandedLines` constant** (20)
-- [ ] **`expandedContentLines(tc *model.ToolCall) []string`** — returns content lines per tool type: Bash (`$ cmd` + output), Edit (diff), Read/Grep/Glob/Task (result content), Write (input content), default (result content). Truncates to `maxExpandedLines` with `... N more lines ...` footer. Returns nil if no content available.
-- [ ] **`renderEditDiff(rawInput map[string]interface{}) []string`** — splits `old_string` into `-` prefixed lines, `new_string` into `+` prefixed lines
-- [ ] **`toolCallLineCount(tc *model.ToolCall) int`** — returns 1 if collapsed, `1 + len(content)` if expanded
-- [ ] **`renderExpandedContentLine(line, toolName string, width int, th theme.Theme) string`** — 4-space indent, Edit `-` lines red (`StatusError`), Edit `+` lines green (`StatusSuccess`), all others dim (`ForegroundDim`), truncate to width
-- [ ] **tests**: new `expand_test.go` — test `expandedContentLines` for each tool type, truncation, nil on empty; test `renderEditDiff` for basic replacement, multi-line, empty old/new; test `toolCallLineCount` collapsed vs expanded
+Raw input/result content flows through parser → executor → session → model. Expansion rendering in `expand.go` with 33 tests: `expandedContentLines` (per tool type), `renderEditDiff`, `toolCallLineCount`, `renderExpandedContentLine`.
 
 ### 3. Cursor system updates — `internal/tui/cursor.go`
 
