@@ -2,101 +2,9 @@
 
 ## Context
 
-The codebase has a monolithic `internal/tui/tui.go` (1,276 lines) containing all business logic, subprocess management, rendering, navigation, and formatting. The specs (`specs/architecture.md`) define a layered architecture with 7 packages and 13+ files, each independently testable. Only `internal/config` has tests today. This plan decomposes the code bottom-up in incremental steps, keeping `make check` green at each step.
+The codebase had a monolithic `internal/tui/tui.go` (1,276 lines) containing all business logic, subprocess management, rendering, navigation, and formatting. The specs (`specs/architecture.md`) define a layered architecture with 7 packages and 13+ files, each independently testable. This plan decomposed the code bottom-up in incremental steps, keeping `make check` green at each step. Steps 1–8 are now complete.
 
-## Steps
-
-### ~~Step 1: Extract pure formatting helpers → `tui/format.go`~~ ✅ DONE
-
-Extracted `FormatDuration`, `FormatDurationValue`, `FormatTokens`, `ToolIcon`, `GroupSummaryUnit`, and new `IsKnownTool` into `tui/format.go`. All call sites in `tui.go` updated to exported names. Originals deleted. `tui/format_test.go` has table-driven tests covering all functions. `tui.go` reduced from 1,276 to ~1,220 lines.
-
----
-
-### ~~Step 2: Extract flat cursor math → `tui/cursor.go`~~ ✅ DONE
-
-Extracted all 6 cursor functions to standalone functions in `tui/cursor.go`: `FlatCursorCount`, `FlatToItem`, `ItemToFlat`, `FlatCursorLineRange`, `ItemLineCount`, `TotalLines`. Added `selectedItems()` helper to Model. All call sites updated. `tui/cursor_test.go` has 26 tests covering empty, standalone, expanded/collapsed groups, mixed items, text blocks, compact view, out-of-range, and roundtrip consistency. `tui.go` reduced from ~1,220 to ~1,080 lines.
-
----
-
-~~Step 3: Extract auto-follow state machine → `tui/autofollow.go`~~ ✅ DONE
-
-Extracted `AutoFollow` struct with `NewAutoFollow()`, `OnManualMove(atEnd bool)`, `JumpToEnd()`, `OnNewItem()`, `Following()` into `tui/autofollow.go`. Replaced `autoFollowLeft bool` / `autoFollowRight bool` fields in `Model` with `AutoFollow` instances. All 12 call sites updated. `tui/autofollow_test.go` has 8 tests covering: starts following, manual move pauses, move-at-end keeps, resume at end, jump resumes, new item doesn't resume, new item doesn't disrupt, full pause-jump-pause sequence. `tui.go` reduced from ~1,080 to ~1,060 lines.
-
----
-
-### ~~Step 4: Add tests for `model`, `parser`, `theme`~~ ✅ DONE
-
-Added comprehensive table-driven tests for all three packages:
-
-**`model/model_test.go`:** 5 test functions covering `ToolCallGroup.Status()` (8 cases: all-running, all-done, mixed running+done, error+done, error+running, all-error, single), `GroupDuration()` (5 cases: running returns 0, single child, overlapping span, sequential, error children), `CompletedCount()` (4 cases), `ToolCallCount()` (2 cases), `Iteration.ToolCallCount()` (5 cases: empty, standalone, groups, mixed, text blocks ignored).
-
-**`parser/parser_test.go`:** 10 test functions covering `ParseStreamEvent` with empty/invalid/unknown input, result type, assistant tool_use with usage, text events, empty text skipped, mixed content, user tool_result (success + error), `extractToolSummary` (11 cases per tool type), `extractToolUseLineInfo` (7 cases for Edit/Write), `extractToolResultLineInfo` (5 cases), `truncate` (3 cases).
-
-**`theme/theme_test.go`:** 2 test functions covering `LookupTheme` (existing themes with field validation, missing, empty name) and `ThemeNames` (count, sorted order, roundtrip lookup).
-
----
-
-### ~~Step 5: Create `internal/session` — business logic controller~~ ✅ DONE
-
-Created `internal/session` package with two files:
-
-**`session/events.go`** — typed event definitions: `Event` interface, `ToolUseEvent`, `ToolResultEvent`, `TextEvent`, `UsageEvent`, `IterationEndEvent`, `AssistantBatchEvent`, `SubprocessExitEvent`. The last two were added in Step 6 to support the executor layer.
-
-**`session/session.go`** — `Controller` struct with `NewController()`, `ProcessAssistantBatch()`, `ProcessToolResult()`, `ProcessUsage()`, `StartIteration()`, `CompleteIteration()`, `ShouldStartNext()`, `RunningIterationIdx()`, `HasKnownModel()`, `LastModel()`. Injectable `Clock func() time.Time` (defaults to `time.Now`).
-
-**`session/session_test.go`** — 23 tests (8 for batch processing covering single/grouped/mixed/text-breaks/empty/no-iteration, 6 for tool result matching covering standalone/group-child/error/Read-lineinfo/Edit-keeps-lineinfo/not-found, 3 for usage covering known-model-cost/unknown-model/accumulation, 4 for iteration lifecycle covering start/complete-success/complete-failed/no-running, table-driven tests for `ShouldStartNext` (7 cases) and `RunningIterationIdx` (5 cases), plus default-clock and full end-to-end lifecycle tests).
-
----
-
-### ~~Step 6: Create `internal/executor` — subprocess abstraction~~ ✅ DONE
-
-Created `internal/executor` package with four files:
-
-**`executor/executor.go`** — `Executor` interface with `Start(ctx, prompt) (<-chan session.Event, error)` and `Kill() error`.
-
-**`executor/claude.go`** — `ClaudeExecutor` that spawns `claude -p --dangerously-skip-permissions --output-format=stream-json --verbose`, pipes prompt to stdin, reads stdout line-by-line via `bufio.Scanner` (10MB buffer), converts `parser.*Event` → `session.*Event`. ToolUseEvent and TextEvent from a single assistant message are grouped into `session.AssistantBatchEvent`; UsageEvent, ToolResultEvent, and IterationEndEvent are sent individually. Channel is closed after subprocess exits and a `SubprocessExitEvent` is sent. Only package that imports `parser`.
-
-**`executor/fake.go`** — `FakeExecutor` with pre-loaded `[]session.Event`, optional `Delay`, records `Prompt`. Supports context cancellation for delayed delivery.
-
-**`session/events.go`** — Added `AssistantBatchEvent` (wraps `[]Event` for batch processing) and `SubprocessExitEvent` (signals subprocess exit with optional error).
-
-**`executor/executor_test.go`** — 13 tests: FakeExecutor (delivers events, records prompt, empty events, delay+cancel, Kill no-op), interface compliance (both impls), readEvents (assistant batch with usage, tool result success/error, iteration end, skips invalid, multiple lines, tool summary extraction, empty input).
-
----
-
-### ~~Step 7: Wire controller + executor into TUI~~ ✅ DONE
-
-Rewired `tui.go` to use `session.Controller` and `executor.Executor`:
-
-- **Model fields**: Added `controller *session.Controller` and `exec executor.Executor`. Removed `cmd *exec.Cmd`, `hasKnownModel bool`, `lastModel string`. Kept `eventCh` as bridge channel.
-- **NewModel signature**: Added `executor.Executor` parameter. Constructor creates `session.Controller` internally.
-- **Message types**: `assistantBatchMsg`, `toolResultMsg`, `usageMsg` are now thin wrappers around `session.*Event` types.
-- **Update method**: `assistantBatchMsg` delegates to `controller.ProcessAssistantBatch()`. `usageMsg` delegates to `controller.ProcessUsage()`. `toolResultMsg` delegates to `controller.ProcessToolResult()`, then handles UI group collapse logic. `subprocessExitMsg` delegates to `controller.CompleteIteration()` and `controller.ShouldStartNext()`.
-- **spawnIteration()**: Delegates to `controller.StartIteration()` + `exec.Start()`. Bridge goroutine converts `session.Event` → `tea.Msg`.
-- **Quit handling**: Uses `exec.Kill()` instead of `cmd.Process.Kill()`.
-- **Removed**: `readEvents()`, `applyToolResult()`, `runningIterationIdx()`, `shouldStartNext()` — all now in session controller.
-- **Removed imports**: `bufio`, `io`, `os/exec`, `parser`. Added: `context`, `executor`, `session`.
-- **main.go**: Constructs `&executor.ClaudeExecutor{}` and passes to `NewModel`.
-- `tui.go` reduced from ~1,060 to ~730 lines. `make check` green.
-
----
-
-### Step 8: Split TUI rendering into component files
-
-**`tui/header.go`** — `HeaderProps` struct + `RenderHeader(HeaderProps) string` pure function. Extract from `viewHeader`.
-
-**`tui/iterlist.go`** — `IterList` struct (cursor + AutoFollow) + `IterListProps`. Extract `renderLeftPane` → `View`, left-pane key handling → `Update`, auto-follow hook `OnNewIteration`.
-
-**`tui/timeline.go`** — `Timeline` struct (cursor + scroll + AutoFollow) + `TimelineProps`. Extract `renderRightPane*`, `renderTextBlockLines`, `renderToolCallLine`, `renderGroupHeaderLine` → `View`, right-pane key handling → `Update`, scroll helpers, `OnNewItems`.
-
-**Rename `tui.go` → `tui/root.go`** — thin coordinator: owns Controller, Executor, IterList, Timeline, focus, dimensions, global keys (q, ctrl+c, tab, h/l, v, gg/G). `View()` calls `RenderHeader` + `IterList.View` + `Timeline.View`.
-
-**Tests:**
-- `header_test.go` — `RenderHeader` with various props, assert substrings (duration, tokens, cost, iteration count, status icon)
-- `iterlist_test.go` — cursor movement, auto-follow, rendering with 0/1/N iterations
-- `timeline_test.go` — cursor movement, enter toggle, scroll, expand/collapse, rendering
-
----
+## Remaining Steps
 
 ### Step 9: Integration test with fake executor
 
@@ -119,10 +27,15 @@ Rewired `tui.go` to use `session.Controller` and `executor.Executor`:
 
 | File | Role |
 |------|------|
-| `internal/tui/tui.go` | Root TUI model (~730 lines, wired to controller+executor) |
-| `internal/tui/format.go` | Pure formatting helpers (extracted Step 1) |
-| `internal/session/session.go` | **New** — business logic controller |
-| `internal/executor/claude.go` | **New** — subprocess abstraction |
+| `internal/tui/root.go` | Root TUI model (~430 lines, thin coordinator) |
+| `internal/tui/header.go` | Header bar component (100 lines, pure `RenderHeader`) |
+| `internal/tui/iterlist.go` | Iteration list component (167 lines, `IterList` struct) |
+| `internal/tui/timeline.go` | Message timeline component (439 lines, `Timeline` struct) |
+| `internal/tui/format.go` | Pure formatting helpers |
+| `internal/tui/cursor.go` | Flat cursor math |
+| `internal/tui/autofollow.go` | Auto-follow state machine |
+| `internal/session/session.go` | Business logic controller |
+| `internal/executor/claude.go` | Subprocess abstraction |
 | `internal/model/model.go` | Data types (shared across layers) |
 | `internal/parser/parser.go` | JSON parsing (consumed only by executor) |
 | `specs/architecture.md` | Target architecture reference |
@@ -145,3 +58,4 @@ After step 10: full spec review pass.
 - **Step 5: Create session controller** — `session/events.go` (5 event types + Event interface), `session/session.go` (Controller with 10 methods), `session/session_test.go` (23 tests covering grouping, result matching, usage/cost, iteration lifecycle, full end-to-end).
 - **Step 6: Create executor** — `executor/executor.go` (Executor interface), `executor/claude.go` (ClaudeExecutor with readEvents), `executor/fake.go` (FakeExecutor), `executor/executor_test.go` (13 tests). Added `AssistantBatchEvent` and `SubprocessExitEvent` to `session/events.go`.
 - **Step 7: Wire controller + executor into TUI** — Replaced inline business logic with `session.Controller` calls, replaced subprocess code with `executor.Executor`. Message types wrap `session.*Event`. `parser` import removed from `tui`. `main.go` constructs `ClaudeExecutor`. `tui.go` reduced to ~730 lines.
+- **Step 8: Split TUI rendering into component files** — Decomposed `tui.go` (880 lines) into 4 files matching `specs/architecture.md`: `root.go` (432 lines, thin coordinator owning Controller, Executor, IterList, Timeline, focus, dimensions, global keys), `header.go` (100 lines, pure `RenderHeader(HeaderProps) string` function), `iterlist.go` (167 lines, `IterList` struct with Cursor, AutoFollow, Update/View/OnNewIteration/JumpToTop/JumpToBottom), `timeline.go` (439 lines, `Timeline` struct with Cursor, Scroll, AutoFollow, Update/View/OnNewItems/JumpToTop/JumpToBottom/ResetPosition, plus `renderTextBlockLines`, `renderToolCallLine`, `renderGroupHeaderLine`). Tests: `header_test.go` (5 test fns covering duration/tokens, context % thresholds, cost visibility, iteration progress, status icons), `iterlist_test.go` (11 test fns covering cursor movement, bounds, auto-follow, OnNewIteration, jump, view with 0/1/N iterations, page navigation), `timeline_test.go` (16 test fns covering cursor movement, bounds, enter toggle for text blocks and groups, auto-follow, OnNewItems, jump, reset, view with empty/tool calls/text blocks/compact/group collapsed/expanded, scroll). `make check` green. Old `tui.go` deleted.
