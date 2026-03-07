@@ -12,9 +12,10 @@ import (
 )
 
 // IterList is the left pane component that displays the iteration list.
-// It owns its cursor position and auto-follow state.
+// It owns its cursor position, scroll offset, and auto-follow state.
 type IterList struct {
 	Cursor     int
+	Scroll     int
 	AutoFollow AutoFollow
 }
 
@@ -47,12 +48,14 @@ func (il *IterList) Update(msg tea.KeyMsg, props IterListProps) tea.Cmd {
 		if il.Cursor < count-1 {
 			il.Cursor++
 		}
+		il.ensureCursorVisible(props)
 		il.AutoFollow.OnManualMove(atEnd())
 
 	case "k", "up":
 		if il.Cursor > 0 {
 			il.Cursor--
 		}
+		il.ensureCursorVisible(props)
 		il.AutoFollow.OnManualMove(atEnd())
 
 	case "g":
@@ -61,10 +64,12 @@ func (il *IterList) Update(msg tea.KeyMsg, props IterListProps) tea.Cmd {
 		if count > 0 {
 			il.Cursor = count - 1
 		}
+		il.ensureCursorVisible(props)
 		il.AutoFollow.JumpToEnd()
 
 	case "home":
 		il.Cursor = 0
+		il.Scroll = 0
 		il.AutoFollow.OnManualMove(atEnd())
 
 	case "pgdown":
@@ -75,6 +80,7 @@ func (il *IterList) Update(msg tea.KeyMsg, props IterListProps) tea.Cmd {
 		if il.Cursor < 0 {
 			il.Cursor = 0
 		}
+		il.ensureCursorVisible(props)
 		il.AutoFollow.OnManualMove(atEnd())
 
 	case "pgup":
@@ -82,6 +88,7 @@ func (il *IterList) Update(msg tea.KeyMsg, props IterListProps) tea.Cmd {
 		if il.Cursor < 0 {
 			il.Cursor = 0
 		}
+		il.ensureCursorVisible(props)
 		il.AutoFollow.OnManualMove(atEnd())
 
 	case "enter":
@@ -91,12 +98,13 @@ func (il *IterList) Update(msg tea.KeyMsg, props IterListProps) tea.Cmd {
 	return nil
 }
 
-// View renders the iteration list.
+// View renders the iteration list, showing only the visible slice based on scroll offset.
 func (il *IterList) View(props IterListProps) string {
 	style := lipgloss.NewStyle().Width(props.Width).Height(props.Height)
 	highlight := lipgloss.NewStyle().Background(lipgloss.Color(props.Theme.Highlight))
 
-	var lines []string
+	// Build all lines
+	var allLines []string
 	for i, iter := range props.Iterations {
 		var statusIcon string
 		var statusColor, iterColor string
@@ -139,19 +147,35 @@ func (il *IterList) View(props IterListProps) string {
 			}
 			line = highlight.Render(line)
 		}
-		lines = append(lines, line)
+		allLines = append(allLines, line)
 	}
 
-	content := strings.Join(lines, "\n")
+	// Apply scroll: render only the visible slice
+	start := il.Scroll
+	if start >= len(allLines) {
+		start = len(allLines) - 1
+	}
+	if start < 0 {
+		start = 0
+	}
+	end := start + props.Height
+	if end > len(allLines) {
+		end = len(allLines)
+	}
+
+	visible := allLines[start:end]
+	content := strings.Join(visible, "\n")
 	return style.Render(content)
 }
 
 // OnNewIteration updates auto-follow state when a new iteration is added.
 // If auto-follow is active, the cursor moves to the latest iteration.
-func (il *IterList) OnNewIteration(count int) {
+func (il *IterList) OnNewIteration(count int, height int) {
 	il.AutoFollow.OnNewItem()
 	if il.AutoFollow.Following() && count > 0 {
 		il.Cursor = count - 1
+		il.clampScroll(count, height)
+		il.ensureCursorVisibleSimple(count, height)
 	}
 }
 
@@ -163,13 +187,45 @@ func (il *IterList) SelectedIndex() int {
 // JumpToTop moves the cursor to the first iteration.
 func (il *IterList) JumpToTop() {
 	il.Cursor = 0
+	il.Scroll = 0
 	il.AutoFollow.OnManualMove(false)
 }
 
 // JumpToBottom moves the cursor to the last iteration and resumes auto-follow.
-func (il *IterList) JumpToBottom(count int) {
+func (il *IterList) JumpToBottom(count int, height int) {
 	if count > 0 {
 		il.Cursor = count - 1
+		il.ensureCursorVisibleSimple(count, height)
 	}
 	il.AutoFollow.JumpToEnd()
+}
+
+// ensureCursorVisible adjusts scroll so the cursor row is within the viewport.
+func (il *IterList) ensureCursorVisible(props IterListProps) {
+	il.ensureCursorVisibleSimple(len(props.Iterations), props.Height)
+}
+
+// ensureCursorVisibleSimple adjusts scroll using count and height directly.
+func (il *IterList) ensureCursorVisibleSimple(count int, height int) {
+	if il.Cursor < il.Scroll {
+		il.Scroll = il.Cursor
+	}
+	if il.Cursor >= il.Scroll+height {
+		il.Scroll = il.Cursor - height + 1
+	}
+	il.clampScroll(count, height)
+}
+
+// clampScroll ensures scroll doesn't exceed the maximum valid offset.
+func (il *IterList) clampScroll(count int, height int) {
+	maxScroll := count - height
+	if maxScroll < 0 {
+		maxScroll = 0
+	}
+	if il.Scroll > maxScroll {
+		il.Scroll = maxScroll
+	}
+	if il.Scroll < 0 {
+		il.Scroll = 0
+	}
 }

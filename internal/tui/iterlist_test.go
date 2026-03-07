@@ -107,12 +107,12 @@ func TestIterList_OnNewIteration(t *testing.T) {
 	il := NewIterList()
 
 	// Auto-follow moves cursor to last
-	il.OnNewIteration(3)
+	il.OnNewIteration(3, 20)
 	if il.Cursor != 2 {
 		t.Errorf("expected cursor=2 after OnNewIteration(3), got %d", il.Cursor)
 	}
 
-	il.OnNewIteration(5)
+	il.OnNewIteration(5, 20)
 	if il.Cursor != 4 {
 		t.Errorf("expected cursor=4 after OnNewIteration(5), got %d", il.Cursor)
 	}
@@ -131,7 +131,7 @@ func TestIterList_JumpToTop(t *testing.T) {
 func TestIterList_JumpToBottom(t *testing.T) {
 	il := NewIterList()
 
-	il.JumpToBottom(10)
+	il.JumpToBottom(10, 20)
 	if il.Cursor != 9 {
 		t.Errorf("expected cursor=9 after JumpToBottom(10), got %d", il.Cursor)
 	}
@@ -302,5 +302,166 @@ func TestIterList_PageUp(t *testing.T) {
 	il.Update(tea.KeyMsg{Type: tea.KeyPgUp}, props)
 	if il.Cursor != 5 {
 		t.Errorf("expected cursor=5 after pgup from 15 with height=10, got %d", il.Cursor)
+	}
+}
+
+// Scroll behavior tests — cursor beyond viewport triggers scroll adjustment
+
+func TestIterList_ScrollDown_CursorBelowViewport(t *testing.T) {
+	il := NewIterList()
+	iters := makeIterations(20)
+	props := iterListProps(iters)
+	props.Height = 5
+
+	// Move cursor beyond the viewport (height=5, so visible rows 0-4)
+	for i := 0; i < 6; i++ {
+		il.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}}, props)
+	}
+
+	if il.Cursor != 6 {
+		t.Errorf("expected cursor=6, got %d", il.Cursor)
+	}
+	// Scroll should have adjusted so cursor is visible (scroll = cursor - height + 1 = 2)
+	if il.Scroll != 2 {
+		t.Errorf("expected scroll=2, got %d", il.Scroll)
+	}
+}
+
+func TestIterList_ScrollUp_CursorAboveViewport(t *testing.T) {
+	il := NewIterList()
+	il.Cursor = 10
+	il.Scroll = 10
+	iters := makeIterations(20)
+	props := iterListProps(iters)
+	props.Height = 5
+
+	// Move cursor up above the viewport
+	for i := 0; i < 3; i++ {
+		il.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'k'}}, props)
+	}
+
+	if il.Cursor != 7 {
+		t.Errorf("expected cursor=7, got %d", il.Cursor)
+	}
+	// Scroll should have adjusted so cursor is visible
+	if il.Scroll != 7 {
+		t.Errorf("expected scroll=7, got %d", il.Scroll)
+	}
+}
+
+func TestIterList_ScrollClamp_AtBoundaries(t *testing.T) {
+	il := NewIterList()
+	iters := makeIterations(3)
+	props := iterListProps(iters)
+	props.Height = 10
+
+	// With 3 items and height 10, scroll should be clamped to 0
+	il.Scroll = 5
+	il.ensureCursorVisible(props)
+	if il.Scroll != 0 {
+		t.Errorf("expected scroll=0 (clamped), got %d", il.Scroll)
+	}
+}
+
+func TestIterList_PageDown_ScrollsViewport(t *testing.T) {
+	il := NewIterList()
+	iters := makeIterations(30)
+	props := iterListProps(iters)
+	props.Height = 10
+
+	il.Update(tea.KeyMsg{Type: tea.KeyPgDown}, props)
+	// Cursor moved to 10, scroll should keep cursor visible
+	if il.Cursor != 10 {
+		t.Errorf("expected cursor=10, got %d", il.Cursor)
+	}
+	if il.Scroll > il.Cursor || il.Scroll+props.Height <= il.Cursor {
+		t.Errorf("cursor %d not visible with scroll=%d height=%d", il.Cursor, il.Scroll, props.Height)
+	}
+}
+
+func TestIterList_PageUp_ScrollsViewport(t *testing.T) {
+	il := NewIterList()
+	il.Cursor = 20
+	il.Scroll = 15
+	iters := makeIterations(30)
+	props := iterListProps(iters)
+	props.Height = 10
+
+	il.Update(tea.KeyMsg{Type: tea.KeyPgUp}, props)
+	// Cursor moved to 10
+	if il.Cursor != 10 {
+		t.Errorf("expected cursor=10, got %d", il.Cursor)
+	}
+	// Scroll should keep cursor visible
+	if il.Scroll > il.Cursor || il.Scroll+props.Height <= il.Cursor {
+		t.Errorf("cursor %d not visible with scroll=%d height=%d", il.Cursor, il.Scroll, props.Height)
+	}
+}
+
+func TestIterList_OnNewIteration_ScrollFollows(t *testing.T) {
+	il := NewIterList()
+	// Simulate auto-follow with a small viewport
+	for i := 1; i <= 15; i++ {
+		il.OnNewIteration(i, 5)
+	}
+
+	if il.Cursor != 14 {
+		t.Errorf("expected cursor=14, got %d", il.Cursor)
+	}
+	// Scroll should keep cursor visible in a height-5 viewport
+	if il.Scroll != 10 {
+		t.Errorf("expected scroll=10, got %d", il.Scroll)
+	}
+}
+
+func TestIterList_JumpToBottom_ScrollsToEnd(t *testing.T) {
+	il := NewIterList()
+
+	il.JumpToBottom(20, 5)
+	if il.Cursor != 19 {
+		t.Errorf("expected cursor=19, got %d", il.Cursor)
+	}
+	if il.Scroll != 15 {
+		t.Errorf("expected scroll=15, got %d", il.Scroll)
+	}
+}
+
+func TestIterList_JumpToTop_ScrollsToTop(t *testing.T) {
+	il := NewIterList()
+	il.Cursor = 15
+	il.Scroll = 10
+
+	il.JumpToTop()
+	if il.Cursor != 0 {
+		t.Errorf("expected cursor=0, got %d", il.Cursor)
+	}
+	if il.Scroll != 0 {
+		t.Errorf("expected scroll=0, got %d", il.Scroll)
+	}
+}
+
+func TestIterList_View_OnlyRendersVisibleSlice(t *testing.T) {
+	il := NewIterList()
+	il.Cursor = 7
+	il.Scroll = 5
+	iters := makeIterations(20)
+	props := iterListProps(iters)
+	props.Height = 5
+
+	result := il.View(props)
+
+	// Should show iterations 6-10 (indices 5-9, 1-indexed display 6-10)
+	if !strings.Contains(result, "Iter 6") {
+		t.Error("expected 'Iter 6' in visible view")
+	}
+	if !strings.Contains(result, "Iter 10") {
+		t.Error("expected 'Iter 10' in visible view")
+	}
+	// Should NOT show iterations outside the viewport
+	if strings.Contains(result, "Iter 1 ") {
+		t.Error("did not expect 'Iter 1' in visible view (scrolled past)")
+	}
+	if strings.Contains(result, "Iter 15") {
+		t.Error("did not expect 'Iter 15' in visible view (below viewport)")
 	}
 }

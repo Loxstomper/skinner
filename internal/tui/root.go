@@ -210,7 +210,7 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	case "G", "end":
 		if m.focusedPane == leftPane {
-			m.iterList.JumpToBottom(len(m.controller.Session.Iterations))
+			m.iterList.JumpToBottom(len(m.controller.Session.Iterations), m.rightPaneHeight())
 			m.timeline.ResetPosition()
 		} else {
 			m.timeline.JumpToBottom(m.currentTimelineProps())
@@ -361,7 +361,7 @@ func (m *Model) timelineProps(items []model.TimelineItem) TimelineProps {
 
 func (m *Model) spawnIteration() tea.Cmd {
 	m.controller.StartIteration()
-	m.iterList.OnNewIteration(len(m.controller.Session.Iterations))
+	m.iterList.OnNewIteration(len(m.controller.Session.Iterations), m.rightPaneHeight())
 	if m.iterList.AutoFollow.Following() {
 		m.timeline.ResetPosition()
 	}

@@ -47,6 +47,8 @@ A vertical list of all iterations in the current session. Each entry shows:
 - **Call count**: total number of tool calls in that iteration.
 - **Duration**: total wallclock time of the iteration. Shown with `...` suffix while still running.
 
+**Scrolling**: When iterations exceed the viewport height, the list scrolls to keep the cursor visible. Moving the cursor beyond the viewport edge adjusts the scroll offset. The view renders only the visible slice of iterations.
+
 **Auto-follow**: During a run, the cursor auto-follows to the latest iteration. If the user manually selects a previous iteration, auto-follow pauses. Selecting the latest iteration re-enables auto-follow.
 
 ## Right Pane — Message Timeline

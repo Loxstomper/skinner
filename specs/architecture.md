@@ -247,7 +247,7 @@ type IterListProps struct {
 
 func (il *IterList) Update(msg tea.KeyMsg, props IterListProps) tea.Cmd
 func (il *IterList) View(props IterListProps) string
-func (il *IterList) OnNewIteration(count int)  // auto-follow hook
+func (il *IterList) OnNewIteration(count int, height int)  // auto-follow hook
 func (il *IterList) SelectedIndex() int
 ```
 
