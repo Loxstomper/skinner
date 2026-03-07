@@ -55,6 +55,7 @@ type Model struct {
 
 	// Cost tracking
 	hasKnownModel bool
+	lastModel     string
 
 	// Auto-follow
 	autoFollowLeft  bool
@@ -193,8 +194,11 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.session.OutputTokens += msg.OutputTokens
 		m.session.CacheReadTokens += msg.CacheReadInputTokens
 		m.session.CacheCreationTokens += msg.CacheCreationInputTokens
+		m.session.LastInputTokens = msg.InputTokens
+		m.session.LastCacheReadTokens = msg.CacheReadInputTokens
 		if pricing, ok := m.config.Pricing[msg.Model]; ok {
 			m.hasKnownModel = true
+			m.lastModel = msg.Model
 			m.session.TotalCost += float64(msg.InputTokens) * pricing.Input
 			m.session.TotalCost += float64(msg.OutputTokens) * pricing.Output
 			m.session.TotalCost += float64(msg.CacheReadInputTokens) * pricing.CacheRead
@@ -282,7 +286,7 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "q", "ctrl+c":
 		m.quitting = true
 		if m.cmd != nil && m.cmd.Process != nil {
-			m.cmd.Process.Kill()
+			_ = m.cmd.Process.Kill()
 		}
 		return m, tea.Quit
 
@@ -447,14 +451,35 @@ func (m *Model) jumpToBottom() {
 func (m *Model) viewHeader() string {
 	dim := lipgloss.NewStyle().Foreground(lipgloss.Color(m.theme.ForegroundDim))
 
-	// Left side: duration, tokens, cost
+	// Build centre content: duration, tokens, context %, cost
 	dur := formatDurationValue(time.Since(m.session.StartTime))
 	inputTokens := m.session.InputTokens + m.session.CacheReadTokens + m.session.CacheCreationTokens
 	outputTokens := m.session.OutputTokens
 
-	left := fmt.Sprintf(" ⏱ %s   ↑%s ↓%s tokens", dur, formatTokens(inputTokens), formatTokens(outputTokens))
+	centreText := fmt.Sprintf("⏱ %s   ↑%s ↓%s tokens", dur, formatTokens(inputTokens), formatTokens(outputTokens))
+	centreRendered := dim.Render(centreText)
+
+	// Context window percentage
+	if m.hasKnownModel && m.lastModel != "" {
+		if pricing, ok := m.config.Pricing[m.lastModel]; ok && pricing.ContextWindow > 0 {
+			pct := int((m.session.LastInputTokens + m.session.LastCacheReadTokens) * 100 / int64(pricing.ContextWindow))
+			ctxText := fmt.Sprintf("   ctx %d%%", pct)
+			var ctxColor string
+			switch {
+			case pct >= 90:
+				ctxColor = m.theme.StatusError
+			case pct >= 70:
+				ctxColor = m.theme.StatusRunning
+			default:
+				ctxColor = m.theme.ForegroundDim
+			}
+			centreRendered += lipgloss.NewStyle().Foreground(lipgloss.Color(ctxColor)).Render(ctxText)
+		}
+	}
+
+	// Cost
 	if m.hasKnownModel {
-		left += fmt.Sprintf("   ~$%.2f", m.session.TotalCost)
+		centreRendered += dim.Render(fmt.Sprintf("   ~$%.2f", m.session.TotalCost))
 	}
 
 	// Right side: iteration progress + status icon
@@ -484,22 +509,23 @@ func (m *Model) viewHeader() string {
 		}
 	}
 
-	styledIcon := lipgloss.NewStyle().Foreground(lipgloss.Color(statusColor)).Render(statusIcon)
-	right := iterText + " " + styledIcon + " "
+	styledStatusIcon := lipgloss.NewStyle().Foreground(lipgloss.Color(statusColor)).Render(statusIcon)
+	rightRendered := dim.Render(iterText+" ") + styledStatusIcon + dim.Render(" ")
 
-	// Pad to fill the full width
-	leftRendered := dim.Render(left)
-	rightTextRendered := dim.Render(iterText+" ") + styledIcon + dim.Render(" ")
-
-	leftWidth := lipgloss.Width(leftRendered)
-	rightWidth := lipgloss.Width(rightTextRendered)
-	gap := m.width - leftWidth - rightWidth
+	// Centre the stats in the space to the left of the right-aligned iteration indicator
+	centreWidth := lipgloss.Width(centreRendered)
+	rightWidth := lipgloss.Width(rightRendered)
+	availableWidth := m.width - rightWidth
+	leftPad := (availableWidth - centreWidth) / 2
+	if leftPad < 1 {
+		leftPad = 1
+	}
+	gap := m.width - leftPad - centreWidth - rightWidth
 	if gap < 0 {
 		gap = 0
 	}
-	_ = right // used via rightTextRendered
 
-	return leftRendered + strings.Repeat(" ", gap) + rightTextRendered
+	return strings.Repeat(" ", leftPad) + centreRendered + strings.Repeat(" ", gap) + rightRendered
 }
 
 func formatTokens(tokens int64) string {
@@ -581,7 +607,7 @@ func (m *Model) renderLeftPane(width, height int) string {
 		if i == m.selectedIter {
 			displayWidth := lipgloss.Width(line)
 			if displayWidth < width {
-				line = line + strings.Repeat(" ", width-displayWidth)
+				line += strings.Repeat(" ", width-displayWidth)
 			}
 			line = highlight.Render(line)
 		}
@@ -699,7 +725,7 @@ func (m *Model) renderRightPaneWithLines(lines []renderedLine, width, height int
 		if m.focusedPane == rightPane && line.flatIdx >= 0 && line.flatIdx == m.rightCursor {
 			displayWidth := lipgloss.Width(text)
 			if displayWidth < width {
-				text = text + strings.Repeat(" ", width-displayWidth)
+				text += strings.Repeat(" ", width-displayWidth)
 			}
 			text = highlight.Render(text)
 		}
@@ -719,7 +745,7 @@ func (m *Model) renderTextBlockLines(tb *model.TextBlock, width int) []string {
 	}
 	if !tb.Expanded && len(textLines) > maxLines {
 		textLines = textLines[:maxLines]
-		textLines[maxLines-1] = textLines[maxLines-1] + "…"
+		textLines[maxLines-1] += "…"
 	}
 
 	textStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(m.theme.TextBlock))

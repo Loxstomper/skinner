@@ -134,5 +134,9 @@ type Session struct {
 	CacheCreationTokens int64
 	TotalCost           float64
 
+	// Latest usage from most recent assistant event (replaced, not accumulated)
+	LastInputTokens     int64
+	LastCacheReadTokens int64
+
 	StartTime time.Time
 }

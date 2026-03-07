@@ -92,6 +92,10 @@ Accumulate token counts from `message.usage` across all `assistant` events in th
 - `cache_read_input_tokens` — total cache read tokens
 - `cache_creation_input_tokens` — total cache creation tokens
 
+### Context Window Usage
+
+In addition to accumulated totals, track the **latest** `input_tokens` and `cache_read_input_tokens` values from the most recent `assistant` event (not accumulated — replaced each time). These represent the current context window consumption and are used to calculate the context window percentage displayed in the header (see [tui-layout.md](tui-layout.md)). The percentage is: `(latest_input_tokens + latest_cache_read_input_tokens) / context_window * 100`, where `context_window` comes from the model's pricing config (see [config.md](config.md)).
+
 ### Cost Calculation
 
 Cost is computed per `assistant` event using the model's pricing rates (see [config.md](config.md) for the pricing table):

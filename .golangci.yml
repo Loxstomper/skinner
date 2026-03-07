@@ -1,0 +1,45 @@
+version: "2"
+
+# golangci-lint configuration for skinner
+#
+# Why this file exists:
+# Default golangci-lint only enables a small set of linters. This config
+# enables additional linters that catch real bugs (errcheck, govet,
+# staticcheck, ineffassign, unused) and enforces code quality standards
+# (gocritic, misspell, unconvert, unparam) while suppressing noise from
+# generated code (sqlc, templ) and known safe patterns (deferred rollbacks,
+# template renders).
+
+run:
+  timeout: 5m
+
+linters:
+  enable:
+    # Default linters (explicit for clarity)
+    - errcheck
+    - govet
+    - ineffassign
+    - staticcheck
+    - unused
+    # Additional linters
+    - gocritic      # Opinionated but catches real issues (e.g., appendAssign, dupBranchBody)
+    - misspell      # Catches typos in comments, strings, and identifiers
+    - unconvert     # Flags unnecessary type conversions
+    - unparam       # Detects unused function parameters
+    - bodyclose     # Ensures HTTP response bodies are closed
+    - durationcheck # Catches incorrect time.Duration multiplications
+    - nilerr        # Detects returning nil instead of the error in error-checking blocks
+    - copyloopvar   # Catches loop variable capture bugs (replaced exportloopref)
+    - reassign      # Flags reassignment of package-level variables
+
+linters-settings:
+  gocritic:
+    enabled-tags:
+      - diagnostic
+      - performance
+    disabled-checks:
+      - hugeParam          # Too noisy for struct-heavy code
+      - rangeValCopy       # Often intentional in Go
+      - commentedOutCode   # Triggers on ASCII art and examples
+  misspell:
+    locale: US

@@ -77,7 +77,7 @@ func ParseStreamEvent(line string) ([]interface{}, error) {
 
 	var event streamEvent
 	if err := json.Unmarshal([]byte(line), &event); err != nil {
-		return nil, nil // skip unparseable lines
+		return nil, nil //nolint:nilerr // skip unparseable lines
 	}
 
 	switch event.Type {

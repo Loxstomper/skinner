@@ -14,4 +14,16 @@ Go
 
 ## Build
 
-Standard `go build`. Single binary output named `skinner`.
+A `Makefile` provides the standard targets:
+
+| Target    | Description                        |
+|-----------|------------------------------------|
+| `build`   | Compile the `skinner` binary       |
+| `clean`   | Remove the compiled binary         |
+| `test`    | Run all tests (`go test ./...`)    |
+| `fmt`     | Format source with `gofmt`         |
+| `lint`    | Run `golangci-lint`                |
+| `vet`     | Run `go vet` on all packages       |
+| `check`   | Run `vet` + `lint` + `test`        |
+| `install` | Install binary to `GOPATH/bin`     |
+| `run`     | Build and run `skinner`            |

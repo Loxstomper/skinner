@@ -9,10 +9,11 @@ import (
 )
 
 type ModelPricing struct {
-	Input       float64
-	Output      float64
-	CacheRead   float64
-	CacheCreate float64
+	Input         float64
+	Output        float64
+	CacheRead     float64
+	CacheCreate   float64
+	ContextWindow int
 }
 
 type Config struct {
@@ -32,22 +33,25 @@ func DefaultConfig() Config {
 func DefaultPricing() map[string]ModelPricing {
 	return map[string]ModelPricing{
 		"claude-opus-4-6": {
-			Input:       0.000005,
-			Output:      0.000025,
-			CacheRead:   0.0000005,
-			CacheCreate: 0.00000625,
+			Input:         0.000005,
+			Output:        0.000025,
+			CacheRead:     0.0000005,
+			CacheCreate:   0.00000625,
+			ContextWindow: 200000,
 		},
 		"claude-sonnet-4-5": {
-			Input:       0.000003,
-			Output:      0.000015,
-			CacheRead:   0.0000003,
-			CacheCreate: 0.00000375,
+			Input:         0.000003,
+			Output:        0.000015,
+			CacheRead:     0.0000003,
+			CacheCreate:   0.00000375,
+			ContextWindow: 200000,
 		},
 		"claude-haiku-4-5": {
-			Input:       0.000001,
-			Output:      0.000005,
-			CacheRead:   0.0000001,
-			CacheCreate: 0.00000125,
+			Input:         0.000001,
+			Output:        0.000005,
+			CacheRead:     0.0000001,
+			CacheCreate:   0.00000125,
+			ContextWindow: 200000,
 		},
 	}
 }
@@ -68,7 +72,7 @@ func LoadConfig() Config {
 	if err != nil {
 		return cfg
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	section := ""
 	scanner := bufio.NewScanner(f)
@@ -107,16 +111,23 @@ func LoadConfig() Config {
 		case strings.HasPrefix(section, "pricing."):
 			modelName := strings.TrimPrefix(section, "pricing.")
 			mp := cfg.Pricing[modelName]
-			if v, err := strconv.ParseFloat(value, 64); err == nil {
-				switch key {
-				case "input":
-					mp.Input = v
-				case "output":
-					mp.Output = v
-				case "cache_read":
-					mp.CacheRead = v
-				case "cache_create":
-					mp.CacheCreate = v
+			switch key {
+			case "context_window":
+				if v, err := strconv.Atoi(value); err == nil {
+					mp.ContextWindow = v
+				}
+			default:
+				if v, err := strconv.ParseFloat(value, 64); err == nil {
+					switch key {
+					case "input":
+						mp.Input = v
+					case "output":
+						mp.Output = v
+					case "cache_read":
+						mp.CacheRead = v
+					case "cache_create":
+						mp.CacheCreate = v
+					}
 				}
 			}
 			cfg.Pricing[modelName] = mp

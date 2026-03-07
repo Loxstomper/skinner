@@ -9,12 +9,16 @@ Two-pane layout: a left sidebar listing iterations and a right main pane showing
 A single-line header pinned to the top of the TUI, spanning the full terminal width. Colored with `ForegroundDim` text on the default background.
 
 ```
- ⏱ 14m32s   ↑42.1k ↓8.3k tokens   ~$1.24                    Iter 3/10 ⟳
+              ⏱ 14m32s   ↑42.1k ↓8.3k tokens   ctx 62%   ~$1.24              Iter 3/10 ⟳
 ```
 
-**Left side** (left-aligned):
+**Centre** (centred in the space left of the iteration indicator):
 - **Session duration** — `⏱` followed by total wallclock time since `skinner` started. Updates every second. Format follows [duration-tracking.md](duration-tracking.md) rules.
 - **Token counts** — `↑` input tokens (including cache read and cache creation) and `↓` output tokens. Formatted with `k` suffix for thousands (e.g. `42.1k`), no suffix under 1000 (e.g. `850`).
+- **Context window usage** — `ctx N%` showing how full the current context window is. Calculated as `(input_tokens + cache_read_input_tokens) / context_window * 100` from the most recent `assistant` event's `message.usage`. The denominator (`context_window`) is a per-model value from the pricing config (see [config.md](config.md)). Omitted entirely until the first `assistant` event is received or if the model is not in the pricing table. Colored by threshold:
+  - Normal (`ForegroundDim`) — 0–69%
+  - Warning (`StatusRunning`) — 70–89%
+  - Critical (`StatusError`) — 90%+
 - **Estimated cost** — `~$` followed by the accumulated cost estimate. See [stream-json-format.md](stream-json-format.md) for calculation. Omitted entirely if the model is not in the pricing table.
 
 **Right side** (right-aligned):
