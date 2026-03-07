@@ -396,3 +396,107 @@ func TestTimeline_Scroll(t *testing.T) {
 		t.Errorf("expected scroll=0 after pgup, got %d", tl.Scroll)
 	}
 }
+
+func TestTimeline_PgDown_ClampsCursorIntoViewport(t *testing.T) {
+	tl := NewTimeline()
+
+	// 30 items, viewport height 10
+	var items []model.TimelineItem
+	for i := 0; i < 30; i++ {
+		items = append(items, &model.ToolCall{
+			ID:      "tc",
+			Name:    "Read",
+			Summary: "file.go",
+			Status:  model.ToolCallDone,
+		})
+	}
+	props := TimelineProps{
+		Items:   items,
+		Width:   80,
+		Height:  10,
+		Focused: true,
+		Theme:   testTheme(),
+	}
+
+	// Cursor starts at 0, pgdown scrolls to line 10.
+	// Cursor at flat 0 (line 0) is now above viewport (line 10-19).
+	// Cursor should be clamped to the first visible position.
+	tl.Update(tea.KeyMsg{Type: tea.KeyPgDown}, props)
+	if tl.Cursor < 10 || tl.Cursor > 19 {
+		t.Errorf("expected cursor in viewport [10,19] after pgdown, got %d", tl.Cursor)
+	}
+	if tl.Cursor != 10 {
+		t.Errorf("expected cursor=10 (first visible) after pgdown, got %d", tl.Cursor)
+	}
+}
+
+func TestTimeline_PgUp_ClampsCursorIntoViewport(t *testing.T) {
+	tl := NewTimeline()
+
+	// 30 items, viewport height 10
+	var items []model.TimelineItem
+	for i := 0; i < 30; i++ {
+		items = append(items, &model.ToolCall{
+			ID:      "tc",
+			Name:    "Read",
+			Summary: "file.go",
+			Status:  model.ToolCallDone,
+		})
+	}
+	props := TimelineProps{
+		Items:   items,
+		Width:   80,
+		Height:  10,
+		Focused: true,
+		Theme:   testTheme(),
+	}
+
+	// Start at bottom: cursor=29, scroll=20
+	tl.Cursor = 29
+	tl.Scroll = 20
+
+	// pgup scrolls to 10. Cursor at 29 (line 29) is below viewport (lines 10-19).
+	// Cursor should clamp to last visible position.
+	tl.Update(tea.KeyMsg{Type: tea.KeyPgUp}, props)
+	if tl.Scroll != 10 {
+		t.Errorf("expected scroll=10 after pgup, got %d", tl.Scroll)
+	}
+	if tl.Cursor < 10 || tl.Cursor > 19 {
+		t.Errorf("expected cursor in viewport [10,19] after pgup, got %d", tl.Cursor)
+	}
+	if tl.Cursor != 19 {
+		t.Errorf("expected cursor=19 (last visible) after pgup, got %d", tl.Cursor)
+	}
+}
+
+func TestTimeline_PgDown_CursorAlreadyInViewport(t *testing.T) {
+	tl := NewTimeline()
+
+	// 30 items, viewport height 10
+	var items []model.TimelineItem
+	for i := 0; i < 30; i++ {
+		items = append(items, &model.ToolCall{
+			ID:      "tc",
+			Name:    "Read",
+			Summary: "file.go",
+			Status:  model.ToolCallDone,
+		})
+	}
+	props := TimelineProps{
+		Items:   items,
+		Width:   80,
+		Height:  10,
+		Focused: true,
+		Theme:   testTheme(),
+	}
+
+	// Cursor at 15, scroll at 10 (viewport lines 10-19). Cursor is visible.
+	tl.Cursor = 15
+	tl.Scroll = 10
+
+	// pgdown scrolls to 20 (viewport lines 20-29). Cursor 15 is now above viewport.
+	tl.Update(tea.KeyMsg{Type: tea.KeyPgDown}, props)
+	if tl.Cursor != 20 {
+		t.Errorf("expected cursor=20 after pgdown pushed cursor out, got %d", tl.Cursor)
+	}
+}

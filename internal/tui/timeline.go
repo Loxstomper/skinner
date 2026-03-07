@@ -80,6 +80,7 @@ func (tl *Timeline) Update(msg tea.KeyMsg, props TimelineProps) tea.Cmd {
 	case "pgdown":
 		tl.Scroll += props.Height
 		tl.clampScroll(props)
+		tl.clampCursorToViewport(props)
 		total := TotalLines(props.Items, props.CompactView)
 		tl.AutoFollow.OnManualMove(tl.Scroll+props.Height >= total)
 
@@ -88,6 +89,7 @@ func (tl *Timeline) Update(msg tea.KeyMsg, props TimelineProps) tea.Cmd {
 		if tl.Scroll < 0 {
 			tl.Scroll = 0
 		}
+		tl.clampCursorToViewport(props)
 		tl.AutoFollow.OnManualMove(false)
 
 	case "enter":
@@ -280,6 +282,25 @@ func (tl *Timeline) scrollToBottom(props TimelineProps) {
 		tl.Scroll = total - props.Height
 	} else {
 		tl.Scroll = 0
+	}
+}
+
+// clampCursorToViewport moves the cursor into the visible viewport after
+// page scrolling. If the cursor is above the viewport, it moves to the first
+// visible flat position; if below, to the last visible flat position.
+func (tl *Timeline) clampCursorToViewport(props TimelineProps) {
+	lineStart, lc := FlatCursorLineRange(props.Items, tl.Cursor, props.CompactView)
+	lineEnd := lineStart + lc
+
+	viewStart := tl.Scroll
+	viewEnd := tl.Scroll + props.Height
+
+	if lineEnd <= viewStart {
+		// Cursor is above viewport — move to first visible position
+		tl.Cursor = LineToFlatCursor(props.Items, viewStart, props.CompactView)
+	} else if lineStart >= viewEnd {
+		// Cursor is below viewport — move to last visible position
+		tl.Cursor = LineToFlatCursor(props.Items, viewEnd-1, props.CompactView)
 	}
 }
 

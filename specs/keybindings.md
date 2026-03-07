@@ -16,8 +16,8 @@
 | `k` / `↑`       | Move cursor up                              |
 | `g g` / `Home`  | Jump to top                                 |
 | `G` / `End`     | Jump to bottom                              |
-| `pgdn`           | Page scroll down                            |
-| `pgup`           | Page scroll up                              |
+| `pgdn`           | Page scroll down; cursor moves into visible viewport if needed |
+| `pgup`           | Page scroll up; cursor moves into visible viewport if needed  |
 
 In the **left pane**, cursor movement selects which iteration is displayed in the right pane.
 

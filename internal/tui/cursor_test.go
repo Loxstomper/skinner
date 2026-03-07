@@ -393,6 +393,152 @@ func TestFlatCursorLineRange_Empty(t *testing.T) {
 	}
 }
 
+func TestLineToFlatCursor_Empty(t *testing.T) {
+	got := LineToFlatCursor(nil, 0, false)
+	if got != 0 {
+		t.Errorf("LineToFlatCursor(nil, 0) = %d, want 0", got)
+	}
+}
+
+func TestLineToFlatCursor_StandaloneItems(t *testing.T) {
+	// 3 tool calls = 3 lines, one per flat position
+	items := []model.TimelineItem{tc("a"), tc("b"), tc("c")}
+	tests := []struct {
+		line int
+		want int
+	}{
+		{0, 0},
+		{1, 1},
+		{2, 2},
+	}
+	for _, tt := range tests {
+		got := LineToFlatCursor(items, tt.line, false)
+		if got != tt.want {
+			t.Errorf("LineToFlatCursor(items, %d) = %d, want %d", tt.line, got, tt.want)
+		}
+	}
+}
+
+func TestLineToFlatCursor_TextBlock(t *testing.T) {
+	// tc(a) at line 0 (1 line), tb("x\ny\nz\nw") at lines 1-3 (collapsed to 3 lines), tc(b) at line 4
+	items := []model.TimelineItem{tc("a"), tb("x\ny\nz\nw"), tc("b")}
+	tests := []struct {
+		line int
+		want int
+	}{
+		{0, 0}, // tc("a")
+		{1, 1}, // first line of text block
+		{2, 1}, // second line of text block — still flat pos 1
+		{3, 1}, // third line of text block — still flat pos 1
+		{4, 2}, // tc("b")
+	}
+	for _, tt := range tests {
+		got := LineToFlatCursor(items, tt.line, false)
+		if got != tt.want {
+			t.Errorf("LineToFlatCursor(items, %d) = %d, want %d", tt.line, got, tt.want)
+		}
+	}
+}
+
+func TestLineToFlatCursor_ExpandedGroup(t *testing.T) {
+	// tc, expandedGroup(2), tc
+	// line 0: tc (flat 0)
+	// line 1: group header (flat 1)
+	// line 2: child 0 (flat 2)
+	// line 3: child 1 (flat 3)
+	// line 4: tc (flat 4)
+	items := []model.TimelineItem{tc("a"), expandedGroup(2), tc("c")}
+	tests := []struct {
+		line int
+		want int
+	}{
+		{0, 0},
+		{1, 1},
+		{2, 2},
+		{3, 3},
+		{4, 4},
+	}
+	for _, tt := range tests {
+		got := LineToFlatCursor(items, tt.line, false)
+		if got != tt.want {
+			t.Errorf("LineToFlatCursor(items, %d) = %d, want %d", tt.line, got, tt.want)
+		}
+	}
+}
+
+func TestLineToFlatCursor_CollapsedGroup(t *testing.T) {
+	// tc, collapsedGroup(2), tc
+	// line 0: tc (flat 0)
+	// line 1: group header (flat 1)
+	// line 2: tc (flat 2)
+	items := []model.TimelineItem{tc("a"), collapsedGroup(2), tc("c")}
+	tests := []struct {
+		line int
+		want int
+	}{
+		{0, 0},
+		{1, 1},
+		{2, 2},
+	}
+	for _, tt := range tests {
+		got := LineToFlatCursor(items, tt.line, false)
+		if got != tt.want {
+			t.Errorf("LineToFlatCursor(items, %d) = %d, want %d", tt.line, got, tt.want)
+		}
+	}
+}
+
+func TestLineToFlatCursor_BeyondEnd(t *testing.T) {
+	items := []model.TimelineItem{tc("a"), tc("b")}
+	// Line 99 is way beyond — should return last flat position (1)
+	got := LineToFlatCursor(items, 99, false)
+	if got != 1 {
+		t.Errorf("LineToFlatCursor(items, 99) = %d, want 1", got)
+	}
+}
+
+func TestLineToFlatCursor_RoundtripWithFlatCursorLineRange(t *testing.T) {
+	// For every flat cursor position, FlatCursorLineRange gives us the start line.
+	// LineToFlatCursor(startLine) should return the same flat cursor position.
+	items := []model.TimelineItem{
+		tc("a"),
+		expandedGroup(3),
+		tb("line1\nline2\nline3\nline4"), // collapsed to 3 lines
+		collapsedGroup(2),
+		tc("z"),
+	}
+	count := FlatCursorCount(items)
+	for f := 0; f < count; f++ {
+		lineStart, _ := FlatCursorLineRange(items, f, false)
+		roundtrip := LineToFlatCursor(items, lineStart, false)
+		if roundtrip != f {
+			t.Errorf("Roundtrip failed: flat %d -> line %d -> flat %d", f, lineStart, roundtrip)
+		}
+	}
+}
+
+func TestLineToFlatCursor_CompactView(t *testing.T) {
+	// In compact view, text blocks take only 1 line
+	items := []model.TimelineItem{tc("a"), tb("x\ny\nz\nw"), tc("b")}
+	// line 0: tc("a") (flat 0)
+	// line 1: tb (flat 1, compact = 1 line)
+	// line 2: tc("b") (flat 2)
+	tests := []struct {
+		line int
+		want int
+	}{
+		{0, 0},
+		{1, 1},
+		{2, 2},
+	}
+	for _, tt := range tests {
+		got := LineToFlatCursor(items, tt.line, true)
+		if got != tt.want {
+			t.Errorf("LineToFlatCursor(items, %d, compact) = %d, want %d", tt.line, got, tt.want)
+		}
+	}
+}
+
 func TestFlatCursorCount_MixedItems(t *testing.T) {
 	items := []model.TimelineItem{
 		tc("a"),

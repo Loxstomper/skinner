@@ -18,20 +18,7 @@ The `--exit` flag exists in `cmd/skinner/main.go` but is not documented.
 - [ ] Add `--exit` to the CLI arguments table in `specs/iteration-loop.md`
 - [ ] Document its behavior: when set, the TUI quits automatically after all iterations complete (or the last iteration fails), rather than remaining open for browsing
 
-## 3. PgUp/PgDown cursor adjustment in timeline
-
-After page scrolling, the cursor may be outside the visible viewport. The highlighted row won't be visible. Note: IterList pgup/pgdown already uses `ensureCursorVisible` (added with left pane scroll support), so the iterlist side is done — this task is timeline-only.
-
-### Tasks
-
-- [ ] In `internal/tui/timeline.go`, after `pgdown` scroll adjustment, clamp cursor into the visible range: if cursor is above viewport, move cursor to the first visible flat position; if cursor is below viewport, move cursor to the last visible flat position
-- [ ] Same for `pgup`
-- [ ] Add a `LineToFlatCursor(items []model.TimelineItem, line int, compactView bool) int` helper in `internal/tui/cursor.go` that maps a rendered line number to the flat cursor position that owns that line (inverse of `FlatCursorLineRange`)
-- [ ] Add tests in `internal/tui/cursor_test.go` for `LineToFlatCursor`
-- [ ] Add tests in `internal/tui/timeline_test.go` verifying cursor moves into viewport after pgdown/pgup
-- [ ] Update `specs/keybindings.md` pgdn/pgup description to note that the cursor moves into the visible viewport after page scroll
-
-## 4. Mouse scrolling and clicking
+## 3. Mouse scrolling and clicking
 
 Add mouse support for both panes: scroll wheel scrolls the pane under the pointer, click selects rows and switches pane focus.
 
@@ -56,7 +43,7 @@ Add mouse support for both panes: scroll wheel scrolls the pane under the pointe
 - [ ] Add tests in `internal/tui/timeline_test.go` for mouse scroll and click
 - [ ] Add integration test in `internal/tui/integration_test.go` verifying mouse click switches pane focus
 
-## 5. Token format units (k, M, G)
+## 4. Token format units (k, M, G)
 
 Extend `FormatTokens()` to support M and G suffixes for millions and billions.
 

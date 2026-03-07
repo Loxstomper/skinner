@@ -106,6 +106,56 @@ func TotalLines(items []model.TimelineItem, compactView bool) int {
 	return total
 }
 
+// LineToFlatCursor maps a rendered line number to the flat cursor position
+// that owns that line (inverse of FlatCursorLineRange). If the line is beyond
+// all items, it returns the last valid flat position.
+func LineToFlatCursor(items []model.TimelineItem, line int, compactView bool) int {
+	if len(items) == 0 {
+		return 0
+	}
+	currentLine := 0
+	flatPos := 0
+	for _, item := range items {
+		switch it := item.(type) {
+		case *model.TextBlock:
+			lc := ItemLineCount(it, compactView)
+			if line < currentLine+lc {
+				return flatPos
+			}
+			currentLine += lc
+			flatPos++
+		case *model.ToolCall:
+			if line < currentLine+1 {
+				return flatPos
+			}
+			currentLine++
+			flatPos++
+		case *model.ToolCallGroup:
+			// Header line
+			if line < currentLine+1 {
+				return flatPos
+			}
+			currentLine++
+			flatPos++
+			if it.Expanded {
+				for range it.Children {
+					if line < currentLine+1 {
+						return flatPos
+					}
+					currentLine++
+					flatPos++
+				}
+			}
+		}
+	}
+	// Beyond all items: return last valid position
+	total := FlatCursorCount(items)
+	if total > 0 {
+		return total - 1
+	}
+	return 0
+}
+
 // FlatCursorLineRange returns the start line and line count for the given flat
 // cursor position.
 func FlatCursorLineRange(items []model.TimelineItem, flatIdx int, compactView bool) (lineStart int, lineCount int) {
