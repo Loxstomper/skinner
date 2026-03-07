@@ -1,0 +1,15 @@
+# Binary
+skinner
+
+# Test binary
+*.test
+
+# Go build cache
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Go coverage
+*.out
