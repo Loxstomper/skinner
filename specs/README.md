@@ -15,3 +15,4 @@ Skinner is a Go TUI that runs Claude CLI in a loop and displays tool call activi
 | [theme.md](theme.md) | Color theme system, built-in themes, `--theme` flag |
 | [config.md](config.md) | TOML config file, view mode, theme, CLI overrides |
 | [tech-stack.md](tech-stack.md) | Go, Bubble Tea, Lip Gloss, standard library |
+| [architecture.md](architecture.md) | Package structure, layered design, interfaces, testing strategy |

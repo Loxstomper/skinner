@@ -452,11 +452,11 @@ func (m *Model) viewHeader() string {
 	dim := lipgloss.NewStyle().Foreground(lipgloss.Color(m.theme.ForegroundDim))
 
 	// Build centre content: duration, tokens, context %, cost
-	dur := formatDurationValue(time.Since(m.session.StartTime))
+	dur := FormatDurationValue(time.Since(m.session.StartTime))
 	inputTokens := m.session.InputTokens + m.session.CacheReadTokens + m.session.CacheCreationTokens
 	outputTokens := m.session.OutputTokens
 
-	centreText := fmt.Sprintf("⏱ %s   ↑%s ↓%s tokens", dur, formatTokens(inputTokens), formatTokens(outputTokens))
+	centreText := fmt.Sprintf("⏱ %s   ↑%s ↓%s tokens", dur, FormatTokens(inputTokens), FormatTokens(outputTokens))
 	centreRendered := dim.Render(centreText)
 
 	// Context window percentage
@@ -528,13 +528,6 @@ func (m *Model) viewHeader() string {
 	return strings.Repeat(" ", leftPad) + centreRendered + strings.Repeat(" ", gap) + rightRendered
 }
 
-func formatTokens(tokens int64) string {
-	if tokens < 1000 {
-		return fmt.Sprintf("%d", tokens)
-	}
-	return fmt.Sprintf("%.1fk", float64(tokens)/1000.0)
-}
-
 func (m *Model) View() string {
 	if m.quitting {
 		return ""
@@ -594,7 +587,7 @@ func (m *Model) renderLeftPane(width, height int) string {
 			iterColor = m.theme.IterError
 		}
 
-		dur := formatDuration(iter.Duration, iter.Status == model.IterationRunning)
+		dur := FormatDuration(iter.Duration, iter.Status == model.IterationRunning)
 		callCount := iter.ToolCallCount()
 
 		styledIcon := lipgloss.NewStyle().Foreground(lipgloss.Color(statusColor)).Render(statusIcon)
@@ -762,9 +755,8 @@ func (m *Model) renderTextBlockLines(tb *model.TextBlock, width int) []string {
 }
 
 func (m *Model) renderToolCallLine(tc *model.ToolCall, nameWidth, summaryWidth, durWidth int) string {
-	icon := toolIcon(tc.Name)
-	isKnown := tc.Name == "Read" || tc.Name == "Edit" || tc.Name == "Write" ||
-		tc.Name == "Bash" || tc.Name == "Grep" || tc.Name == "Glob" || tc.Name == "Task"
+	icon := ToolIcon(tc.Name)
+	isKnown := IsKnownTool(tc.Name)
 
 	summary := tc.Summary
 	// Append line info metadata after summary for completed calls
@@ -797,7 +789,7 @@ func (m *Model) renderToolCallLine(tc *model.ToolCall, nameWidth, summaryWidth, 
 		durColor = m.theme.DurationRunning
 	}
 
-	dur := formatDuration(tc.Duration, tc.Status == model.ToolCallRunning)
+	dur := FormatDuration(tc.Duration, tc.Status == model.ToolCallRunning)
 	dur = fmt.Sprintf("%*s", durWidth, dur)
 
 	styledIcon := lipgloss.NewStyle().Foreground(lipgloss.Color(nameColor)).Render(icon)
@@ -819,16 +811,15 @@ func (m *Model) renderToolCallLine(tc *model.ToolCall, nameWidth, summaryWidth, 
 }
 
 func (m *Model) renderGroupHeaderLine(g *model.ToolCallGroup, nameWidth, summaryWidth, durWidth int) string {
-	icon := toolIcon(g.ToolName)
-	isKnown := g.ToolName == "Read" || g.ToolName == "Edit" || g.ToolName == "Write" ||
-		g.ToolName == "Bash" || g.ToolName == "Grep" || g.ToolName == "Glob" || g.ToolName == "Task"
+	icon := ToolIcon(g.ToolName)
+	isKnown := IsKnownTool(g.ToolName)
 
 	status := g.Status()
 
 	// Build summary: "3/8 files" while in progress, "8 files" when complete
 	total := len(g.Children)
 	completed := g.CompletedCount()
-	unit := groupSummaryUnit(g.ToolName)
+	unit := GroupSummaryUnit(g.ToolName)
 	var summary string
 	if status == model.ToolCallRunning {
 		summary = fmt.Sprintf("%d/%d %s", completed, total, unit)
@@ -859,7 +850,7 @@ func (m *Model) renderGroupHeaderLine(g *model.ToolCallGroup, nameWidth, summary
 		durColor = m.theme.DurationRunning
 	}
 
-	dur := formatDuration(g.GroupDuration(), status == model.ToolCallRunning)
+	dur := FormatDuration(g.GroupDuration(), status == model.ToolCallRunning)
 	dur = fmt.Sprintf("%*s", durWidth, dur)
 
 	styledIcon := lipgloss.NewStyle().Foreground(lipgloss.Color(nameColor)).Render(icon)
@@ -878,25 +869,6 @@ func (m *Model) renderGroupHeaderLine(g *model.ToolCallGroup, nameWidth, summary
 	}
 
 	return fmt.Sprintf("  %s %s %s %s", styledIcon, styledSummary, styledResult, styledDur)
-}
-
-func groupSummaryUnit(toolName string) string {
-	switch toolName {
-	case "Read", "Write":
-		return "files"
-	case "Edit":
-		return "edits"
-	case "Bash":
-		return "commands"
-	case "Grep":
-		return "searches"
-	case "Glob":
-		return "globs"
-	case "Task":
-		return "tasks"
-	default:
-		return "calls"
-	}
 }
 
 // Subprocess management
@@ -1228,44 +1200,6 @@ func (m *Model) itemToFlat(itemIdx int) int {
 func (m *Model) isCursorOnGroup(itemIdx int) bool {
 	curItemIdx, _ := m.flatToItem(m.rightCursor)
 	return curItemIdx == itemIdx
-}
-
-func formatDuration(d time.Duration, running bool) string {
-	if running {
-		return "..."
-	}
-	return formatDurationValue(d)
-}
-
-func formatDurationValue(d time.Duration) string {
-	secs := d.Seconds()
-	if secs < 60 {
-		return fmt.Sprintf("%.1fs", secs)
-	}
-	mins := int(secs) / 60
-	remainSecs := int(secs) % 60
-	return fmt.Sprintf("%dm%02ds", mins, remainSecs)
-}
-
-func toolIcon(name string) string {
-	switch name {
-	case "Read":
-		return "\uf02d" //
-	case "Edit":
-		return "\uf044" //
-	case "Write":
-		return "\uf0c7" //
-	case "Bash":
-		return "\uf120" //
-	case "Grep":
-		return "\uf002" //
-	case "Glob":
-		return "\uf07b" //
-	case "Task":
-		return "\uf085" //
-	default:
-		return "\uf059" //
-	}
 }
 
 func tickCmd() tea.Cmd {
