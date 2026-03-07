@@ -24,22 +24,15 @@ Extracted `AutoFollow` struct with `NewAutoFollow()`, `OnManualMove(atEnd bool)`
 
 ---
 
-### Step 4: Add tests for `model`, `parser`, `theme`
+### ~~Step 4: Add tests for `model`, `parser`, `theme`~~ ✅ DONE
 
-**`model/model_test.go`:**
-- `ToolCallGroup.Status()` — all-running, all-done, mixed, has-error
-- `ToolCallGroup.GroupDuration()` — completed group, running group returns 0
-- `CompletedCount()`, `ToolCallCount()`
-- `Iteration.ToolCallCount()` — standalone calls, groups, mixed
+Added comprehensive table-driven tests for all three packages:
 
-**`parser/parser_test.go`:**
-- `ParseStreamEvent` with assistant (tool_use + text + usage), user (tool_result), result (iteration end), empty/invalid lines
-- Summary extraction for each tool type via full JSON fixtures
-- Line info for Edit (+N/-N), Write (N lines), Read result (N lines)
+**`model/model_test.go`:** 5 test functions covering `ToolCallGroup.Status()` (8 cases: all-running, all-done, mixed running+done, error+done, error+running, all-error, single), `GroupDuration()` (5 cases: running returns 0, single child, overlapping span, sequential, error children), `CompletedCount()` (4 cases), `ToolCallCount()` (2 cases), `Iteration.ToolCallCount()` (5 cases: empty, standalone, groups, mixed, text blocks ignored).
 
-**`theme/theme_test.go`:**
-- `LookupTheme` — existing and missing theme
-- `ThemeNames` — returns sorted, contains all 4
+**`parser/parser_test.go`:** 10 test functions covering `ParseStreamEvent` with empty/invalid/unknown input, result type, assistant tool_use with usage, text events, empty text skipped, mixed content, user tool_result (success + error), `extractToolSummary` (11 cases per tool type), `extractToolUseLineInfo` (7 cases for Edit/Write), `extractToolResultLineInfo` (5 cases), `truncate` (3 cases).
+
+**`theme/theme_test.go`:** 2 test functions covering `LookupTheme` (existing themes with field validation, missing, empty name) and `ThemeNames` (count, sorted order, roundtrip lookup).
 
 ---
 
@@ -164,3 +157,4 @@ After step 10: full spec review pass.
 - **Lint fixes** — golangci-lint v2 config migration, fixed `errcheck`, `gocritic`, and `nilerr` warnings.
 - **Config tests** — `TestDefaultPricing`, `TestLoadConfig_ContextWindowFromTOML`, `TestLoadConfig_NoConfigFile` added.
 - **Step 3: Extract auto-follow** — `AutoFollow` struct in `tui/autofollow.go` with `NewAutoFollow()`, `OnManualMove()`, `JumpToEnd()`, `OnNewItem()`, `Following()`. 8 tests in `tui/autofollow_test.go`. `autoFollowLeft`/`autoFollowRight` bools replaced with `AutoFollow` instances in `tui.go`.
+- **Step 4: Add tests for model, parser, theme** — `model/model_test.go` (5 test fns, ~22 cases), `parser/parser_test.go` (10 test fns, ~50 cases), `theme/theme_test.go` (2 test fns, ~9 cases). All packages now have full test coverage.
