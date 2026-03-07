@@ -65,7 +65,16 @@ func TestFormatTokens(t *testing.T) {
 		{"exactly 1k", 1000, "1.0k"},
 		{"1.5k", 1500, "1.5k"},
 		{"large", 12345, "12.3k"},
-		{"very large", 150000, "150.0k"},
+		{"hundreds of k", 150000, "150.0k"},
+		{"just under 1M", 999999, "1000.0k"},
+		{"exactly 1M", 1000000, "1.0M"},
+		{"1.5M", 1500000, "1.5M"},
+		{"large M", 12345678, "12.3M"},
+		{"hundreds of M", 500000000, "500.0M"},
+		{"just under 1G", 999999999, "1000.0M"},
+		{"exactly 1G", 1000000000, "1.0G"},
+		{"1.5G", 1500000000, "1.5G"},
+		{"large G", 5000000000, "5.0G"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

@@ -14,7 +14,7 @@ A single-line header pinned to the top of the TUI, spanning the full terminal wi
 
 **Centre** (centred in the space left of the iteration indicator):
 - **Session duration** — `⏱` followed by total wallclock time since `skinner` started. Updates every second. Format follows [duration-tracking.md](duration-tracking.md) rules.
-- **Token counts** — `↑` input tokens (including cache read and cache creation) and `↓` output tokens. Formatted with `k` suffix for thousands (e.g. `42.1k`), no suffix under 1000 (e.g. `850`).
+- **Token counts** — `↑` input tokens (including cache read and cache creation) and `↓` output tokens. Formatted with `G` suffix for billions (e.g. `1.5G`), `M` for millions (e.g. `12.3M`), `k` for thousands (e.g. `42.1k`), no suffix under 1000 (e.g. `850`).
 - **Context window usage** — `ctx N%` showing how full the current context window is. Calculated as `(input_tokens + cache_read_input_tokens) / context_window * 100` from the most recent `assistant` event's `message.usage`. The denominator (`context_window`) is a per-model value from the pricing config (see [config.md](config.md)). Omitted entirely until the first `assistant` event is received or if the model is not in the pricing table. Colored by threshold:
   - Normal (`ForegroundDim`) — 0–69%
   - Warning (`StatusRunning`) — 70–89%

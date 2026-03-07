@@ -24,12 +24,19 @@ func FormatDurationValue(d time.Duration) string {
 	return fmt.Sprintf("%dm%02ds", mins, remainSecs)
 }
 
-// FormatTokens formats token counts: raw number if <1000, "N.Nk" otherwise.
+// FormatTokens formats token counts with appropriate unit suffix:
+// >= 1B → "N.NG", >= 1M → "N.NM", >= 1k → "N.Nk", < 1k → raw number.
 func FormatTokens(tokens int64) string {
-	if tokens < 1000 {
+	switch {
+	case tokens >= 1_000_000_000:
+		return fmt.Sprintf("%.1fG", float64(tokens)/1_000_000_000.0)
+	case tokens >= 1_000_000:
+		return fmt.Sprintf("%.1fM", float64(tokens)/1_000_000.0)
+	case tokens >= 1000:
+		return fmt.Sprintf("%.1fk", float64(tokens)/1000.0)
+	default:
 		return fmt.Sprintf("%d", tokens)
 	}
-	return fmt.Sprintf("%.1fk", float64(tokens)/1000.0)
 }
 
 // ToolIcon returns a Nerd Font icon for the given tool name.

@@ -18,12 +18,3 @@ The `--exit` flag exists in `cmd/skinner/main.go` but is not documented.
 - [ ] Add `--exit` to the CLI arguments table in `specs/iteration-loop.md`
 - [ ] Document its behavior: when set, the TUI quits automatically after all iterations complete (or the last iteration fails), rather than remaining open for browsing
 
-## 3. Token format units (k, M, G)
-
-Extend `FormatTokens()` to support M and G suffixes for millions and billions.
-
-### Tasks
-
-- [ ] Update `FormatTokens()` in `internal/tui/format.go` to add thresholds: `>= 1,000,000,000` → `N.NG`, `>= 1,000,000` → `N.NM`, `>= 1,000` → `N.Nk` (existing), `< 1,000` → raw (existing)
-- [ ] Update tests in `internal/tui/format_test.go` to cover M and G cases
-- [ ] Update `specs/tui-layout.md` header section token format description to mention M and G suffixes
