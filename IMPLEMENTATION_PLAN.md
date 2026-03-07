@@ -36,25 +36,15 @@ Added comprehensive table-driven tests for all three packages:
 
 ---
 
-### Step 5: Create `internal/session` — business logic controller
+### ~~Step 5: Create `internal/session` — business logic controller~~ ✅ DONE
 
-New package with two files:
+Created `internal/session` package with two files:
 
-**`session/events.go`** — typed event definitions:
-- `Event` interface, `ToolUseEvent`, `ToolResultEvent`, `TextEvent`, `UsageEvent`, `IterationEndEvent`, `SubprocessExitEvent`
+**`session/events.go`** — typed event definitions: `Event` interface, `ToolUseEvent`, `ToolResultEvent`, `TextEvent`, `UsageEvent`, `IterationEndEvent`. Note: `SubprocessExitEvent` omitted — it's a TUI-level concern (subprocess lifecycle), not a business logic event. The executor signals iteration end by closing the channel.
 
-**`session/session.go`** — `Controller` struct extracted from `tui.go`:
-- `ProcessAssistantBatch(events []Event)` — grouping logic (consecutive same-type → `ToolCallGroup`)
-- `ProcessToolResult(ToolResultEvent) *model.ToolCallGroup` — match by ID, apply status/duration
-- `ProcessUsage(UsageEvent)` — accumulate tokens, compute cost
-- `StartIteration()` — create running iteration
-- `CompleteIteration(err error)` — mark completed/failed, record duration
-- `ShouldStartNext() bool` — check max iterations (caller checks `quitting` separately)
-- `RunningIterationIdx() int`
-- `HasKnownModel() bool`
-- Injectable `Clock func() time.Time` for deterministic tests
+**`session/session.go`** — `Controller` struct with `NewController()`, `ProcessAssistantBatch()`, `ProcessToolResult()`, `ProcessUsage()`, `StartIteration()`, `CompleteIteration()`, `ShouldStartNext()`, `RunningIterationIdx()`, `HasKnownModel()`, `LastModel()`. Injectable `Clock func() time.Time` (defaults to `time.Now`).
 
-**Tests** (`session/session_test.go`): comprehensive tests with fake clock — grouping logic, result matching (standalone + group children), token accumulation, cost with known/unknown model, iteration lifecycle, `ShouldStartNext` with various max values.
+**`session/session_test.go`** — 23 tests (8 for batch processing covering single/grouped/mixed/text-breaks/empty/no-iteration, 6 for tool result matching covering standalone/group-child/error/Read-lineinfo/Edit-keeps-lineinfo/not-found, 3 for usage covering known-model-cost/unknown-model/accumulation, 4 for iteration lifecycle covering start/complete-success/complete-failed/no-running, table-driven tests for `ShouldStartNext` (7 cases) and `RunningIterationIdx` (5 cases), plus default-clock and full end-to-end lifecycle tests).
 
 ---
 
@@ -158,3 +148,4 @@ After step 10: full spec review pass.
 - **Config tests** — `TestDefaultPricing`, `TestLoadConfig_ContextWindowFromTOML`, `TestLoadConfig_NoConfigFile` added.
 - **Step 3: Extract auto-follow** — `AutoFollow` struct in `tui/autofollow.go` with `NewAutoFollow()`, `OnManualMove()`, `JumpToEnd()`, `OnNewItem()`, `Following()`. 8 tests in `tui/autofollow_test.go`. `autoFollowLeft`/`autoFollowRight` bools replaced with `AutoFollow` instances in `tui.go`.
 - **Step 4: Add tests for model, parser, theme** — `model/model_test.go` (5 test fns, ~22 cases), `parser/parser_test.go` (10 test fns, ~50 cases), `theme/theme_test.go` (2 test fns, ~9 cases). All packages now have full test coverage.
+- **Step 5: Create session controller** — `session/events.go` (5 event types + Event interface), `session/session.go` (Controller with 10 methods), `session/session_test.go` (23 tests covering grouping, result matching, usage/cost, iteration lifecycle, full end-to-end).
