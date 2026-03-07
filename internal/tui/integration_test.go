@@ -724,6 +724,146 @@ func TestIntegration_SubprocessFailure(t *testing.T) {
 	}
 }
 
+// --- Mouse click switches pane focus ---
+
+func TestIntegration_MouseClickSwitchesFocus(t *testing.T) {
+	events := []session.Event{
+		session.AssistantBatchEvent{Events: []session.Event{
+			session.ToolUseEvent{ID: "tc1", Name: "Read", Summary: "main.go"},
+		}},
+		session.ToolResultEvent{ToolUseID: "tc1", IsError: false},
+		session.SubprocessExitEvent{Err: nil},
+	}
+
+	m := newTestModel(events, 1)
+	drainEvents(t, m)
+
+	// Starts on left pane.
+	if m.focusedPane != leftPane {
+		t.Fatal("expected initial focus on left pane")
+	}
+
+	// Click on right pane (X >= 32) switches focus.
+	m.Update(tea.MouseMsg{
+		X:      50,
+		Y:      2, // pane row 1 (subtract 1 for header)
+		Button: tea.MouseButtonLeft,
+		Action: tea.MouseActionPress,
+	})
+	if m.focusedPane != rightPane {
+		t.Error("expected right pane focus after clicking right pane")
+	}
+
+	// Click on left pane (X < 32) switches back.
+	m.Update(tea.MouseMsg{
+		X:      10,
+		Y:      1, // header row Y=0, pane row 0
+		Button: tea.MouseButtonLeft,
+		Action: tea.MouseActionPress,
+	})
+	if m.focusedPane != leftPane {
+		t.Error("expected left pane focus after clicking left pane")
+	}
+}
+
+// --- Mouse click on header is ignored ---
+
+func TestIntegration_MouseClickOnHeaderIgnored(t *testing.T) {
+	events := []session.Event{
+		session.AssistantBatchEvent{Events: []session.Event{
+			session.ToolUseEvent{ID: "tc1", Name: "Read", Summary: "main.go"},
+		}},
+		session.ToolResultEvent{ToolUseID: "tc1", IsError: false},
+		session.SubprocessExitEvent{Err: nil},
+	}
+
+	m := newTestModel(events, 1)
+	drainEvents(t, m)
+
+	// Click on header row (Y=0) should be ignored, focus stays on left.
+	m.Update(tea.MouseMsg{
+		X:      50,
+		Y:      0,
+		Button: tea.MouseButtonLeft,
+		Action: tea.MouseActionPress,
+	})
+	if m.focusedPane != leftPane {
+		t.Error("expected focus unchanged after clicking header")
+	}
+}
+
+// --- Mouse scroll switches focus and scrolls ---
+
+func TestIntegration_MouseScrollSwitchesFocus(t *testing.T) {
+	events := []session.Event{
+		session.AssistantBatchEvent{Events: []session.Event{
+			session.ToolUseEvent{ID: "tc1", Name: "Read", Summary: "main.go"},
+		}},
+		session.ToolResultEvent{ToolUseID: "tc1", IsError: false},
+		session.SubprocessExitEvent{Err: nil},
+	}
+
+	m := newTestModel(events, 1)
+	drainEvents(t, m)
+
+	// Scroll wheel on right pane should switch focus.
+	m.Update(tea.MouseMsg{
+		X:      50,
+		Y:      5,
+		Button: tea.MouseButtonWheelDown,
+	})
+	if m.focusedPane != rightPane {
+		t.Error("expected right pane focus after scrolling on right pane")
+	}
+}
+
+// --- Mouse click on left pane selects iteration and resets timeline ---
+
+func TestIntegration_MouseClickSelectsIteration(t *testing.T) {
+	events := []session.Event{
+		session.AssistantBatchEvent{Events: []session.Event{
+			session.ToolUseEvent{ID: "tc1", Name: "Bash", Summary: "cmd"},
+		}},
+		session.ToolResultEvent{ToolUseID: "tc1", IsError: false},
+		session.SubprocessExitEvent{Err: nil},
+	}
+
+	m := newTestModel(events, 3)
+	drainEvents(t, m)
+
+	// Cursor should be at 2 (last iteration, auto-follow).
+	if m.iterList.Cursor != 2 {
+		t.Fatalf("expected cursor=2, got %d", m.iterList.Cursor)
+	}
+
+	// Move timeline cursor to verify it gets reset.
+	m.focusedPane = rightPane
+	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+	if m.timeline.Cursor == 0 {
+		// Move further if needed
+		m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+	}
+
+	// Click on first iteration (row 0 in pane, Y=1 accounting for header).
+	m.Update(tea.MouseMsg{
+		X:      10,
+		Y:      1, // header is Y=0, first pane row is Y=1
+		Button: tea.MouseButtonLeft,
+		Action: tea.MouseActionPress,
+	})
+
+	if m.focusedPane != leftPane {
+		t.Error("expected left pane focus after clicking left pane")
+	}
+	if m.iterList.Cursor != 0 {
+		t.Errorf("expected cursor=0 after clicking first iteration, got %d", m.iterList.Cursor)
+	}
+	// Timeline should be reset when changing iteration.
+	if m.timeline.Cursor != 0 {
+		t.Errorf("expected timeline cursor=0 after clicking different iteration, got %d", m.timeline.Cursor)
+	}
+}
+
 type testError struct{ msg string }
 
 func (e *testError) Error() string { return e.msg }

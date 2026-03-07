@@ -304,6 +304,32 @@ func (tl *Timeline) clampCursorToViewport(props TimelineProps) {
 	}
 }
 
+// ScrollBy adjusts the scroll offset by delta lines (positive = down, negative = up).
+// It clamps the result and pauses auto-follow.
+func (tl *Timeline) ScrollBy(delta int, props TimelineProps) {
+	tl.Scroll += delta
+	if tl.Scroll < 0 {
+		tl.Scroll = 0
+	}
+	tl.clampScroll(props)
+	tl.AutoFollow.OnManualMove(false)
+}
+
+// ClickRow handles a mouse click on the given pane-relative row.
+// It maps scroll+row to the flat cursor position and sets the cursor if valid.
+// Returns true if the cursor changed.
+func (tl *Timeline) ClickRow(row int, props TimelineProps) bool {
+	line := tl.Scroll + row
+	total := TotalLines(props.Items, props.CompactView)
+	if line < 0 || line >= total {
+		return false
+	}
+	tl.Cursor = LineToFlatCursor(props.Items, line, props.CompactView)
+	maxPos := FlatCursorCount(props.Items) - 1
+	tl.AutoFollow.OnManualMove(tl.Cursor >= maxPos)
+	return true
+}
+
 // clampScroll ensures scroll doesn't exceed the maximum.
 func (tl *Timeline) clampScroll(props TimelineProps) {
 	total := TotalLines(props.Items, props.CompactView)

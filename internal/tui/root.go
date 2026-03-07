@@ -153,6 +153,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case tea.KeyMsg:
 		return m.handleKey(msg)
+
+	case tea.MouseMsg:
+		return m.handleMouse(msg)
 	}
 
 	return m, nil
@@ -234,6 +237,59 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			}
 		} else {
 			m.timeline.Update(msg, m.currentTimelineProps())
+		}
+	}
+
+	return m, nil
+}
+
+const mouseScrollLines = 3
+
+func (m *Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
+	// Ignore events on the header row
+	paneRow := msg.Y - 1
+	if paneRow < 0 {
+		return m, nil
+	}
+
+	// Determine target pane by X coordinate
+	leftWidth := 32
+	targetPane := leftPane
+	if msg.X >= leftWidth {
+		targetPane = rightPane
+	}
+
+	switch {
+	case msg.Button == tea.MouseButtonWheelUp:
+		m.focusedPane = targetPane
+		if targetPane == leftPane {
+			count := len(m.controller.Session.Iterations)
+			m.iterList.ScrollBy(-mouseScrollLines, count, m.rightPaneHeight())
+		} else {
+			m.timeline.ScrollBy(-mouseScrollLines, m.currentTimelineProps())
+		}
+
+	case msg.Button == tea.MouseButtonWheelDown:
+		m.focusedPane = targetPane
+		if targetPane == leftPane {
+			count := len(m.controller.Session.Iterations)
+			m.iterList.ScrollBy(mouseScrollLines, count, m.rightPaneHeight())
+		} else {
+			m.timeline.ScrollBy(mouseScrollLines, m.currentTimelineProps())
+		}
+
+	case msg.Button == tea.MouseButtonLeft && msg.Action == tea.MouseActionPress:
+		m.focusedPane = targetPane
+		if targetPane == leftPane {
+			count := len(m.controller.Session.Iterations)
+			oldCursor := m.iterList.Cursor
+			if m.iterList.ClickRow(paneRow, count, m.rightPaneHeight()) {
+				if m.iterList.Cursor != oldCursor {
+					m.timeline.ResetPosition()
+				}
+			}
+		} else {
+			m.timeline.ClickRow(paneRow, m.currentTimelineProps())
 		}
 	}
 

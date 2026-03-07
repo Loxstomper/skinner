@@ -216,6 +216,26 @@ func (il *IterList) ensureCursorVisibleSimple(count int, height int) {
 	il.clampScroll(count, height)
 }
 
+// ScrollBy adjusts the scroll offset by delta lines (positive = down, negative = up).
+// It clamps the result, pauses auto-follow, and returns whether the scroll changed.
+func (il *IterList) ScrollBy(delta int, count int, height int) {
+	il.Scroll += delta
+	il.clampScroll(count, height)
+	il.AutoFollow.OnManualMove(false)
+}
+
+// ClickRow handles a mouse click on the given pane-relative row.
+// It sets the cursor to scroll+row if valid, and returns true if the cursor changed.
+func (il *IterList) ClickRow(row int, count int, height int) bool {
+	target := il.Scroll + row
+	if target < 0 || target >= count {
+		return false
+	}
+	il.Cursor = target
+	il.AutoFollow.OnManualMove(il.Cursor == count-1)
+	return true
+}
+
 // clampScroll ensures scroll doesn't exceed the maximum valid offset.
 func (il *IterList) clampScroll(count int, height int) {
 	maxScroll := count - height

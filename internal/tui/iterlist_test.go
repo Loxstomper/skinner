@@ -440,6 +440,124 @@ func TestIterList_JumpToTop_ScrollsToTop(t *testing.T) {
 	}
 }
 
+// --- Mouse support tests ---
+
+func TestIterList_ScrollBy_Down(t *testing.T) {
+	il := NewIterList()
+	iters := makeIterations(20)
+	props := iterListProps(iters)
+	props.Height = 10
+
+	il.ScrollBy(3, len(iters), props.Height)
+	if il.Scroll != 3 {
+		t.Errorf("expected scroll=3 after ScrollBy(3), got %d", il.Scroll)
+	}
+	if il.AutoFollow.Following() {
+		t.Error("expected auto-follow paused after mouse scroll")
+	}
+}
+
+func TestIterList_ScrollBy_Up(t *testing.T) {
+	il := NewIterList()
+	il.Scroll = 5
+	iters := makeIterations(20)
+	props := iterListProps(iters)
+	props.Height = 10
+
+	il.ScrollBy(-3, len(iters), props.Height)
+	if il.Scroll != 2 {
+		t.Errorf("expected scroll=2 after ScrollBy(-3) from 5, got %d", il.Scroll)
+	}
+}
+
+func TestIterList_ScrollBy_ClampsAtBottom(t *testing.T) {
+	il := NewIterList()
+	il.Scroll = 8
+	iters := makeIterations(15)
+	props := iterListProps(iters)
+	props.Height = 10
+
+	il.ScrollBy(10, len(iters), props.Height)
+	// Max scroll = 15 - 10 = 5, but we're at 8 which is already beyond that
+	// After adding 10, it should clamp to maxScroll = 5
+	if il.Scroll != 5 {
+		t.Errorf("expected scroll=5 (clamped), got %d", il.Scroll)
+	}
+}
+
+func TestIterList_ScrollBy_ClampsAtTop(t *testing.T) {
+	il := NewIterList()
+	il.Scroll = 2
+
+	il.ScrollBy(-10, 20, 10)
+	if il.Scroll != 0 {
+		t.Errorf("expected scroll=0 (clamped at top), got %d", il.Scroll)
+	}
+}
+
+func TestIterList_ClickRow_ValidRow(t *testing.T) {
+	il := NewIterList()
+	iters := makeIterations(10)
+
+	changed := il.ClickRow(3, len(iters), 10)
+	if !changed {
+		t.Error("expected ClickRow to return true for valid row")
+	}
+	if il.Cursor != 3 {
+		t.Errorf("expected cursor=3 after clicking row 3, got %d", il.Cursor)
+	}
+}
+
+func TestIterList_ClickRow_WithScroll(t *testing.T) {
+	il := NewIterList()
+	il.Scroll = 5
+	iters := makeIterations(20)
+
+	changed := il.ClickRow(2, len(iters), 10)
+	if !changed {
+		t.Error("expected ClickRow to return true")
+	}
+	// scroll(5) + row(2) = 7
+	if il.Cursor != 7 {
+		t.Errorf("expected cursor=7 (scroll 5 + row 2), got %d", il.Cursor)
+	}
+}
+
+func TestIterList_ClickRow_BeyondLastItem(t *testing.T) {
+	il := NewIterList()
+	iters := makeIterations(3)
+
+	changed := il.ClickRow(5, len(iters), 10)
+	if changed {
+		t.Error("expected ClickRow to return false for click beyond last item")
+	}
+	if il.Cursor != 0 {
+		t.Errorf("expected cursor unchanged at 0, got %d", il.Cursor)
+	}
+}
+
+func TestIterList_ClickRow_PausesAutoFollow(t *testing.T) {
+	il := NewIterList()
+	iters := makeIterations(5)
+
+	// Click on non-last row
+	il.ClickRow(1, len(iters), 10)
+	if il.AutoFollow.Following() {
+		t.Error("expected auto-follow paused after clicking non-last row")
+	}
+}
+
+func TestIterList_ClickRow_AtEnd_ContinuesAutoFollow(t *testing.T) {
+	il := NewIterList()
+	iters := makeIterations(5)
+
+	// Click on last row
+	il.ClickRow(4, len(iters), 10)
+	if !il.AutoFollow.Following() {
+		t.Error("expected auto-follow to continue when clicking the last row")
+	}
+}
+
 func TestIterList_View_OnlyRendersVisibleSlice(t *testing.T) {
 	il := NewIterList()
 	il.Cursor = 7

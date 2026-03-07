@@ -35,7 +35,7 @@ func main() {
 	compactView := cfg.ViewMode == "compact"
 	exec := &executor.ClaudeExecutor{}
 	m := tui.NewModel(session, cfg, string(content), th, compactView, exitOnComplete, exec)
-	p := tea.NewProgram(&m, tea.WithAltScreen())
+	p := tea.NewProgram(&m, tea.WithAltScreen(), tea.WithMouseCellMotion())
 	if _, err := p.Run(); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)

@@ -18,32 +18,7 @@ The `--exit` flag exists in `cmd/skinner/main.go` but is not documented.
 - [ ] Add `--exit` to the CLI arguments table in `specs/iteration-loop.md`
 - [ ] Document its behavior: when set, the TUI quits automatically after all iterations complete (or the last iteration fails), rather than remaining open for browsing
 
-## 3. Mouse scrolling and clicking
-
-Add mouse support for both panes: scroll wheel scrolls the pane under the pointer, click selects rows and switches pane focus.
-
-### Tasks
-
-- [ ] Create `specs/mouse.md` spec covering: mouse mode, scroll behavior (3 lines per tick), click to focus pane, click to select row, auto-follow pausing on mouse interaction, click on empty space does nothing, click on collapsed group header just selects (doesn't expand)
-- [ ] Add `mouse.md` to the specs table in `specs/README.md`
-- [ ] Enable mouse mode in `cmd/skinner/main.go`: add `tea.WithMouseCellMotion()` option to `tea.NewProgram`
-- [ ] Add `tea.MouseMsg` handling in root `Update()` in `internal/tui/root.go`:
-  - Determine target pane by comparing `msg.X` against left pane width (32)
-  - Subtract header height (1) from `msg.Y` to get pane-relative Y
-  - Ignore events where pane-relative Y is negative (click on header)
-  - On wheel up/down: switch focus to target pane, adjust that pane's scroll by 3 lines, clamp scroll, pause auto-follow
-  - On click (`tea.MouseActionPress` with `tea.MouseButtonLeft`): switch focus to target pane, map pane-relative Y to a row, move cursor to that row, pause auto-follow
-- [ ] Add mouse scroll handling to `IterList`: new method `ScrollBy(delta int, props IterListProps)` that adjusts scroll and clamps
-- [ ] Add mouse scroll handling to `Timeline`: new method `ScrollBy(delta int, props TimelineProps)` that adjusts scroll and clamps
-- [ ] Add mouse click handling to `IterList`: new method `ClickRow(row int, props IterListProps)` that sets cursor to `scroll + row` if valid, resets timeline position (via return value or callback)
-- [ ] Add mouse click handling to `Timeline`: new method `ClickRow(row int, props TimelineProps)` that maps `scroll + row` to the flat cursor position using `LineToFlatCursor` (from task 3), sets cursor if valid
-- [ ] Both click handlers ignore clicks beyond the last item (do nothing)
-- [ ] Both scroll and click handlers call `AutoFollow.OnManualMove()` to pause auto-follow
-- [ ] Add tests in `internal/tui/iterlist_test.go` for mouse scroll and click
-- [ ] Add tests in `internal/tui/timeline_test.go` for mouse scroll and click
-- [ ] Add integration test in `internal/tui/integration_test.go` verifying mouse click switches pane focus
-
-## 4. Token format units (k, M, G)
+## 3. Token format units (k, M, G)
 
 Extend `FormatTokens()` to support M and G suffixes for millions and billions.
 

@@ -469,6 +469,157 @@ func TestTimeline_PgUp_ClampsCursorIntoViewport(t *testing.T) {
 	}
 }
 
+// --- Mouse support tests ---
+
+func TestTimeline_ScrollBy_Down(t *testing.T) {
+	tl := NewTimeline()
+
+	var items []model.TimelineItem
+	for i := 0; i < 30; i++ {
+		items = append(items, &model.ToolCall{
+			ID: "tc", Name: "Read", Summary: "file.go", Status: model.ToolCallDone,
+		})
+	}
+	props := TimelineProps{Items: items, Width: 80, Height: 10, Theme: testTheme()}
+
+	tl.ScrollBy(3, props)
+	if tl.Scroll != 3 {
+		t.Errorf("expected scroll=3 after ScrollBy(3), got %d", tl.Scroll)
+	}
+	if tl.AutoFollow.Following() {
+		t.Error("expected auto-follow paused after mouse scroll")
+	}
+}
+
+func TestTimeline_ScrollBy_Up(t *testing.T) {
+	tl := NewTimeline()
+	tl.Scroll = 5
+
+	var items []model.TimelineItem
+	for i := 0; i < 30; i++ {
+		items = append(items, &model.ToolCall{
+			ID: "tc", Name: "Read", Summary: "file.go", Status: model.ToolCallDone,
+		})
+	}
+	props := TimelineProps{Items: items, Width: 80, Height: 10, Theme: testTheme()}
+
+	tl.ScrollBy(-3, props)
+	if tl.Scroll != 2 {
+		t.Errorf("expected scroll=2 after ScrollBy(-3) from 5, got %d", tl.Scroll)
+	}
+}
+
+func TestTimeline_ScrollBy_ClampsAtTop(t *testing.T) {
+	tl := NewTimeline()
+	tl.Scroll = 2
+
+	var items []model.TimelineItem
+	for i := 0; i < 30; i++ {
+		items = append(items, &model.ToolCall{
+			ID: "tc", Name: "Read", Summary: "file.go", Status: model.ToolCallDone,
+		})
+	}
+	props := TimelineProps{Items: items, Width: 80, Height: 10, Theme: testTheme()}
+
+	tl.ScrollBy(-10, props)
+	if tl.Scroll != 0 {
+		t.Errorf("expected scroll=0 (clamped at top), got %d", tl.Scroll)
+	}
+}
+
+func TestTimeline_ScrollBy_ClampsAtBottom(t *testing.T) {
+	tl := NewTimeline()
+	tl.Scroll = 15
+
+	var items []model.TimelineItem
+	for i := 0; i < 20; i++ {
+		items = append(items, &model.ToolCall{
+			ID: "tc", Name: "Read", Summary: "file.go", Status: model.ToolCallDone,
+		})
+	}
+	props := TimelineProps{Items: items, Width: 80, Height: 10, Theme: testTheme()}
+
+	tl.ScrollBy(10, props)
+	// Max scroll = 20 - 10 = 10
+	if tl.Scroll != 10 {
+		t.Errorf("expected scroll=10 (clamped at bottom), got %d", tl.Scroll)
+	}
+}
+
+func TestTimeline_ClickRow_ValidRow(t *testing.T) {
+	tl := NewTimeline()
+	items := makeTimelineItems()
+	props := timelineProps(items)
+
+	changed := tl.ClickRow(1, props)
+	if !changed {
+		t.Error("expected ClickRow to return true for valid row")
+	}
+	// Row 1 with scroll 0 → line 1 → should map to flat cursor 1
+	if tl.Cursor != 1 {
+		t.Errorf("expected cursor=1 after clicking row 1, got %d", tl.Cursor)
+	}
+}
+
+func TestTimeline_ClickRow_WithScroll(t *testing.T) {
+	tl := NewTimeline()
+	tl.Scroll = 5
+
+	var items []model.TimelineItem
+	for i := 0; i < 30; i++ {
+		items = append(items, &model.ToolCall{
+			ID: "tc", Name: "Read", Summary: "file.go", Status: model.ToolCallDone,
+		})
+	}
+	props := TimelineProps{Items: items, Width: 80, Height: 10, Theme: testTheme()}
+
+	changed := tl.ClickRow(3, props)
+	if !changed {
+		t.Error("expected ClickRow to return true")
+	}
+	// scroll(5) + row(3) = line 8 → flat cursor 8 (1:1 for tool calls)
+	if tl.Cursor != 8 {
+		t.Errorf("expected cursor=8 (line 8), got %d", tl.Cursor)
+	}
+}
+
+func TestTimeline_ClickRow_BeyondLastItem(t *testing.T) {
+	tl := NewTimeline()
+	items := makeTimelineItems() // 4 items, 4 lines
+	props := timelineProps(items)
+
+	changed := tl.ClickRow(10, props)
+	if changed {
+		t.Error("expected ClickRow to return false for click beyond last item")
+	}
+	if tl.Cursor != 0 {
+		t.Errorf("expected cursor unchanged at 0, got %d", tl.Cursor)
+	}
+}
+
+func TestTimeline_ClickRow_PausesAutoFollow(t *testing.T) {
+	tl := NewTimeline()
+	items := makeTimelineItems()
+	props := timelineProps(items)
+
+	tl.ClickRow(0, props)
+	if tl.AutoFollow.Following() {
+		t.Error("expected auto-follow paused after clicking non-last row")
+	}
+}
+
+func TestTimeline_ClickRow_AtEnd_ContinuesAutoFollow(t *testing.T) {
+	tl := NewTimeline()
+	items := makeTimelineItems() // 4 items
+	props := timelineProps(items)
+
+	// Click on last line (row 3, maps to flat cursor 3 which is the last item)
+	tl.ClickRow(3, props)
+	if !tl.AutoFollow.Following() {
+		t.Error("expected auto-follow to continue when clicking the last item")
+	}
+}
+
 func TestTimeline_PgDown_CursorAlreadyInViewport(t *testing.T) {
 	tl := NewTimeline()
 
