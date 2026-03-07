@@ -87,10 +87,14 @@ func ItemLineCount(item model.TimelineItem, compactView bool) int {
 		}
 		return lines
 	case *model.ToolCall:
-		return 1
+		return toolCallLineCount(it)
 	case *model.ToolCallGroup:
 		if it.Expanded {
-			return 1 + len(it.Children) // header + children
+			lines := 1 // header
+			for _, child := range it.Children {
+				lines += toolCallLineCount(child)
+			}
+			return lines
 		}
 		return 1 // collapsed: header only
 	}
@@ -125,10 +129,11 @@ func LineToFlatCursor(items []model.TimelineItem, line int, compactView bool) in
 			currentLine += lc
 			flatPos++
 		case *model.ToolCall:
-			if line < currentLine+1 {
+			lc := toolCallLineCount(it)
+			if line < currentLine+lc {
 				return flatPos
 			}
-			currentLine++
+			currentLine += lc
 			flatPos++
 		case *model.ToolCallGroup:
 			// Header line
@@ -138,11 +143,12 @@ func LineToFlatCursor(items []model.TimelineItem, line int, compactView bool) in
 			currentLine++
 			flatPos++
 			if it.Expanded {
-				for range it.Children {
-					if line < currentLine+1 {
+				for _, child := range it.Children {
+					clc := toolCallLineCount(child)
+					if line < currentLine+clc {
 						return flatPos
 					}
-					currentLine++
+					currentLine += clc
 					flatPos++
 				}
 			}
@@ -171,10 +177,11 @@ func FlatCursorLineRange(items []model.TimelineItem, flatIdx int, compactView bo
 			line += lc
 			pos++
 		case *model.ToolCall:
+			lc := toolCallLineCount(it)
 			if pos == flatIdx {
-				return line, 1
+				return line, lc
 			}
-			line++
+			line += lc
 			pos++
 		case *model.ToolCallGroup:
 			// Header
@@ -184,11 +191,12 @@ func FlatCursorLineRange(items []model.TimelineItem, flatIdx int, compactView bo
 			line++
 			pos++
 			if it.Expanded {
-				for range it.Children {
+				for _, child := range it.Children {
+					clc := toolCallLineCount(child)
 					if pos == flatIdx {
-						return line, 1
+						return line, clc
 					}
-					line++
+					line += clc
 					pos++
 				}
 			}

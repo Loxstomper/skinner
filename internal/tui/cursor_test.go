@@ -32,6 +32,35 @@ func collapsedGroup(n int) *model.ToolCallGroup {
 	return g
 }
 
+// helper to build an expanded ToolCall with result content that produces
+// contentLines lines of output. Total display lines = 1 (header) + contentLines.
+func expandedTC(id string, contentLines int) *model.ToolCall {
+	content := "line1"
+	for i := 2; i <= contentLines; i++ {
+		content += "\nline" + string(rune('0'+i))
+	}
+	return &model.ToolCall{
+		ID:            id,
+		Name:          "Read",
+		Status:        model.ToolCallDone,
+		ResultContent: content,
+		Expanded:      true,
+	}
+}
+
+// helper to build an expanded ToolCallGroup where one child is expanded
+func expandedGroupWithExpandedChild(nChildren, expandedChildIdx, contentLines int) *model.ToolCallGroup {
+	g := &model.ToolCallGroup{ToolName: "Read", Expanded: true}
+	for i := 0; i < nChildren; i++ {
+		if i == expandedChildIdx {
+			g.Children = append(g.Children, expandedTC("child", contentLines))
+		} else {
+			g.Children = append(g.Children, &model.ToolCall{Name: "Read", Status: model.ToolCallRunning})
+		}
+	}
+	return g
+}
+
 func TestFlatCursorCount_Empty(t *testing.T) {
 	count := FlatCursorCount(nil)
 	if count != 0 {
@@ -551,5 +580,180 @@ func TestFlatCursorCount_MixedItems(t *testing.T) {
 	count := FlatCursorCount(items)
 	if count != 8 {
 		t.Errorf("FlatCursorCount = %d, want 8", count)
+	}
+}
+
+// --- Expanded ToolCall tests (multi-line tool calls) ---
+
+func TestItemLineCount_ExpandedToolCall(t *testing.T) {
+	// An expanded ToolCall with 3 content lines = 1 header + 3 content = 4 lines
+	etc := expandedTC("a", 3)
+	lc := ItemLineCount(etc, false)
+	if lc != 4 {
+		t.Errorf("ItemLineCount(expanded ToolCall, 3 content lines) = %d, want 4", lc)
+	}
+
+	// A collapsed ToolCall still returns 1
+	collapsed := tc("b")
+	lc = ItemLineCount(collapsed, false)
+	if lc != 1 {
+		t.Errorf("ItemLineCount(collapsed ToolCall) = %d, want 1", lc)
+	}
+}
+
+func TestItemLineCount_GroupWithExpandedChild(t *testing.T) {
+	// Group with 3 children, child 1 expanded with 2 content lines.
+	// header(1) + child0(1) + child1(1+2=3) + child2(1) = 6
+	g := expandedGroupWithExpandedChild(3, 1, 2)
+	lc := ItemLineCount(g, false)
+	if lc != 6 {
+		t.Errorf("ItemLineCount(group with expanded child) = %d, want 6", lc)
+	}
+}
+
+func TestTotalLines_WithExpandedToolCall(t *testing.T) {
+	// expandedTC with 3 content lines = 4 display lines, tc = 1 line
+	items := []model.TimelineItem{
+		expandedTC("a", 3), // 4 lines
+		tc("b"),            // 1 line
+	}
+	total := TotalLines(items, false)
+	if total != 5 {
+		t.Errorf("TotalLines with expanded ToolCall = %d, want 5", total)
+	}
+}
+
+func TestFlatCursorLineRange_ExpandedToolCall(t *testing.T) {
+	// tc(a), expandedTC(b, 3 content lines), tc(c)
+	// flat 0 = tc(a) -> line 0, count 1
+	// flat 1 = expandedTC(b) -> line 1, count 4 (1 header + 3 content)
+	// flat 2 = tc(c) -> line 5, count 1
+	items := []model.TimelineItem{tc("a"), expandedTC("b", 3), tc("c")}
+	tests := []struct {
+		flatIdx   int
+		wantStart int
+		wantCount int
+	}{
+		{0, 0, 1},
+		{1, 1, 4},
+		{2, 5, 1},
+	}
+	for _, tt := range tests {
+		start, count := FlatCursorLineRange(items, tt.flatIdx, false)
+		if start != tt.wantStart || count != tt.wantCount {
+			t.Errorf("FlatCursorLineRange(items, %d) = (%d, %d), want (%d, %d)",
+				tt.flatIdx, start, count, tt.wantStart, tt.wantCount)
+		}
+	}
+}
+
+func TestFlatCursorLineRange_GroupWithExpandedChild(t *testing.T) {
+	// expandedGroupWithExpandedChild(3, 1, 2):
+	//   header(1), child0(1), child1(1+2=3), child2(1)
+	// Placed after tc(a):
+	// flat 0 = tc(a) -> line 0, count 1
+	// flat 1 = group header -> line 1, count 1
+	// flat 2 = child 0 -> line 2, count 1
+	// flat 3 = child 1 (expanded) -> line 3, count 3
+	// flat 4 = child 2 -> line 6, count 1
+	// flat 5 = tc(c) -> line 7, count 1
+	items := []model.TimelineItem{tc("a"), expandedGroupWithExpandedChild(3, 1, 2), tc("c")}
+	tests := []struct {
+		flatIdx   int
+		wantStart int
+		wantCount int
+	}{
+		{0, 0, 1},
+		{1, 1, 1},
+		{2, 2, 1},
+		{3, 3, 3},
+		{4, 6, 1},
+		{5, 7, 1},
+	}
+	for _, tt := range tests {
+		start, count := FlatCursorLineRange(items, tt.flatIdx, false)
+		if start != tt.wantStart || count != tt.wantCount {
+			t.Errorf("FlatCursorLineRange(items, %d) = (%d, %d), want (%d, %d)",
+				tt.flatIdx, start, count, tt.wantStart, tt.wantCount)
+		}
+	}
+}
+
+func TestLineToFlatCursor_ExpandedToolCall(t *testing.T) {
+	// tc(a), expandedTC(b, 3 content lines), tc(c)
+	// line 0: tc(a) -> flat 0
+	// line 1: expandedTC header -> flat 1
+	// line 2: expandedTC content line 1 -> flat 1 (same cursor)
+	// line 3: expandedTC content line 2 -> flat 1
+	// line 4: expandedTC content line 3 -> flat 1
+	// line 5: tc(c) -> flat 2
+	items := []model.TimelineItem{tc("a"), expandedTC("b", 3), tc("c")}
+	tests := []struct {
+		line int
+		want int
+	}{
+		{0, 0},
+		{1, 1},
+		{2, 1}, // content line maps to same flat cursor
+		{3, 1},
+		{4, 1},
+		{5, 2},
+	}
+	for _, tt := range tests {
+		got := LineToFlatCursor(items, tt.line, false)
+		if got != tt.want {
+			t.Errorf("LineToFlatCursor(items, %d) = %d, want %d", tt.line, got, tt.want)
+		}
+	}
+}
+
+func TestLineToFlatCursor_GroupWithExpandedChild(t *testing.T) {
+	// expandedGroupWithExpandedChild(3, 1, 2):
+	// line 0: tc(a) -> flat 0
+	// line 1: group header -> flat 1
+	// line 2: child 0 -> flat 2
+	// line 3: child 1 header -> flat 3
+	// line 4: child 1 content 1 -> flat 3
+	// line 5: child 1 content 2 -> flat 3
+	// line 6: child 2 -> flat 4
+	// line 7: tc(c) -> flat 5
+	items := []model.TimelineItem{tc("a"), expandedGroupWithExpandedChild(3, 1, 2), tc("c")}
+	tests := []struct {
+		line int
+		want int
+	}{
+		{0, 0},
+		{1, 1},
+		{2, 2},
+		{3, 3},
+		{4, 3}, // content line maps to child 1's flat cursor
+		{5, 3},
+		{6, 4},
+		{7, 5},
+	}
+	for _, tt := range tests {
+		got := LineToFlatCursor(items, tt.line, false)
+		if got != tt.want {
+			t.Errorf("LineToFlatCursor(items, %d) = %d, want %d", tt.line, got, tt.want)
+		}
+	}
+}
+
+func TestLineToFlatCursor_RoundtripWithExpandedToolCalls(t *testing.T) {
+	// Comprehensive roundtrip test including expanded tool calls
+	items := []model.TimelineItem{
+		tc("a"),
+		expandedTC("b", 2),                      // 3 display lines
+		expandedGroupWithExpandedChild(2, 0, 3), // header + child0(4 lines) + child1(1 line)
+		tb("line1\nline2\nline3\nline4"),        // collapsed to 3 lines
+		tc("z"),
+	}
+	count := FlatCursorCount(items)
+	for f := 0; f < count; f++ {
+		lineStart, _ := FlatCursorLineRange(items, f, false)
+		roundtrip := LineToFlatCursor(items, lineStart, false)
+		if roundtrip != f {
+			t.Errorf("Roundtrip failed: flat %d -> line %d -> flat %d", f, lineStart, roundtrip)
+		}
 	}
 }

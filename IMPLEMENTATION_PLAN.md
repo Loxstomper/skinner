@@ -14,14 +14,9 @@ Specs updated: `tui-layout.md`, `keybindings.md`, `tool-call-groups.md`, `stream
 
 Raw input/result content flows through parser → executor → session → model. Expansion rendering in `expand.go` with 33 tests: `expandedContentLines` (per tool type), `renderEditDiff`, `toolCallLineCount`, `renderExpandedContentLine`.
 
-### 3. Cursor system updates — `internal/tui/cursor.go`
+### 3. Cursor system updates — `internal/tui/cursor.go`  ✅ DONE
 
-ToolCall can now span multiple display lines when expanded, similar to TextBlock.
-
-- [ ] **`ItemLineCount`**: ToolCall case returns `toolCallLineCount(it)` instead of hardcoded 1; ToolCallGroup expanded case sums `toolCallLineCount(child)` per child instead of `len(children)`
-- [ ] **`FlatCursorLineRange`**: ToolCall case returns `(line, toolCallLineCount(it))`; group children loop uses `toolCallLineCount(child)` per child
-- [ ] **`LineToFlatCursor`**: ToolCall case uses `toolCallLineCount(it)`; group children loop uses `toolCallLineCount(child)` per child
-- [ ] **tests**: update `cursor_test.go` — add cases for expanded ToolCall (multi-line range), groups with expanded children, `LineToFlatCursor` mapping content lines to same flat cursor
+`ItemLineCount`, `FlatCursorLineRange`, and `LineToFlatCursor` now use `toolCallLineCount()` for ToolCall items and group children, supporting multi-line expanded tool calls. 8 new tests cover expanded standalone tool calls, groups with expanded children, line-to-cursor mapping for content lines, and roundtrip consistency.
 
 ### 4. Timeline rendering and interaction — `internal/tui/timeline.go`
 
