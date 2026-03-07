@@ -16,14 +16,17 @@ const (
 )
 
 type ToolCall struct {
-	ID        string
-	Name      string
-	Summary   string
-	LineInfo  string
-	StartTime time.Time
-	Duration  time.Duration
-	Status    ToolCallStatus
-	IsError   bool
+	ID            string
+	Name          string
+	Summary       string
+	LineInfo      string
+	StartTime     time.Time
+	Duration      time.Duration
+	Status        ToolCallStatus
+	IsError       bool
+	RawInput      map[string]interface{}
+	ResultContent string
+	Expanded      bool
 }
 
 func (*ToolCall) timelineItem() {}

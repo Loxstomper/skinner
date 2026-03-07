@@ -166,8 +166,15 @@ func TestReadEvents_AssistantBatch(t *testing.T) {
 	if te, ok := batch.Events[0].(session.TextEvent); !ok || te.Text != "thinking..." {
 		t.Errorf("batch[0] = %T %+v, want TextEvent{thinking...}", batch.Events[0], batch.Events[0])
 	}
-	if tu, ok := batch.Events[1].(session.ToolUseEvent); !ok || tu.ID != "tu_1" || tu.Name != "Read" {
+	tu, ok := batch.Events[1].(session.ToolUseEvent)
+	if !ok || tu.ID != "tu_1" || tu.Name != "Read" {
 		t.Errorf("batch[1] = %T %+v, want ToolUseEvent{tu_1, Read}", batch.Events[1], batch.Events[1])
+	}
+	if tu.RawInput == nil {
+		t.Fatal("expected RawInput to be non-nil on ToolUseEvent")
+	}
+	if fp, ok := tu.RawInput["file_path"].(string); !ok || fp != "/foo/bar.go" {
+		t.Errorf("RawInput[file_path] = %v, want /foo/bar.go", tu.RawInput["file_path"])
 	}
 }
 
@@ -196,6 +203,9 @@ func TestReadEvents_ToolResult(t *testing.T) {
 	}
 	if tr.IsError {
 		t.Error("IsError = true, want false")
+	}
+	if tr.Content != "file contents here\nline 2\n" {
+		t.Errorf("Content = %q, want %q", tr.Content, "file contents here\nline 2\n")
 	}
 }
 

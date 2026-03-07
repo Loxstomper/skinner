@@ -11,6 +11,7 @@ type ToolUseEvent struct {
 	Name     string
 	Summary  string
 	LineInfo string
+	RawInput map[string]interface{}
 }
 
 func (ToolUseEvent) event() {}
@@ -20,6 +21,7 @@ type ToolResultEvent struct {
 	ToolUseID string
 	IsError   bool
 	LineInfo  string
+	Content   string
 }
 
 func (ToolResultEvent) event() {}

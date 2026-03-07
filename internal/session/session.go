@@ -94,6 +94,7 @@ func (c *Controller) ProcessAssistantBatch(events []Event) {
 					LineInfo:  e.LineInfo,
 					StartTime: now,
 					Status:    model.ToolCallRunning,
+					RawInput:  e.RawInput,
 				})
 			} else {
 				group := &model.ToolCallGroup{
@@ -109,6 +110,7 @@ func (c *Controller) ProcessAssistantBatch(events []Event) {
 						LineInfo:  e.LineInfo,
 						StartTime: now,
 						Status:    model.ToolCallRunning,
+						RawInput:  e.RawInput,
 					})
 				}
 				iter.Items = append(iter.Items, group)
@@ -149,6 +151,7 @@ func (c *Controller) ProcessToolResult(result ToolResultEvent) *model.ToolCallGr
 func (c *Controller) applyToolResult(tc *model.ToolCall, result ToolResultEvent) {
 	tc.Duration = c.Clock().Sub(tc.StartTime)
 	tc.IsError = result.IsError
+	tc.ResultContent = result.Content
 	if result.IsError {
 		tc.Status = model.ToolCallError
 	} else {

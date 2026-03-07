@@ -138,6 +138,12 @@ func TestParseStreamEvent_AssistantToolUse(t *testing.T) {
 	if toolUse.Summary != "/tmp/test.go" {
 		t.Errorf("toolUse.Summary = %q, want %q", toolUse.Summary, "/tmp/test.go")
 	}
+	if toolUse.RawInput == nil {
+		t.Fatal("expected RawInput to be non-nil")
+	}
+	if fp, ok := toolUse.RawInput["file_path"].(string); !ok || fp != "/tmp/test.go" {
+		t.Errorf("RawInput[file_path] = %v, want /tmp/test.go", toolUse.RawInput["file_path"])
+	}
 }
 
 func TestParseStreamEvent_AssistantText(t *testing.T) {
@@ -272,6 +278,9 @@ func TestParseStreamEvent_UserToolResult(t *testing.T) {
 	}
 	if result.LineInfo != "(3 lines)" {
 		t.Errorf("LineInfo = %q, want %q", result.LineInfo, "(3 lines)")
+	}
+	if result.Content != "line1\nline2\nline3" {
+		t.Errorf("Content = %q, want %q", result.Content, "line1\nline2\nline3")
 	}
 }
 

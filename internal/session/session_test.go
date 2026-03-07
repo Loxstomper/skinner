@@ -34,7 +34,10 @@ func TestProcessAssistantBatch_SingleToolCall(t *testing.T) {
 
 	ctrl.StartIteration()
 	ctrl.ProcessAssistantBatch([]Event{
-		ToolUseEvent{ID: "t1", Name: "Read", Summary: "/foo/bar.go", LineInfo: ""},
+		ToolUseEvent{
+			ID: "t1", Name: "Read", Summary: "/foo/bar.go", LineInfo: "",
+			RawInput: map[string]interface{}{"file_path": "/foo/bar.go"},
+		},
 	})
 
 	if len(sess.Iterations) != 1 {
@@ -63,6 +66,12 @@ func TestProcessAssistantBatch_SingleToolCall(t *testing.T) {
 	}
 	if !tc.StartTime.Equal(now) {
 		t.Errorf("expected StartTime %v, got %v", now, tc.StartTime)
+	}
+	if tc.RawInput == nil {
+		t.Fatal("expected RawInput to be non-nil")
+	}
+	if fp, ok := tc.RawInput["file_path"].(string); !ok || fp != "/foo/bar.go" {
+		t.Errorf("expected RawInput[file_path] = /foo/bar.go, got %v", tc.RawInput["file_path"])
 	}
 }
 
@@ -248,6 +257,7 @@ func TestProcessToolResult_Standalone(t *testing.T) {
 		ToolUseID: "t1",
 		IsError:   false,
 		LineInfo:  "(42 lines)",
+		Content:   "file contents here\nline 2",
 	})
 
 	if group != nil {
@@ -264,6 +274,9 @@ func TestProcessToolResult_Standalone(t *testing.T) {
 	// Read tool gets LineInfo from result
 	if tc.LineInfo != "(42 lines)" {
 		t.Errorf("expected LineInfo '(42 lines)', got %q", tc.LineInfo)
+	}
+	if tc.ResultContent != "file contents here\nline 2" {
+		t.Errorf("expected ResultContent to be set, got %q", tc.ResultContent)
 	}
 }
 

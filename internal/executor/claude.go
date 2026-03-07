@@ -101,6 +101,7 @@ func readEvents(r io.Reader, ch chan<- session.Event) {
 					Name:     e.Name,
 					Summary:  e.Summary,
 					LineInfo: e.LineInfo,
+					RawInput: e.RawInput,
 				})
 			case parser.TextEvent:
 				batch = append(batch, session.TextEvent{
@@ -111,6 +112,7 @@ func readEvents(r io.Reader, ch chan<- session.Event) {
 					ToolUseID: e.ToolUseID,
 					IsError:   e.IsError,
 					LineInfo:  e.LineInfo,
+					Content:   e.Content,
 				}
 			case parser.IterationEndEvent:
 				ch <- session.IterationEndEvent{}

@@ -45,12 +45,14 @@ type ToolUseEvent struct {
 	Name     string
 	Summary  string
 	LineInfo string
+	RawInput map[string]interface{}
 }
 
 type ToolResultEvent struct {
 	ToolUseID string
 	IsError   bool
 	LineInfo  string
+	Content   string
 }
 
 type TextEvent struct {
@@ -125,11 +127,16 @@ func parseAssistantEvent(raw json.RawMessage) ([]interface{}, error) {
 		case "tool_use":
 			summary := extractToolSummary(block.Name, block.Input)
 			lineInfo := extractToolUseLineInfo(block.Name, block.Input)
+			var rawInput map[string]interface{}
+			if len(block.Input) > 0 {
+				_ = json.Unmarshal(block.Input, &rawInput)
+			}
 			events = append(events, ToolUseEvent{
 				ID:       block.ID,
 				Name:     block.Name,
 				Summary:  summary,
 				LineInfo: lineInfo,
+				RawInput: rawInput,
 			})
 		}
 	}
@@ -151,10 +158,12 @@ func parseUserEvent(raw json.RawMessage) ([]interface{}, error) {
 	for _, block := range blocks {
 		if block.Type == "tool_result" {
 			lineInfo := extractToolResultLineInfo(block.Content)
+			contentStr, _ := block.Content.(string)
 			events = append(events, ToolResultEvent{
 				ToolUseID: block.ToolUseID,
 				IsError:   block.IsError,
 				LineInfo:  lineInfo,
+				Content:   contentStr,
 			})
 		}
 	}
