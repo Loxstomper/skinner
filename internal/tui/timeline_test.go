@@ -17,7 +17,7 @@ func makeTimelineItems() []model.TimelineItem {
 			Status: model.ToolCallDone, Duration: 2 * time.Second,
 		},
 		&model.ToolCall{
-			ID: "tc2", Name: "Edit", Summary: "main.go (+3/-1)",
+			ID: "tc2", Name: "Edit", Summary: "main.go (+2/-2)",
 			Status: model.ToolCallDone, Duration: 300 * time.Millisecond,
 		},
 		&model.TextBlock{Text: "Tests still failing"},

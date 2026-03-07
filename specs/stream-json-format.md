@@ -143,7 +143,7 @@ Computed from the `tool_use` input fields in the `assistant` event:
 - Added = `new_lines - old_lines` (if positive)
 - Removed = `old_lines - new_lines` (if positive)
 
-Displayed as `(+A/-R)`, e.g. `(+3/-1)`. If only additions: `(+3)`. If only removals: `(-2)`. If net zero: `(+2/-2)`.
+Since `added` and `removed` are derived from the same difference, they are mutually exclusive — you can never have both positive at the same time. Displayed as `(+A)` if only additions (e.g. `(+3)`), `(-R)` if only removals (e.g. `(-2)`), or `(+N/-N)` if net zero (e.g. `(+2/-2)`).
 
 ### Write — lines written
 

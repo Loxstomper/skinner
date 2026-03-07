@@ -98,7 +98,7 @@ func TestIntegration_SingleIteration(t *testing.T) {
 		session.ToolResultEvent{ToolUseID: "tu1", IsError: false, LineInfo: "(85 lines)"},
 		session.AssistantBatchEvent{Events: []session.Event{
 			session.TextEvent{Text: "Now I'll edit the file"},
-			session.ToolUseEvent{ID: "tu2", Name: "Edit", Summary: "main.go (+3/-1)"},
+			session.ToolUseEvent{ID: "tu2", Name: "Edit", Summary: "main.go (+2/-2)"},
 		}},
 		session.ToolResultEvent{ToolUseID: "tu2", IsError: false},
 		session.UsageEvent{

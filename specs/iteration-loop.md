@@ -7,7 +7,7 @@ The TUI manages a loop of Claude CLI invocations, similar to the shell script it
 ## CLI Arguments
 
 ```
-skinner [--theme=<name>] [plan] [max_iterations]
+skinner [--theme=<name>] [--exit] [plan] [max_iterations]
 ```
 
 | Arguments         | Mode  | Prompt file      | Max iterations |
@@ -18,6 +18,8 @@ skinner [--theme=<name>] [plan] [max_iterations]
 | `plan 5`          | plan  | PROMPT_PLAN.md   | 5              |
 
 The `--theme` flag selects a color theme (default: `solarized-dark`). See [theme.md](theme.md).
+
+The `--exit` flag causes the TUI to quit automatically after all iterations complete (or the last iteration fails), rather than remaining open for browsing.
 
 ## Iteration Lifecycle
 

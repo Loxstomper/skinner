@@ -94,7 +94,7 @@ The right pane supports two view modes, toggled at runtime with `v` (see [keybin
   The test expects a return value of 42 but
   the function returns a string. I need to
   fix the return type.
-   Edit   src/main.go (+3/-1)                 ✓   0.3s
+   Edit   src/main.go (+2/-2)                 ✓   0.3s
    Bash   go test ./...                       ✗   4.5s
   Tests still failing — different error now…
    Read   src/main.go (85 lines)              ✓   0.8s
@@ -106,7 +106,7 @@ The right pane supports two view modes, toggled at runtime with `v` (see [keybin
   Looking at the test failures to understand...
    4 files                                     ✓   2.1s
   The test expects a return value of 42 but...
-   src/main.go (+3/-1)                        ✓   0.3s
+   src/main.go (+2/-2)                        ✓   0.3s
    go test ./...                              ✗   4.5s
   Tests still failing — different error now…
    src/main.go (85 lines)                     ✓   0.8s
