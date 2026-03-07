@@ -142,26 +142,68 @@ func TestTimeline_EnterExpandCollapse_Group(t *testing.T) {
 	}
 }
 
-func TestTimeline_EnterOnGroupChild_NoOp(t *testing.T) {
+func TestTimeline_EnterOnGroupChild_TogglesChildExpansion(t *testing.T) {
 	tl := NewTimeline()
 	items := []model.TimelineItem{
 		&model.ToolCallGroup{
 			ToolName: "Read",
 			Expanded: true,
 			Children: []*model.ToolCall{
-				{ID: "tc1", Name: "Read", Summary: "a.go", Status: model.ToolCallDone},
+				{ID: "tc1", Name: "Read", Summary: "a.go", Status: model.ToolCallDone, ResultContent: "file contents"},
 				{ID: "tc2", Name: "Read", Summary: "b.go", Status: model.ToolCallDone},
 			},
 		},
 	}
 	props := timelineProps(items)
 	group := items[0].(*model.ToolCallGroup)
+	child := group.Children[0]
 
-	// Move cursor to first child (flatIdx 1)
+	if child.Expanded {
+		t.Error("child should start collapsed")
+	}
+
+	// Move cursor to first child (flatIdx 1) and press Enter
 	tl.Cursor = 1
 	tl.Update(tea.KeyMsg{Type: tea.KeyEnter}, props)
+	if !child.Expanded {
+		t.Error("child should be expanded after enter")
+	}
 	if !group.Expanded {
-		t.Error("group should remain expanded after enter on child")
+		t.Error("group should remain expanded after toggling child")
+	}
+
+	// Press Enter again to collapse
+	tl.Update(tea.KeyMsg{Type: tea.KeyEnter}, props)
+	if child.Expanded {
+		t.Error("child should be collapsed after second enter")
+	}
+}
+
+func TestTimeline_EnterOnToolCall_TogglesExpansion(t *testing.T) {
+	tl := NewTimeline()
+	items := []model.TimelineItem{
+		&model.ToolCall{
+			ID: "tc1", Name: "Bash", Summary: "ls",
+			Status:        model.ToolCallDone,
+			RawInput:      map[string]interface{}{"command": "ls"},
+			ResultContent: "file1.go\nfile2.go",
+		},
+	}
+	props := timelineProps(items)
+	tc := items[0].(*model.ToolCall)
+
+	if tc.Expanded {
+		t.Error("tool call should start collapsed")
+	}
+
+	tl.Update(tea.KeyMsg{Type: tea.KeyEnter}, props)
+	if !tc.Expanded {
+		t.Error("tool call should be expanded after enter")
+	}
+
+	tl.Update(tea.KeyMsg{Type: tea.KeyEnter}, props)
+	if tc.Expanded {
+		t.Error("tool call should be collapsed after second enter")
 	}
 }
 
@@ -363,6 +405,160 @@ func TestTimeline_View_GroupExpanded(t *testing.T) {
 	}
 	if !strings.Contains(result, "b.go") {
 		t.Error("expected child 'b.go' when group is expanded")
+	}
+}
+
+func TestTimeline_View_ExpandedToolCall(t *testing.T) {
+	tl := NewTimeline()
+	items := []model.TimelineItem{
+		&model.ToolCall{
+			ID: "tc1", Name: "Bash", Summary: "ls",
+			Status:        model.ToolCallDone,
+			Duration:      time.Second,
+			RawInput:      map[string]interface{}{"command": "ls -la"},
+			ResultContent: "file1.go\nfile2.go",
+			Expanded:      true,
+		},
+	}
+	props := timelineProps(items)
+
+	result := tl.View(props)
+
+	// Should contain the command
+	if !strings.Contains(result, "$ ls -la") {
+		t.Error("expected expanded Bash to show '$ ls -la' command")
+	}
+	// Should contain result content
+	if !strings.Contains(result, "file1.go") {
+		t.Error("expected expanded Bash to show result 'file1.go'")
+	}
+	if !strings.Contains(result, "file2.go") {
+		t.Error("expected expanded Bash to show result 'file2.go'")
+	}
+}
+
+func TestTimeline_View_ExpandedEditDiff(t *testing.T) {
+	tl := NewTimeline()
+	items := []model.TimelineItem{
+		&model.ToolCall{
+			ID: "tc1", Name: "Edit", Summary: "main.go",
+			Status:   model.ToolCallDone,
+			Duration: time.Second,
+			RawInput: map[string]interface{}{
+				"old_string": "oldCode",
+				"new_string": "newCode",
+			},
+			Expanded: true,
+		},
+	}
+	props := timelineProps(items)
+
+	result := tl.View(props)
+
+	// Edit diff should show -/+ lines
+	if !strings.Contains(result, "-oldCode") {
+		t.Error("expected expanded Edit to show '-oldCode' diff line")
+	}
+	if !strings.Contains(result, "+newCode") {
+		t.Error("expected expanded Edit to show '+newCode' diff line")
+	}
+}
+
+func TestTimeline_View_ExpandedGroupChild(t *testing.T) {
+	tl := NewTimeline()
+	items := []model.TimelineItem{
+		&model.ToolCallGroup{
+			ToolName: "Read",
+			Expanded: true,
+			Children: []*model.ToolCall{
+				{
+					ID: "tc1", Name: "Read", Summary: "a.go",
+					Status: model.ToolCallDone, Duration: time.Second,
+					ResultContent: "package main",
+					Expanded:      true,
+				},
+				{
+					ID: "tc2", Name: "Read", Summary: "b.go",
+					Status: model.ToolCallDone, Duration: time.Second,
+				},
+			},
+		},
+	}
+	props := timelineProps(items)
+
+	result := tl.View(props)
+
+	// Expanded child should show its result content
+	if !strings.Contains(result, "package main") {
+		t.Error("expected expanded group child to show 'package main'")
+	}
+	// Group header and children should still render
+	if !strings.Contains(result, "a.go") {
+		t.Error("expected child 'a.go' summary")
+	}
+	if !strings.Contains(result, "b.go") {
+		t.Error("expected child 'b.go' summary")
+	}
+}
+
+func TestTimeline_View_ExpandedTruncation(t *testing.T) {
+	tl := NewTimeline()
+
+	// Create content that exceeds maxExpandedLines (20)
+	var longContent strings.Builder
+	for i := 0; i < 30; i++ {
+		if i > 0 {
+			longContent.WriteString("\n")
+		}
+		longContent.WriteString("line content")
+	}
+
+	items := []model.TimelineItem{
+		&model.ToolCall{
+			ID: "tc1", Name: "Read", Summary: "big.go",
+			Status:        model.ToolCallDone,
+			Duration:      time.Second,
+			ResultContent: longContent.String(),
+			Expanded:      true,
+		},
+	}
+	props := TimelineProps{
+		Items:   items,
+		Width:   80,
+		Height:  40, // large enough to see all lines
+		Focused: true,
+		Theme:   testTheme(),
+	}
+
+	result := tl.View(props)
+
+	// Should show truncation footer
+	if !strings.Contains(result, "more lines") {
+		t.Error("expected truncation footer with 'more lines' for content exceeding 20 lines")
+	}
+}
+
+func TestTimeline_View_CollapsedToolCall_NoContent(t *testing.T) {
+	tl := NewTimeline()
+	items := []model.TimelineItem{
+		&model.ToolCall{
+			ID: "tc1", Name: "Bash", Summary: "ls",
+			Status:        model.ToolCallDone,
+			Duration:      time.Second,
+			RawInput:      map[string]interface{}{"command": "ls -la"},
+			ResultContent: "should not appear",
+			Expanded:      false,
+		},
+	}
+	props := timelineProps(items)
+
+	result := tl.View(props)
+
+	if strings.Contains(result, "should not appear") {
+		t.Error("collapsed tool call should not show result content")
+	}
+	if strings.Contains(result, "$ ls") {
+		t.Error("collapsed tool call should not show command")
 	}
 }
 

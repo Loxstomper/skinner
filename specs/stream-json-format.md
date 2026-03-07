@@ -50,7 +50,7 @@ Emitted when Claude invokes a tool.
 - For `tool_use` elements:
   - `id` is the unique tool use ID used to correlate with the result.
   - `name` is the tool name (e.g. `Read`, `Edit`, `Bash`, `Grep`, `Glob`, `Write`, `Task`).
-  - `input` is a tool-specific arguments object.
+  - `input` is a tool-specific arguments object. The parsed input fields are retained on the tool call model for use in expanded detail views (see [tui-layout.md](tui-layout.md#expandable-tool-call-detail)).
 
 ### `user` — Tool Result
 
@@ -76,7 +76,7 @@ Emitted when a tool call completes and returns its result.
 ```
 
 - `tool_use_id` matches the `id` from the corresponding `tool_use` event.
-- `content` is the tool output (string). Not displayed in the timeline.
+- `content` is the tool output (string). Stored on the tool call model for display in expanded detail views (see [tui-layout.md](tui-layout.md#expandable-tool-call-detail)).
 - `is_error` indicates whether the tool call failed. Displayed as `✓` (false) or `✗` (true) on the tool call row.
 
 ### `result` — End of Session

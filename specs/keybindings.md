@@ -27,7 +27,7 @@ In the **right pane**, cursor movement highlights individual items (text blocks 
 
 | Key              | Action                                      |
 |------------------|---------------------------------------------|
-| `enter`          | Focus right pane (left pane); expand/collapse selected text block or tool call group (right pane) |
+| `enter`          | Focus right pane (left pane); expand/collapse selected text block, tool call, or tool call group (right pane) |
 
 ## View
 

@@ -35,16 +35,15 @@ A vertical list of all iterations in the current session. Each entry shows:
 
 ```
  ████████████████████████████████
-   Iter 1  ✓  (23 calls, 2m14s)    ← highlighted row
+   Iter 1  ✓  (2m14s)               ← highlighted row
  ████████████████████████████████
-   Iter 2  ✓  (17 calls, 1m48s)
-   Iter 3  ⟳  (5 calls, 0m32s...)
+   Iter 2  ✓  (1m48s)
+   Iter 3  ⟳  (0m32s...)
 ```
 
 - **Cursor**: The selected iteration row is highlighted with the theme's `Highlight` background color.
 - **Status icon**: `✓` completed (`StatusSuccess`), `⟳` running (`StatusRunning`), `✗` failed (`StatusError`). Colored per theme.
 - **Iteration text**: colored per state (`IterRunning`, `IterSuccess`, `IterError`).
-- **Call count**: total number of tool calls in that iteration.
 - **Duration**: total wallclock time of the iteration. Shown with `...` suffix while still running.
 
 **Scrolling**: When iterations exceed the viewport height, the list scrolls to keep the cursor visible. Moving the cursor beyond the viewport edge adjusts the scroll offset. The view renders only the visible slice of iterations.
@@ -75,6 +74,54 @@ Each tool call is a single row containing:
 6. **Duration** — right-aligned, colored per state (`DurationRunning`/`DurationSuccess`/`DurationError`). Shows `...` while the call is in progress, then the final duration.
 
 For unknown tools (not in the icon table), use the fallback icon `` (`f059`, question-circle) and always show the tool name regardless of view mode.
+
+### Expandable Tool Call Detail
+
+Pressing `enter` on any tool call row (standalone or group child) toggles an expanded detail view below the summary row. The expanded view shows tool-specific content:
+
+| Tool  | Expanded content                                                    |
+|-------|---------------------------------------------------------------------|
+| Bash  | `$ command` header line, then command output                        |
+| Edit  | Unified diff of `old_string` → `new_string` (see below)            |
+| Read  | File contents from the tool result                                  |
+| Write | The `content` that was written (from the tool input)                |
+| Grep  | Search results from the tool result                                 |
+| Glob  | Matched file list from the tool result                              |
+| Task  | Task output from the tool result                                    |
+| Other | Tool result content, if available                                   |
+
+**Truncation**: Expanded content is limited to **20 lines**. If the content exceeds this limit, the last line shows `... N more lines ...` in dim text (`ForegroundDim`).
+
+**Styling**: Expanded content lines are indented by 4 spaces and rendered in dim text (`ForegroundDim`), except for Edit diffs which use colored diff styling (see below).
+
+**Cursor behavior**: Expanded content lines are **not individually selectable** — the tool call remains a single cursor position regardless of expansion state. However, the expanded lines count toward the item's display height for scroll calculations (the cursor "covers" the header + all expanded lines, similar to multi-line text blocks).
+
+**Highlighting**: Only the summary header line receives cursor highlighting. The expanded content lines below it are not highlighted.
+
+#### Edit Diff Format
+
+When an Edit tool call is expanded, the detail view shows a unified diff:
+
+- Lines from `old_string` are prefixed with `-` and colored red (`StatusError`).
+- Lines from `new_string` are prefixed with `+` and colored green (`StatusSuccess`).
+
+```
+   Edit   src/main.go (+2/-1)                    ✓   0.3s
+      -    return "hello"
+      +    name := "world"
+      +    return fmt.Sprintf("hello, %s", name)
+```
+
+#### Bash Expanded Example
+
+```
+   Bash   Run test suite                          ✗   4.5s
+      $ go test ./...
+      --- FAIL: TestParser (0.01s)
+          parser_test.go:42: expected 42, got "42"
+      FAIL
+      ... 12 more lines ...
+```
 
 ### Tool Call Groups
 

@@ -109,6 +109,9 @@ func (tl *Timeline) handleEnter(props TimelineProps) {
 	case *model.TextBlock:
 		it.Expanded = !it.Expanded
 		tl.ensureCursorVisible(props)
+	case *model.ToolCall:
+		it.Expanded = !it.Expanded
+		tl.ensureCursorVisible(props)
 	case *model.ToolCallGroup:
 		if childIdx == -1 {
 			// On group header: toggle expand/collapse
@@ -121,8 +124,11 @@ func (tl *Timeline) handleEnter(props TimelineProps) {
 				it.Expanded = true
 			}
 			tl.ensureCursorVisible(props)
+		} else if childIdx >= 0 && childIdx < len(it.Children) {
+			// On child row: toggle child tool call expansion
+			it.Children[childIdx].Expanded = !it.Children[childIdx].Expanded
+			tl.ensureCursorVisible(props)
 		}
-		// On child row: no-op
 	}
 }
 
@@ -172,6 +178,13 @@ func (tl *Timeline) View(props TimelineProps) string {
 		case *model.ToolCall:
 			l := renderToolCallLine(it, nameWidth, summaryWidth, durWidth, props.CompactView, props.Theme)
 			lines = append(lines, renderedLine{text: l, flatIdx: flatPos})
+			// Render expanded content lines for standalone tool calls
+			if it.Expanded {
+				for _, cl := range expandedContentLines(it) {
+					rendered := renderExpandedContentLine(cl, it.Name, props.Width, props.Theme)
+					lines = append(lines, renderedLine{text: rendered, flatIdx: -1})
+				}
+			}
 			flatPos++
 		case *model.ToolCallGroup:
 			l := renderGroupHeaderLine(it, nameWidth, summaryWidth, durWidth, props.CompactView, props.Theme)
@@ -183,6 +196,13 @@ func (tl *Timeline) View(props TimelineProps) string {
 					cl := renderToolCallLine(child, nameWidth, childSummaryWidth, durWidth, props.CompactView, props.Theme)
 					cl = "  " + cl
 					lines = append(lines, renderedLine{text: cl, flatIdx: flatPos})
+					// Render expanded content lines for group children with extra indent
+					if child.Expanded {
+						for _, el := range expandedContentLines(child) {
+							rendered := "  " + renderExpandedContentLine(el, child.Name, props.Width-2, props.Theme)
+							lines = append(lines, renderedLine{text: rendered, flatIdx: -1})
+						}
+					}
 					flatPos++
 				}
 			}

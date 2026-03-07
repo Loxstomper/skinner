@@ -18,11 +18,9 @@ Raw input/result content flows through parser → executor → session → model
 
 `ItemLineCount`, `FlatCursorLineRange`, and `LineToFlatCursor` now use `toolCallLineCount()` for ToolCall items and group children, supporting multi-line expanded tool calls. 8 new tests cover expanded standalone tool calls, groups with expanded children, line-to-cursor mapping for content lines, and roundtrip consistency.
 
-### 4. Timeline rendering and interaction — `internal/tui/timeline.go`
+### 4. Timeline rendering and interaction — `internal/tui/timeline.go`  ✅ DONE
 
-- [ ] **`View()`**: after rendering a ToolCall line, if `Expanded`, render content lines via `expandedContentLines` + `renderExpandedContentLine` with `flatIdx: -1` (no highlight). Same for group children when their `Expanded` is true (with extra 2-space indent).
-- [ ] **`handleEnter()`**: add `*model.ToolCall` case to toggle `Expanded`; change `*model.ToolCallGroup` `childIdx >= 0` branch from no-op to toggling `child.Expanded`
-- [ ] **tests**: update `timeline_test.go` — test Enter toggles standalone ToolCall expansion, Enter toggles group child expansion, View output includes expanded content lines, Edit shows diff lines, truncation renders footer
+`View()` renders expanded content lines (via `expandedContentLines` + `renderExpandedContentLine`) below standalone ToolCall rows and group child rows. Group child content gets extra 2-space indent. Content lines use `flatIdx: -1` (no cursor highlight). `handleEnter()` toggles `Expanded` on standalone `*model.ToolCall` items and on group children (`childIdx >= 0`). 7 new tests: Enter toggles standalone ToolCall, Enter toggles group child, View shows expanded Bash command+output, View shows Edit diff lines, View shows expanded group child content, truncation footer renders, collapsed tool call hides content.
 
 ### 5. Left pane — remove tool call count — `internal/tui/iterlist.go`
 

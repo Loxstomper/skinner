@@ -103,7 +103,7 @@ A manually collapsed group during a live run stays collapsed (auto-expand does n
 
 ### Enter on child rows
 
-`enter` on a child tool call row has **no action**. Only the group header responds to `enter`.
+`enter` on a child tool call row toggles the **expanded detail view** for that individual tool call (see [tui-layout.md](tui-layout.md#expandable-tool-call-detail)). This is the same expand/collapse behavior as standalone tool calls — it shows the command, output, diff, or other detail content below the child row.
 
 ## Cursor Navigation
 
