@@ -1,28 +1,25 @@
 package tui
 
 import (
-	"bufio"
+	"context"
 	"fmt"
-	"io"
-	"os/exec"
 	"strings"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/loxstomper/skinner/internal/config"
+	"github.com/loxstomper/skinner/internal/executor"
 	"github.com/loxstomper/skinner/internal/model"
-	"github.com/loxstomper/skinner/internal/parser"
+	"github.com/loxstomper/skinner/internal/session"
 	"github.com/loxstomper/skinner/internal/theme"
 )
 
-// Bubble Tea messages
+// Bubble Tea messages — thin wrappers around session events
 
-type assistantBatchMsg struct {
-	Events []interface{} // parser.ToolUseEvent and parser.TextEvent only (UsageEvent sent separately)
-}
-type toolResultMsg parser.ToolResultEvent
-type usageMsg parser.UsageEvent
+type assistantBatchMsg struct{ session.AssistantBatchEvent }
+type toolResultMsg struct{ session.ToolResultEvent }
+type usageMsg struct{ session.UsageEvent }
 type iterationEndMsg struct{}
 type subprocessExitMsg struct{ err error }
 type tickMsg time.Time
@@ -38,7 +35,8 @@ const (
 
 // Model is the Bubble Tea model for the TUI.
 type Model struct {
-	session       model.Session
+	controller    *session.Controller
+	exec          executor.Executor
 	config        config.Config
 	promptContent string
 	theme         theme.Theme
@@ -53,10 +51,6 @@ type Model struct {
 	// View mode
 	compactView bool
 
-	// Cost tracking
-	hasKnownModel bool
-	lastModel     string
-
 	// Auto-follow
 	autoFollowLeft  AutoFollow
 	autoFollowRight AutoFollow
@@ -64,8 +58,7 @@ type Model struct {
 	// gg state machine
 	gPending bool
 
-	// Subprocess
-	cmd     *exec.Cmd
+	// Event channel for bridging executor events to Bubble Tea
 	eventCh chan tea.Msg
 
 	// Exit when done
@@ -75,9 +68,12 @@ type Model struct {
 	quitting bool
 }
 
-func NewModel(session model.Session, cfg config.Config, promptContent string, th theme.Theme, compactView bool, exitOnComplete bool) Model {
+func NewModel(sess model.Session, cfg config.Config, promptContent string, th theme.Theme, compactView bool, exitOnComplete bool, exec executor.Executor) Model {
+	sessionPtr := &sess
+	ctrl := session.NewController(sessionPtr, cfg, nil)
 	return Model{
-		session:         session,
+		controller:      ctrl,
+		exec:            exec,
 		config:          cfg,
 		promptContent:   promptContent,
 		theme:           th,
@@ -88,6 +84,11 @@ func NewModel(session model.Session, cfg config.Config, promptContent string, th
 		autoFollowLeft:  NewAutoFollow(),
 		autoFollowRight: NewAutoFollow(),
 	}
+}
+
+// Session returns a pointer to the controller's session for read access.
+func (m *Model) Session() *model.Session {
+	return m.controller.Session
 }
 
 func (m *Model) Init() tea.Cmd {
@@ -109,79 +110,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, tickCmd()
 
 	case assistantBatchMsg:
-		if idx := m.runningIterationIdx(); idx >= 0 {
-			iter := &m.session.Iterations[idx]
-
-			// Collect runs of consecutive same-name ToolUseEvents into groups.
-			// Runs of 1 become standalone ToolCalls; runs of 2+ become ToolCallGroups.
-			type toolRun struct {
-				name   string
-				events []parser.ToolUseEvent
-			}
-			var pending []interface{} // *model.TextBlock or *toolRun
-
-			var currentRun *toolRun
-			flushRun := func() {
-				if currentRun != nil {
-					pending = append(pending, currentRun)
-					currentRun = nil
-				}
-			}
-
-			for _, evt := range msg.Events {
-				switch e := evt.(type) {
-				case parser.ToolUseEvent:
-					if currentRun != nil && currentRun.name == e.Name {
-						currentRun.events = append(currentRun.events, e)
-					} else {
-						flushRun()
-						currentRun = &toolRun{name: e.Name, events: []parser.ToolUseEvent{e}}
-					}
-				case parser.TextEvent:
-					flushRun()
-					pending = append(pending, &model.TextBlock{Text: e.Text})
-				}
-			}
-			flushRun()
-
-			// Convert pending items to timeline items
-			now := time.Now()
-			for _, p := range pending {
-				switch v := p.(type) {
-				case *model.TextBlock:
-					iter.Items = append(iter.Items, v)
-				case *toolRun:
-					if len(v.events) == 1 {
-						e := v.events[0]
-						iter.Items = append(iter.Items, &model.ToolCall{
-							ID:        e.ID,
-							Name:      e.Name,
-							Summary:   e.Summary,
-							LineInfo:  e.LineInfo,
-							StartTime: now,
-							Status:    model.ToolCallRunning,
-						})
-					} else {
-						group := &model.ToolCallGroup{
-							ToolName:     v.name,
-							Expanded:     true,
-							ManualToggle: false,
-						}
-						for _, e := range v.events {
-							group.Children = append(group.Children, &model.ToolCall{
-								ID:        e.ID,
-								Name:      e.Name,
-								Summary:   e.Summary,
-								LineInfo:  e.LineInfo,
-								StartTime: now,
-								Status:    model.ToolCallRunning,
-							})
-						}
-						iter.Items = append(iter.Items, group)
-					}
-				}
-			}
-
+		m.controller.ProcessAssistantBatch(msg.Events)
+		if idx := m.controller.RunningIterationIdx(); idx >= 0 {
+			iter := &m.controller.Session.Iterations[idx]
 			if m.selectedIter == idx && m.autoFollowRight.Following() {
 				m.rightCursor = FlatCursorCount(iter.Items) - 1
 				m.scrollToBottom()
@@ -190,46 +121,21 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, waitForEvent(m.eventCh)
 
 	case usageMsg:
-		m.session.InputTokens += msg.InputTokens
-		m.session.OutputTokens += msg.OutputTokens
-		m.session.CacheReadTokens += msg.CacheReadInputTokens
-		m.session.CacheCreationTokens += msg.CacheCreationInputTokens
-		m.session.LastInputTokens = msg.InputTokens
-		m.session.LastCacheReadTokens = msg.CacheReadInputTokens
-		if pricing, ok := m.config.Pricing[msg.Model]; ok {
-			m.hasKnownModel = true
-			m.lastModel = msg.Model
-			m.session.TotalCost += float64(msg.InputTokens) * pricing.Input
-			m.session.TotalCost += float64(msg.OutputTokens) * pricing.Output
-			m.session.TotalCost += float64(msg.CacheReadInputTokens) * pricing.CacheRead
-			m.session.TotalCost += float64(msg.CacheCreationInputTokens) * pricing.CacheCreate
-		}
+		m.controller.ProcessUsage(msg.UsageEvent)
 		return m, waitForEvent(m.eventCh)
 
 	case toolResultMsg:
-		if idx := m.runningIterationIdx(); idx >= 0 {
-			iter := &m.session.Iterations[idx]
-			for i, item := range iter.Items {
-				if tc, ok := item.(*model.ToolCall); ok && tc.ID == msg.ToolUseID {
-					m.applyToolResult(tc, msg)
-					break
-				}
-				if group, ok := item.(*model.ToolCallGroup); ok {
-					found := false
-					for _, child := range group.Children {
-						if child.ID == msg.ToolUseID {
-							m.applyToolResult(child, msg)
-							found = true
-							break
-						}
-					}
-					if found {
-						// Check if the group just completed (all children done)
-						if group.Status() != model.ToolCallRunning && !group.ManualToggle {
-							cursorOnGroup := m.isCursorOnGroup(i)
-							if m.selectedIter != idx || !cursorOnGroup {
-								group.Expanded = false
-							}
+		group := m.controller.ProcessToolResult(msg.ToolResultEvent)
+		if group != nil && group.Status() != model.ToolCallRunning && !group.ManualToggle {
+			idx := m.controller.RunningIterationIdx()
+			if idx >= 0 {
+				iter := &m.controller.Session.Iterations[idx]
+				// Find the item index of this group
+				for i, item := range iter.Items {
+					if item == group {
+						cursorOnGroup := m.isCursorOnGroup(i)
+						if m.selectedIter != idx || !cursorOnGroup {
+							group.Expanded = false
 						}
 						break
 					}
@@ -242,18 +148,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, waitForEvent(m.eventCh)
 
 	case subprocessExitMsg:
-		m.cmd = nil
-		if idx := m.runningIterationIdx(); idx >= 0 {
-			iter := &m.session.Iterations[idx]
-			iter.Duration = time.Since(iter.StartTime)
-			if msg.err != nil {
-				iter.Status = model.IterationFailed
-			} else {
-				iter.Status = model.IterationCompleted
-			}
-		}
+		m.controller.CompleteIteration(msg.err)
 
-		if m.shouldStartNext() {
+		if !m.quitting && m.controller.ShouldStartNext() {
 			return m, m.spawnIteration()
 		}
 		if m.exitOnComplete {
@@ -285,9 +182,7 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch key {
 	case "q", "ctrl+c":
 		m.quitting = true
-		if m.cmd != nil && m.cmd.Process != nil {
-			_ = m.cmd.Process.Kill()
-		}
+		_ = m.exec.Kill()
 		return m, tea.Quit
 
 	case "tab":
@@ -314,12 +209,12 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	case "j", "down":
 		if m.focusedPane == leftPane {
-			if m.selectedIter < len(m.session.Iterations)-1 {
+			if m.selectedIter < len(m.controller.Session.Iterations)-1 {
 				m.selectedIter++
 				m.rightCursor = 0
 				m.scrollOffset = 0
 			}
-			m.autoFollowLeft.OnManualMove(m.selectedIter == len(m.session.Iterations)-1)
+			m.autoFollowLeft.OnManualMove(m.selectedIter == len(m.controller.Session.Iterations)-1)
 		} else {
 			items := m.selectedItems()
 			maxPos := FlatCursorCount(items) - 1
@@ -337,7 +232,7 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				m.rightCursor = 0
 				m.scrollOffset = 0
 			}
-			m.autoFollowLeft.OnManualMove(m.selectedIter == len(m.session.Iterations)-1)
+			m.autoFollowLeft.OnManualMove(m.selectedIter == len(m.controller.Session.Iterations)-1)
 		} else {
 			if m.rightCursor > 0 {
 				m.rightCursor--
@@ -349,15 +244,15 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "pgdown":
 		if m.focusedPane == leftPane {
 			m.selectedIter += m.height
-			if m.selectedIter >= len(m.session.Iterations) {
-				m.selectedIter = len(m.session.Iterations) - 1
+			if m.selectedIter >= len(m.controller.Session.Iterations) {
+				m.selectedIter = len(m.controller.Session.Iterations) - 1
 			}
 			if m.selectedIter < 0 {
 				m.selectedIter = 0
 			}
 			m.rightCursor = 0
 			m.scrollOffset = 0
-			m.autoFollowLeft.OnManualMove(m.selectedIter == len(m.session.Iterations)-1)
+			m.autoFollowLeft.OnManualMove(m.selectedIter == len(m.controller.Session.Iterations)-1)
 		} else {
 			m.scrollOffset += m.rightPaneHeight()
 			m.clampScroll()
@@ -373,7 +268,7 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			}
 			m.rightCursor = 0
 			m.scrollOffset = 0
-			m.autoFollowLeft.OnManualMove(m.selectedIter == len(m.session.Iterations)-1)
+			m.autoFollowLeft.OnManualMove(m.selectedIter == len(m.controller.Session.Iterations)-1)
 		} else {
 			m.scrollOffset -= m.rightPaneHeight()
 			if m.scrollOffset < 0 {
@@ -388,8 +283,8 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "enter":
 		if m.focusedPane == leftPane {
 			m.focusedPane = rightPane
-		} else if m.selectedIter < len(m.session.Iterations) {
-			iter := &m.session.Iterations[m.selectedIter]
+		} else if m.selectedIter < len(m.controller.Session.Iterations) {
+			iter := &m.controller.Session.Iterations[m.selectedIter]
 			itemIdx, childIdx := FlatToItem(iter.Items, m.rightCursor)
 			if itemIdx < len(iter.Items) {
 				switch it := iter.Items[itemIdx].(type) {
@@ -423,7 +318,7 @@ func (m *Model) jumpToTop() {
 		m.selectedIter = 0
 		m.rightCursor = 0
 		m.scrollOffset = 0
-		m.autoFollowLeft.OnManualMove(m.selectedIter == len(m.session.Iterations)-1)
+		m.autoFollowLeft.OnManualMove(m.selectedIter == len(m.controller.Session.Iterations)-1)
 	} else {
 		m.rightCursor = 0
 		m.scrollOffset = 0
@@ -433,8 +328,8 @@ func (m *Model) jumpToTop() {
 
 func (m *Model) jumpToBottom() {
 	if m.focusedPane == leftPane {
-		if len(m.session.Iterations) > 0 {
-			m.selectedIter = len(m.session.Iterations) - 1
+		if len(m.controller.Session.Iterations) > 0 {
+			m.selectedIter = len(m.controller.Session.Iterations) - 1
 			m.rightCursor = 0
 			m.scrollOffset = 0
 		}
@@ -453,17 +348,17 @@ func (m *Model) viewHeader() string {
 	dim := lipgloss.NewStyle().Foreground(lipgloss.Color(m.theme.ForegroundDim))
 
 	// Build centre content: duration, tokens, context %, cost
-	dur := FormatDurationValue(time.Since(m.session.StartTime))
-	inputTokens := m.session.InputTokens + m.session.CacheReadTokens + m.session.CacheCreationTokens
-	outputTokens := m.session.OutputTokens
+	dur := FormatDurationValue(time.Since(m.controller.Session.StartTime))
+	inputTokens := m.controller.Session.InputTokens + m.controller.Session.CacheReadTokens + m.controller.Session.CacheCreationTokens
+	outputTokens := m.controller.Session.OutputTokens
 
 	centreText := fmt.Sprintf("⏱ %s   ↑%s ↓%s tokens", dur, FormatTokens(inputTokens), FormatTokens(outputTokens))
 	centreRendered := dim.Render(centreText)
 
 	// Context window percentage
-	if m.hasKnownModel && m.lastModel != "" {
-		if pricing, ok := m.config.Pricing[m.lastModel]; ok && pricing.ContextWindow > 0 {
-			pct := int((m.session.LastInputTokens + m.session.LastCacheReadTokens) * 100 / int64(pricing.ContextWindow))
+	if m.controller.HasKnownModel() && m.controller.LastModel() != "" {
+		if pricing, ok := m.config.Pricing[m.controller.LastModel()]; ok && pricing.ContextWindow > 0 {
+			pct := int((m.controller.Session.LastInputTokens + m.controller.Session.LastCacheReadTokens) * 100 / int64(pricing.ContextWindow))
 			ctxText := fmt.Sprintf("   ctx %d%%", pct)
 			var ctxColor string
 			switch {
@@ -479,28 +374,28 @@ func (m *Model) viewHeader() string {
 	}
 
 	// Cost
-	if m.hasKnownModel {
-		centreRendered += dim.Render(fmt.Sprintf("   ~$%.2f", m.session.TotalCost))
+	if m.controller.HasKnownModel() {
+		centreRendered += dim.Render(fmt.Sprintf("   ~$%.2f", m.controller.Session.TotalCost))
 	}
 
 	// Right side: iteration progress + status icon
-	iterCount := len(m.session.Iterations)
+	iterCount := len(m.controller.Session.Iterations)
 	if iterCount == 0 {
 		iterCount = 1
 	}
 	var iterText string
-	if m.session.MaxIterations > 0 {
-		iterText = fmt.Sprintf("Iter %d/%d", iterCount, m.session.MaxIterations)
+	if m.controller.Session.MaxIterations > 0 {
+		iterText = fmt.Sprintf("Iter %d/%d", iterCount, m.controller.Session.MaxIterations)
 	} else {
 		iterText = fmt.Sprintf("Iter %d", iterCount)
 	}
 
 	var statusIcon, statusColor string
-	if idx := m.runningIterationIdx(); idx >= 0 {
+	if idx := m.controller.RunningIterationIdx(); idx >= 0 {
 		statusIcon = "⟳"
 		statusColor = m.theme.StatusRunning
 	} else if iterCount > 0 {
-		lastIter := m.session.Iterations[len(m.session.Iterations)-1]
+		lastIter := m.controller.Session.Iterations[len(m.controller.Session.Iterations)-1]
 		if lastIter.Status == model.IterationFailed {
 			statusIcon = "✗"
 			statusColor = m.theme.StatusError
@@ -570,7 +465,7 @@ func (m *Model) renderLeftPane(width, height int) string {
 	highlight := lipgloss.NewStyle().Background(lipgloss.Color(m.theme.Highlight))
 
 	var lines []string
-	for i, iter := range m.session.Iterations {
+	for i, iter := range m.controller.Session.Iterations {
 		var statusIcon string
 		var statusColor, iterColor string
 		switch iter.Status {
@@ -622,11 +517,11 @@ type renderedLine struct {
 func (m *Model) renderRightPane(width, height int) string {
 	style := lipgloss.NewStyle().Width(width).Height(height)
 
-	if m.selectedIter >= len(m.session.Iterations) {
+	if m.selectedIter >= len(m.controller.Session.Iterations) {
 		return style.Render("")
 	}
 
-	iter := m.session.Iterations[m.selectedIter]
+	iter := m.controller.Session.Iterations[m.selectedIter]
 	items := iter.Items
 
 	if len(items) == 0 {
@@ -872,88 +767,45 @@ func (m *Model) renderGroupHeaderLine(g *model.ToolCallGroup, nameWidth, summary
 	return fmt.Sprintf("  %s %s %s %s", styledIcon, styledSummary, styledResult, styledDur)
 }
 
-// Subprocess management
+// Subprocess management — delegates to executor
 
 func (m *Model) spawnIteration() tea.Cmd {
-	iter := model.Iteration{
-		Index:     len(m.session.Iterations),
-		Status:    model.IterationRunning,
-		StartTime: time.Now(),
-	}
-	m.session.Iterations = append(m.session.Iterations, iter)
+	m.controller.StartIteration()
 	if m.autoFollowLeft.Following() {
-		m.selectedIter = len(m.session.Iterations) - 1
+		m.selectedIter = len(m.controller.Session.Iterations) - 1
 		m.rightCursor = 0
 		m.scrollOffset = 0
 	}
 
-	cmd := exec.Command("claude",
-		"-p",
-		"--dangerously-skip-permissions",
-		"--output-format=stream-json",
-		"--verbose",
-	)
-	cmd.Stdin = strings.NewReader(m.promptContent)
+	ch := m.eventCh
 
-	stdout, err := cmd.StdoutPipe()
+	// Start the executor and bridge its events to Bubble Tea messages
+	eventCh, err := m.exec.Start(context.Background(), m.promptContent)
 	if err != nil {
 		return func() tea.Msg {
 			return subprocessExitMsg{err: err}
 		}
 	}
 
-	if err := cmd.Start(); err != nil {
-		return func() tea.Msg {
-			return subprocessExitMsg{err: err}
-		}
-	}
-
-	m.cmd = cmd
-	ch := m.eventCh
-
-	// Goroutine reads stdout and sends parsed events to channel
+	// Bridge goroutine: reads session.Event from executor, wraps as tea.Msg
 	go func() {
-		readEvents(stdout, ch)
-		err := cmd.Wait()
-		ch <- subprocessExitMsg{err: err}
+		for evt := range eventCh {
+			switch e := evt.(type) {
+			case session.AssistantBatchEvent:
+				ch <- assistantBatchMsg{e}
+			case session.UsageEvent:
+				ch <- usageMsg{e}
+			case session.ToolResultEvent:
+				ch <- toolResultMsg{e}
+			case session.IterationEndEvent:
+				ch <- iterationEndMsg{}
+			case session.SubprocessExitEvent:
+				ch <- subprocessExitMsg{err: e.Err}
+			}
+		}
 	}()
 
 	return waitForEvent(ch)
-}
-
-func readEvents(r io.Reader, ch chan<- tea.Msg) {
-	scanner := bufio.NewScanner(r)
-	buf := make([]byte, 0, 1024*1024)
-	scanner.Buffer(buf, 10*1024*1024)
-
-	for scanner.Scan() {
-		line := scanner.Text()
-		events, err := parser.ParseStreamEvent(line)
-		if err != nil {
-			continue
-		}
-
-		// Collect ToolUseEvent and TextEvent from assistant events into a batch.
-		// UsageEvent, ToolResultEvent, and IterationEndEvent are sent individually.
-		var batch []interface{}
-		for _, evt := range events {
-			switch e := evt.(type) {
-			case parser.UsageEvent:
-				ch <- usageMsg(e)
-			case parser.ToolUseEvent:
-				batch = append(batch, e)
-			case parser.TextEvent:
-				batch = append(batch, e)
-			case parser.ToolResultEvent:
-				ch <- toolResultMsg(e)
-			case parser.IterationEndEvent:
-				ch <- iterationEndMsg{}
-			}
-		}
-		if len(batch) > 0 {
-			ch <- assistantBatchMsg{Events: batch}
-		}
-	}
 }
 
 func waitForEvent(ch <-chan tea.Msg) tea.Cmd {
@@ -963,39 +815,6 @@ func waitForEvent(ch <-chan tea.Msg) tea.Cmd {
 }
 
 // Helpers
-
-func (m *Model) applyToolResult(tc *model.ToolCall, msg toolResultMsg) {
-	tc.Duration = time.Since(tc.StartTime)
-	tc.IsError = msg.IsError
-	if msg.IsError {
-		tc.Status = model.ToolCallError
-	} else {
-		tc.Status = model.ToolCallDone
-	}
-	if msg.LineInfo != "" && tc.LineInfo == "" && tc.Name == "Read" {
-		tc.LineInfo = msg.LineInfo
-	}
-}
-
-func (m *Model) runningIterationIdx() int {
-	for i, iter := range m.session.Iterations {
-		if iter.Status == model.IterationRunning {
-			return i
-		}
-	}
-	return -1
-}
-
-func (m *Model) shouldStartNext() bool {
-	if m.quitting {
-		return false
-	}
-	count := len(m.session.Iterations)
-	if m.session.MaxIterations > 0 && count >= m.session.MaxIterations {
-		return false
-	}
-	return true
-}
 
 func (m *Model) rightPaneHeight() int {
 	if m.height > 1 {
@@ -1007,10 +826,10 @@ func (m *Model) rightPaneHeight() int {
 // selectedItems returns the timeline items for the currently selected iteration,
 // or nil if the selection is out of range.
 func (m *Model) selectedItems() []model.TimelineItem {
-	if m.selectedIter >= len(m.session.Iterations) {
+	if m.selectedIter >= len(m.controller.Session.Iterations) {
 		return nil
 	}
-	return m.session.Iterations[m.selectedIter].Items
+	return m.controller.Session.Iterations[m.selectedIter].Items
 }
 
 func (m *Model) ensureCursorVisible() {

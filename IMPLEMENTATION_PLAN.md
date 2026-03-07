@@ -64,21 +64,20 @@ Created `internal/executor` package with four files:
 
 ---
 
-### Step 7: Wire controller + executor into TUI
+### ~~Step 7: Wire controller + executor into TUI~~ ✅ DONE
 
-Modify `tui.go`:
-- Add `session.Controller` and `executor.Executor` fields to `Model`
-- Remove `eventCh`, `cmd`, `hasKnownModel`, `lastModel` fields
-- Replace inline business logic in `Update` with controller calls
-- Replace subprocess code with executor calls
-- Bridge executor channel → Bubble Tea messages: the executor sends `session.Event` values (including `AssistantBatchEvent`, `UsageEvent`, `ToolResultEvent`, `IterationEndEvent`, `SubprocessExitEvent`). The TUI adapter goroutine wraps each into a `tea.Msg` and sends to Bubble Tea.
-- The existing `assistantBatchMsg`, `toolResultMsg`, `usageMsg`, `iterationEndMsg`, `subprocessExitMsg` types become thin wrappers around session events.
-- Remove `parser` import (now internal to executor)
+Rewired `tui.go` to use `session.Controller` and `executor.Executor`:
 
-Modify `cmd/skinner/main.go`:
-- Construct `ClaudeExecutor` and pass to `NewModel`
-
-Verify: `make check` still green.
+- **Model fields**: Added `controller *session.Controller` and `exec executor.Executor`. Removed `cmd *exec.Cmd`, `hasKnownModel bool`, `lastModel string`. Kept `eventCh` as bridge channel.
+- **NewModel signature**: Added `executor.Executor` parameter. Constructor creates `session.Controller` internally.
+- **Message types**: `assistantBatchMsg`, `toolResultMsg`, `usageMsg` are now thin wrappers around `session.*Event` types.
+- **Update method**: `assistantBatchMsg` delegates to `controller.ProcessAssistantBatch()`. `usageMsg` delegates to `controller.ProcessUsage()`. `toolResultMsg` delegates to `controller.ProcessToolResult()`, then handles UI group collapse logic. `subprocessExitMsg` delegates to `controller.CompleteIteration()` and `controller.ShouldStartNext()`.
+- **spawnIteration()**: Delegates to `controller.StartIteration()` + `exec.Start()`. Bridge goroutine converts `session.Event` → `tea.Msg`.
+- **Quit handling**: Uses `exec.Kill()` instead of `cmd.Process.Kill()`.
+- **Removed**: `readEvents()`, `applyToolResult()`, `runningIterationIdx()`, `shouldStartNext()` — all now in session controller.
+- **Removed imports**: `bufio`, `io`, `os/exec`, `parser`. Added: `context`, `executor`, `session`.
+- **main.go**: Constructs `&executor.ClaudeExecutor{}` and passes to `NewModel`.
+- `tui.go` reduced from ~1,060 to ~730 lines. `make check` green.
 
 ---
 
@@ -120,7 +119,7 @@ Verify: `make check` still green.
 
 | File | Role |
 |------|------|
-| `internal/tui/tui.go` | Monolith being decomposed (~1,220 lines) |
+| `internal/tui/tui.go` | Root TUI model (~730 lines, wired to controller+executor) |
 | `internal/tui/format.go` | Pure formatting helpers (extracted Step 1) |
 | `internal/session/session.go` | **New** — business logic controller |
 | `internal/executor/claude.go` | **New** — subprocess abstraction |
@@ -145,3 +144,4 @@ After step 10: full spec review pass.
 - **Step 4: Add tests for model, parser, theme** — `model/model_test.go` (5 test fns, ~22 cases), `parser/parser_test.go` (10 test fns, ~50 cases), `theme/theme_test.go` (2 test fns, ~9 cases). All packages now have full test coverage.
 - **Step 5: Create session controller** — `session/events.go` (5 event types + Event interface), `session/session.go` (Controller with 10 methods), `session/session_test.go` (23 tests covering grouping, result matching, usage/cost, iteration lifecycle, full end-to-end).
 - **Step 6: Create executor** — `executor/executor.go` (Executor interface), `executor/claude.go` (ClaudeExecutor with readEvents), `executor/fake.go` (FakeExecutor), `executor/executor_test.go` (13 tests). Added `AssistantBatchEvent` and `SubprocessExitEvent` to `session/events.go`.
+- **Step 7: Wire controller + executor into TUI** — Replaced inline business logic with `session.Controller` calls, replaced subprocess code with `executor.Executor`. Message types wrap `session.*Event`. `parser` import removed from `tui`. `main.go` constructs `ClaudeExecutor`. `tui.go` reduced to ~730 lines.
