@@ -18,17 +18,9 @@ Extracted all 6 cursor functions to standalone functions in `tui/cursor.go`: `Fl
 
 ---
 
-### Step 3: Extract auto-follow state machine → `tui/autofollow.go`
+~~Step 3: Extract auto-follow state machine → `tui/autofollow.go`~~ ✅ DONE
 
-Create `AutoFollow` struct replacing `autoFollowLeft`/`autoFollowRight` bools:
-- `NewAutoFollow() AutoFollow` (starts following)
-- `OnManualMove(atEnd bool)` (pauses if not at end)
-- `JumpToEnd()` (resumes)
-- `Following() bool`
-
-Update `tui.go` to use `AutoFollow` structs instead of raw bools.
-
-**Tests** (`tui/autofollow_test.go`): starts following, manual move pauses, move-at-end keeps, jump resumes.
+Extracted `AutoFollow` struct with `NewAutoFollow()`, `OnManualMove(atEnd bool)`, `JumpToEnd()`, `OnNewItem()`, `Following()` into `tui/autofollow.go`. Replaced `autoFollowLeft bool` / `autoFollowRight bool` fields in `Model` with `AutoFollow` instances. All 12 call sites updated. `tui/autofollow_test.go` has 8 tests covering: starts following, manual move pauses, move-at-end keeps, resume at end, jump resumes, new item doesn't resume, new item doesn't disrupt, full pause-jump-pause sequence. `tui.go` reduced from ~1,080 to ~1,060 lines.
 
 ---
 
@@ -171,3 +163,4 @@ After step 10: full spec review pass.
 - **Context window percentage in header** — `ContextWindow` field added to `ModelPricing`, latest usage tracked per assistant event, header centred with `ctx N%` display color-coded by threshold.
 - **Lint fixes** — golangci-lint v2 config migration, fixed `errcheck`, `gocritic`, and `nilerr` warnings.
 - **Config tests** — `TestDefaultPricing`, `TestLoadConfig_ContextWindowFromTOML`, `TestLoadConfig_NoConfigFile` added.
+- **Step 3: Extract auto-follow** — `AutoFollow` struct in `tui/autofollow.go` with `NewAutoFollow()`, `OnManualMove()`, `JumpToEnd()`, `OnNewItem()`, `Following()`. 8 tests in `tui/autofollow_test.go`. `autoFollowLeft`/`autoFollowRight` bools replaced with `AutoFollow` instances in `tui.go`.

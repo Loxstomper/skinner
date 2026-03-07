@@ -58,8 +58,8 @@ type Model struct {
 	lastModel     string
 
 	// Auto-follow
-	autoFollowLeft  bool
-	autoFollowRight bool
+	autoFollowLeft  AutoFollow
+	autoFollowRight AutoFollow
 
 	// gg state machine
 	gPending bool
@@ -85,8 +85,8 @@ func NewModel(session model.Session, cfg config.Config, promptContent string, th
 		exitOnComplete:  exitOnComplete,
 		eventCh:         make(chan tea.Msg, 100),
 		focusedPane:     leftPane,
-		autoFollowLeft:  true,
-		autoFollowRight: true,
+		autoFollowLeft:  NewAutoFollow(),
+		autoFollowRight: NewAutoFollow(),
 	}
 }
 
@@ -182,7 +182,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 			}
 
-			if m.selectedIter == idx && m.autoFollowRight {
+			if m.selectedIter == idx && m.autoFollowRight.Following() {
 				m.rightCursor = FlatCursorCount(iter.Items) - 1
 				m.scrollToBottom()
 			}
@@ -319,7 +319,7 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				m.rightCursor = 0
 				m.scrollOffset = 0
 			}
-			m.autoFollowLeft = (m.selectedIter == len(m.session.Iterations)-1)
+			m.autoFollowLeft.OnManualMove(m.selectedIter == len(m.session.Iterations)-1)
 		} else {
 			items := m.selectedItems()
 			maxPos := FlatCursorCount(items) - 1
@@ -327,7 +327,7 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				m.rightCursor++
 				m.ensureCursorVisible()
 			}
-			m.autoFollowRight = (m.rightCursor >= maxPos)
+			m.autoFollowRight.OnManualMove(m.rightCursor >= maxPos)
 		}
 
 	case "k", "up":
@@ -337,13 +337,13 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				m.rightCursor = 0
 				m.scrollOffset = 0
 			}
-			m.autoFollowLeft = (m.selectedIter == len(m.session.Iterations)-1)
+			m.autoFollowLeft.OnManualMove(m.selectedIter == len(m.session.Iterations)-1)
 		} else {
 			if m.rightCursor > 0 {
 				m.rightCursor--
 				m.ensureCursorVisible()
 			}
-			m.autoFollowRight = (m.rightCursor >= FlatCursorCount(m.selectedItems())-1)
+			m.autoFollowRight.OnManualMove(m.rightCursor >= FlatCursorCount(m.selectedItems())-1)
 		}
 
 	case "pgdown":
@@ -357,12 +357,12 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			}
 			m.rightCursor = 0
 			m.scrollOffset = 0
-			m.autoFollowLeft = (m.selectedIter == len(m.session.Iterations)-1)
+			m.autoFollowLeft.OnManualMove(m.selectedIter == len(m.session.Iterations)-1)
 		} else {
 			m.scrollOffset += m.rightPaneHeight()
 			m.clampScroll()
 			total := TotalLines(m.selectedItems(), m.compactView)
-			m.autoFollowRight = (m.scrollOffset+m.rightPaneHeight() >= total)
+			m.autoFollowRight.OnManualMove(m.scrollOffset+m.rightPaneHeight() >= total)
 		}
 
 	case "pgup":
@@ -373,13 +373,13 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			}
 			m.rightCursor = 0
 			m.scrollOffset = 0
-			m.autoFollowLeft = (m.selectedIter == len(m.session.Iterations)-1)
+			m.autoFollowLeft.OnManualMove(m.selectedIter == len(m.session.Iterations)-1)
 		} else {
 			m.scrollOffset -= m.rightPaneHeight()
 			if m.scrollOffset < 0 {
 				m.scrollOffset = 0
 			}
-			m.autoFollowRight = false
+			m.autoFollowRight.OnManualMove(false)
 		}
 
 	case "v":
@@ -423,11 +423,11 @@ func (m *Model) jumpToTop() {
 		m.selectedIter = 0
 		m.rightCursor = 0
 		m.scrollOffset = 0
-		m.autoFollowLeft = (m.selectedIter == len(m.session.Iterations)-1)
+		m.autoFollowLeft.OnManualMove(m.selectedIter == len(m.session.Iterations)-1)
 	} else {
 		m.rightCursor = 0
 		m.scrollOffset = 0
-		m.autoFollowRight = false
+		m.autoFollowRight.OnManualMove(false)
 	}
 }
 
@@ -438,14 +438,14 @@ func (m *Model) jumpToBottom() {
 			m.rightCursor = 0
 			m.scrollOffset = 0
 		}
-		m.autoFollowLeft = true
+		m.autoFollowLeft.JumpToEnd()
 	} else {
 		maxPos := FlatCursorCount(m.selectedItems())
 		if maxPos > 0 {
 			m.rightCursor = maxPos - 1
 			m.scrollToBottom()
 		}
-		m.autoFollowRight = true
+		m.autoFollowRight.JumpToEnd()
 	}
 }
 
@@ -881,7 +881,7 @@ func (m *Model) spawnIteration() tea.Cmd {
 		StartTime: time.Now(),
 	}
 	m.session.Iterations = append(m.session.Iterations, iter)
-	if m.autoFollowLeft {
+	if m.autoFollowLeft.Following() {
 		m.selectedIter = len(m.session.Iterations) - 1
 		m.rightCursor = 0
 		m.scrollOffset = 0
