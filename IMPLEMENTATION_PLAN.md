@@ -8,7 +8,7 @@
 
 Specs updated: `tui-layout.md`, `keybindings.md`, `tool-call-groups.md`, `stream-json-format.md`.
 
-## Tasks
+## Completed Tasks
 
 ### 1–2. Data pipeline + expanded content rendering  ✅ DONE
 
@@ -22,12 +22,12 @@ Raw input/result content flows through parser → executor → session → model
 
 `View()` renders expanded content lines (via `expandedContentLines` + `renderExpandedContentLine`) below standalone ToolCall rows and group child rows. Group child content gets extra 2-space indent. Content lines use `flatIdx: -1` (no cursor highlight). `handleEnter()` toggles `Expanded` on standalone `*model.ToolCall` items and on group children (`childIdx >= 0`). 7 new tests: Enter toggles standalone ToolCall, Enter toggles group child, View shows expanded Bash command+output, View shows Edit diff lines, View shows expanded group child content, truncation footer renders, collapsed tool call hides content.
 
-### 5. Left pane — remove tool call count — `internal/tui/iterlist.go`
+### 5. Left pane — remove tool call count  ✅ DONE
 
-- [ ] Change format string from `"  (%d calls, %s)"` to `"  (%s)"`, remove `callCount` variable
-- [ ] **tests**: update `iterlist_test.go` — verify format is `(Ns)` without call count
+Removed `callCount` variable and changed format from `"(%d calls, %s)"` to `"(%s)"` in `iterlist.go`. Added `TestIterList_View_FormatShowsDurationOnly` — verifies `(2m14s)` format and absence of "calls" text.
 
-### 6. Integration tests — `internal/tui/integration_test.go`
+### 6. Integration tests  ✅ DONE
 
-- [ ] Update any assertions that check for call count text in the left pane
-- [ ] Add integration test for expanding a standalone tool call via Enter and verifying expanded content appears in the rendered view
+No integration test assertions referenced call count text (no changes needed). Added `TestIntegration_ExpandToolCallShowsContent` — creates a Bash tool call with RawInput command and ResultContent, verifies Enter toggles Expanded, and checks that `"$ go test"` and command output appear/disappear in rendered View.
+
+## All features implemented.

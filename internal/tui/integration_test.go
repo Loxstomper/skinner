@@ -864,6 +864,72 @@ func TestIntegration_MouseClickSelectsIteration(t *testing.T) {
 	}
 }
 
+// --- Expanding a standalone tool call via Enter shows expanded content ---
+
+func TestIntegration_ExpandToolCallShowsContent(t *testing.T) {
+	events := []session.Event{
+		session.AssistantBatchEvent{Events: []session.Event{
+			session.ToolUseEvent{
+				ID:       "tc1",
+				Name:     "Bash",
+				Summary:  "go test ./...",
+				RawInput: map[string]interface{}{"command": "go test ./..."},
+			},
+		}},
+		session.ToolResultEvent{ToolUseID: "tc1", IsError: false, Content: "ok  mypackage 0.5s"},
+		session.SubprocessExitEvent{Err: nil},
+	}
+
+	m := newTestModel(events, 1)
+	drainEvents(t, m)
+
+	// Focus right pane where the tool call is.
+	m.Update(tea.KeyMsg{Type: tea.KeyTab})
+	if m.focusedPane != rightPane {
+		t.Fatal("expected right pane focus")
+	}
+
+	// Tool call should start collapsed.
+	iter := &m.Session().Iterations[0]
+	tc := iter.Items[0].(*model.ToolCall)
+	if tc.Expanded {
+		t.Error("expected tool call to start collapsed")
+	}
+
+	// View should not show expanded content.
+	view := m.View()
+	if strings.Contains(view, "$ go test") {
+		t.Error("expected no expanded content before Enter")
+	}
+
+	// Press Enter to expand.
+	m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	if !tc.Expanded {
+		t.Error("expected tool call to be expanded after Enter")
+	}
+
+	// View should now show expanded content (Bash shows "$ command" header).
+	view = m.View()
+	if !strings.Contains(view, "$ go test") {
+		t.Error("expected '$ go test' in expanded view")
+	}
+	if !strings.Contains(view, "ok  mypackage") {
+		t.Error("expected command output in expanded view")
+	}
+
+	// Press Enter again to collapse.
+	m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	if tc.Expanded {
+		t.Error("expected tool call to be collapsed after second Enter")
+	}
+
+	// View should no longer show expanded content.
+	view = m.View()
+	if strings.Contains(view, "$ go test") {
+		t.Error("expected expanded content hidden after collapse")
+	}
+}
+
 type testError struct{ msg string }
 
 func (e *testError) Error() string { return e.msg }

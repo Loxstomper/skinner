@@ -131,11 +131,9 @@ func (il *IterList) View(props IterListProps) string {
 		} else {
 			dur = FormatDurationValue(iter.Duration)
 		}
-		callCount := iter.ToolCallCount()
-
 		styledIcon := lipgloss.NewStyle().Foreground(lipgloss.Color(statusColor)).Render(statusIcon)
 		iterText := fmt.Sprintf("  Iter %d  ", iter.Index+1)
-		metaText := fmt.Sprintf("  (%d calls, %s)", callCount, dur)
+		metaText := fmt.Sprintf("  (%s)", dur)
 
 		iterStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(iterColor))
 		line := iterStyle.Render(iterText) + styledIcon + iterStyle.Render(metaText)

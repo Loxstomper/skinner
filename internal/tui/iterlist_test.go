@@ -558,6 +558,40 @@ func TestIterList_ClickRow_AtEnd_ContinuesAutoFollow(t *testing.T) {
 	}
 }
 
+func TestIterList_View_FormatShowsDurationOnly(t *testing.T) {
+	il := NewIterList()
+	iters := []model.Iteration{
+		{
+			Index:    0,
+			Status:   model.IterationCompleted,
+			Duration: 2*time.Minute + 14*time.Second,
+			Items: []model.TimelineItem{
+				&model.ToolCall{Name: "Read"},
+				&model.ToolCall{Name: "Edit"},
+				&model.ToolCall{Name: "Bash"},
+			},
+		},
+	}
+	props := IterListProps{
+		Iterations: iters,
+		Width:      50,
+		Height:     10,
+		Focused:    true,
+		Theme:      testTheme(),
+	}
+
+	result := il.View(props)
+
+	// Should show duration in parentheses without call count
+	if !strings.Contains(result, "(2m14s)") {
+		t.Errorf("expected '(2m14s)' format, got: %s", result)
+	}
+	// Should NOT show call count
+	if strings.Contains(result, "calls") {
+		t.Errorf("should not contain 'calls' in output, got: %s", result)
+	}
+}
+
 func TestIterList_View_OnlyRendersVisibleSlice(t *testing.T) {
 	il := NewIterList()
 	il.Cursor = 7
