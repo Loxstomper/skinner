@@ -161,9 +161,9 @@ func TestIterList_View_SingleIteration(t *testing.T) {
 	il := NewIterList()
 	iters := []model.Iteration{
 		{
-			Index:    0,
-			Status:   model.IterationRunning,
-			Duration: 30 * time.Second,
+			Index:     0,
+			Status:    model.IterationRunning,
+			StartTime: time.Now().Add(-30 * time.Second),
 		},
 	}
 	props := IterListProps{
@@ -182,6 +182,13 @@ func TestIterList_View_SingleIteration(t *testing.T) {
 	if !strings.Contains(result, "⟳") {
 		t.Error("expected running icon ⟳")
 	}
+	// Running iterations show live elapsed time with ... suffix
+	if !strings.Contains(result, "...") {
+		t.Error("expected '...' suffix for running iteration duration")
+	}
+	if !strings.Contains(result, "s...") {
+		t.Error("expected elapsed time with '...' suffix (e.g. '30.0s...')")
+	}
 }
 
 func TestIterList_View_MultipleIterations(t *testing.T) {
@@ -189,7 +196,7 @@ func TestIterList_View_MultipleIterations(t *testing.T) {
 	iters := []model.Iteration{
 		{Index: 0, Status: model.IterationCompleted, Duration: 2 * time.Minute},
 		{Index: 1, Status: model.IterationCompleted, Duration: time.Minute},
-		{Index: 2, Status: model.IterationRunning, Duration: 30 * time.Second},
+		{Index: 2, Status: model.IterationRunning, StartTime: time.Now().Add(-30 * time.Second)},
 	}
 	props := IterListProps{
 		Iterations: iters,
@@ -215,6 +222,61 @@ func TestIterList_View_MultipleIterations(t *testing.T) {
 	}
 	if !strings.Contains(result, "⟳") {
 		t.Error("expected running icon ⟳")
+	}
+}
+
+func TestIterList_View_RunningDurationShowsElapsed(t *testing.T) {
+	il := NewIterList()
+	// Iteration started 2 minutes and 14 seconds ago
+	iters := []model.Iteration{
+		{
+			Index:     0,
+			Status:    model.IterationRunning,
+			StartTime: time.Now().Add(-2*time.Minute - 14*time.Second),
+		},
+	}
+	props := IterListProps{
+		Iterations: iters,
+		Width:      50,
+		Height:     10,
+		Focused:    true,
+		Theme:      testTheme(),
+	}
+
+	result := il.View(props)
+
+	// Should show elapsed time with ... suffix, e.g. "2m14s..."
+	if !strings.Contains(result, "2m14s...") {
+		t.Errorf("expected '2m14s...' for running iteration, got: %s", result)
+	}
+}
+
+func TestIterList_View_CompletedDurationNoSuffix(t *testing.T) {
+	il := NewIterList()
+	iters := []model.Iteration{
+		{
+			Index:    0,
+			Status:   model.IterationCompleted,
+			Duration: 2*time.Minute + 14*time.Second,
+		},
+	}
+	props := IterListProps{
+		Iterations: iters,
+		Width:      50,
+		Height:     10,
+		Focused:    true,
+		Theme:      testTheme(),
+	}
+
+	result := il.View(props)
+
+	// Completed iterations show final duration without ... suffix
+	if !strings.Contains(result, "2m14s") {
+		t.Errorf("expected '2m14s' for completed iteration, got: %s", result)
+	}
+	// Should NOT have ... suffix
+	if strings.Contains(result, "2m14s...") {
+		t.Errorf("completed iteration should not have '...' suffix, got: %s", result)
 	}
 }
 

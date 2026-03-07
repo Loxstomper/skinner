@@ -34,4 +34,5 @@ Total wallclock time since the `skinner` process started. Displayed in the heade
 
 - Durations under 60s: `1.2s`, `45.0s`
 - Durations 60s and above: `1m14s`, `2m03s`
-- In-progress: `...` (no time shown)
+- Tool calls in-progress: `...` (no time shown)
+- Iterations in-progress: `2m14s...` (live elapsed time with `...` suffix, updated every second via tick)

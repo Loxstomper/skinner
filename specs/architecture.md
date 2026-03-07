@@ -119,9 +119,11 @@ type ToolResultEvent struct { ToolUseID string; IsError bool; LineInfo string }
 type TextEvent struct { Text string }
 type UsageEvent struct { Model string; InputTokens, OutputTokens, CacheReadInputTokens, CacheCreationInputTokens int64 }
 type IterationEndEvent struct{}
+type AssistantBatchEvent struct { Events []Event }  // wraps ToolUse/Text events from one assistant message
+type SubprocessExitEvent struct { Err error }       // sent when the subprocess exits
 ```
 
-These mirror the parser event types but live in the session package to avoid the TUI depending on the parser.
+These mirror the parser event types but live in the session package to avoid the TUI depending on the parser. `AssistantBatchEvent` groups all tool use and text events from a single assistant message, while `SubprocessExitEvent` signals process termination.
 
 ## Executor
 

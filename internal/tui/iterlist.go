@@ -3,6 +3,7 @@ package tui
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -114,7 +115,14 @@ func (il *IterList) View(props IterListProps) string {
 			iterColor = props.Theme.IterError
 		}
 
-		dur := FormatDuration(iter.Duration, iter.Status == model.IterationRunning)
+		var dur string
+		if iter.Status == model.IterationRunning {
+			// Show live elapsed time with ... suffix per duration-tracking spec
+			elapsed := time.Since(iter.StartTime)
+			dur = FormatDurationValue(elapsed) + "..."
+		} else {
+			dur = FormatDurationValue(iter.Duration)
+		}
 		callCount := iter.ToolCallCount()
 
 		styledIcon := lipgloss.NewStyle().Foreground(lipgloss.Color(statusColor)).Render(statusIcon)
