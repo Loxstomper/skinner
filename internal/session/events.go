@@ -42,7 +42,24 @@ type UsageEvent struct {
 
 func (UsageEvent) event() {}
 
+// AssistantBatchEvent wraps ToolUseEvent and TextEvent values from a single
+// assistant message. The controller's ProcessAssistantBatch expects these
+// grouped together to detect consecutive same-name tool call runs.
+type AssistantBatchEvent struct {
+	Events []Event
+}
+
+func (AssistantBatchEvent) event() {}
+
 // IterationEndEvent signals that the current iteration's result has arrived.
 type IterationEndEvent struct{}
 
 func (IterationEndEvent) event() {}
+
+// SubprocessExitEvent signals that the Claude subprocess has exited.
+// A nil Err indicates clean exit.
+type SubprocessExitEvent struct {
+	Err error
+}
+
+func (SubprocessExitEvent) event() {}

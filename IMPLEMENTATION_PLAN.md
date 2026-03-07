@@ -40,7 +40,7 @@ Added comprehensive table-driven tests for all three packages:
 
 Created `internal/session` package with two files:
 
-**`session/events.go`** — typed event definitions: `Event` interface, `ToolUseEvent`, `ToolResultEvent`, `TextEvent`, `UsageEvent`, `IterationEndEvent`. Note: `SubprocessExitEvent` omitted — it's a TUI-level concern (subprocess lifecycle), not a business logic event. The executor signals iteration end by closing the channel.
+**`session/events.go`** — typed event definitions: `Event` interface, `ToolUseEvent`, `ToolResultEvent`, `TextEvent`, `UsageEvent`, `IterationEndEvent`, `AssistantBatchEvent`, `SubprocessExitEvent`. The last two were added in Step 6 to support the executor layer.
 
 **`session/session.go`** — `Controller` struct with `NewController()`, `ProcessAssistantBatch()`, `ProcessToolResult()`, `ProcessUsage()`, `StartIteration()`, `CompleteIteration()`, `ShouldStartNext()`, `RunningIterationIdx()`, `HasKnownModel()`, `LastModel()`. Injectable `Clock func() time.Time` (defaults to `time.Now`).
 
@@ -48,25 +48,19 @@ Created `internal/session` package with two files:
 
 ---
 
-### Step 6: Create `internal/executor` — subprocess abstraction
+### ~~Step 6: Create `internal/executor` — subprocess abstraction~~ ✅ DONE
 
-**`executor/executor.go`** — interface:
-```go
-type Executor interface {
-    Start(ctx context.Context, prompt string) (<-chan session.Event, error)
-    Kill() error
-}
-```
+Created `internal/executor` package with four files:
 
-**`executor/claude.go`** — `ClaudeExecutor`:
-- Extract `spawnIteration` subprocess setup + `readEvents` goroutine from `tui.go`
-- Converts `parser.*Event` → `session.*Event`
-- Only package that imports `parser`
+**`executor/executor.go`** — `Executor` interface with `Start(ctx, prompt) (<-chan session.Event, error)` and `Kill() error`.
 
-**`executor/fake.go`** — `FakeExecutor` for tests:
-- Pre-loaded `[]session.Event`, sends all to channel and closes
+**`executor/claude.go`** — `ClaudeExecutor` that spawns `claude -p --dangerously-skip-permissions --output-format=stream-json --verbose`, pipes prompt to stdin, reads stdout line-by-line via `bufio.Scanner` (10MB buffer), converts `parser.*Event` → `session.*Event`. ToolUseEvent and TextEvent from a single assistant message are grouped into `session.AssistantBatchEvent`; UsageEvent, ToolResultEvent, and IterationEndEvent are sent individually. Channel is closed after subprocess exits and a `SubprocessExitEvent` is sent. Only package that imports `parser`.
 
-**Tests** (`executor/executor_test.go`): `FakeExecutor` delivers events and closes channel.
+**`executor/fake.go`** — `FakeExecutor` with pre-loaded `[]session.Event`, optional `Delay`, records `Prompt`. Supports context cancellation for delayed delivery.
+
+**`session/events.go`** — Added `AssistantBatchEvent` (wraps `[]Event` for batch processing) and `SubprocessExitEvent` (signals subprocess exit with optional error).
+
+**`executor/executor_test.go`** — 13 tests: FakeExecutor (delivers events, records prompt, empty events, delay+cancel, Kill no-op), interface compliance (both impls), readEvents (assistant batch with usage, tool result success/error, iteration end, skips invalid, multiple lines, tool summary extraction, empty input).
 
 ---
 
@@ -77,7 +71,8 @@ Modify `tui.go`:
 - Remove `eventCh`, `cmd`, `hasKnownModel`, `lastModel` fields
 - Replace inline business logic in `Update` with controller calls
 - Replace subprocess code with executor calls
-- Bridge executor channel → Bubble Tea messages in thin adapter goroutine
+- Bridge executor channel → Bubble Tea messages: the executor sends `session.Event` values (including `AssistantBatchEvent`, `UsageEvent`, `ToolResultEvent`, `IterationEndEvent`, `SubprocessExitEvent`). The TUI adapter goroutine wraps each into a `tea.Msg` and sends to Bubble Tea.
+- The existing `assistantBatchMsg`, `toolResultMsg`, `usageMsg`, `iterationEndMsg`, `subprocessExitMsg` types become thin wrappers around session events.
 - Remove `parser` import (now internal to executor)
 
 Modify `cmd/skinner/main.go`:
@@ -149,3 +144,4 @@ After step 10: full spec review pass.
 - **Step 3: Extract auto-follow** — `AutoFollow` struct in `tui/autofollow.go` with `NewAutoFollow()`, `OnManualMove()`, `JumpToEnd()`, `OnNewItem()`, `Following()`. 8 tests in `tui/autofollow_test.go`. `autoFollowLeft`/`autoFollowRight` bools replaced with `AutoFollow` instances in `tui.go`.
 - **Step 4: Add tests for model, parser, theme** — `model/model_test.go` (5 test fns, ~22 cases), `parser/parser_test.go` (10 test fns, ~50 cases), `theme/theme_test.go` (2 test fns, ~9 cases). All packages now have full test coverage.
 - **Step 5: Create session controller** — `session/events.go` (5 event types + Event interface), `session/session.go` (Controller with 10 methods), `session/session_test.go` (23 tests covering grouping, result matching, usage/cost, iteration lifecycle, full end-to-end).
+- **Step 6: Create executor** — `executor/executor.go` (Executor interface), `executor/claude.go` (ClaudeExecutor with readEvents), `executor/fake.go` (FakeExecutor), `executor/executor_test.go` (13 tests). Added `AssistantBatchEvent` and `SubprocessExitEvent` to `session/events.go`.
