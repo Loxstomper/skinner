@@ -12,19 +12,9 @@ Extracted `FormatDuration`, `FormatDurationValue`, `FormatTokens`, `ToolIcon`, `
 
 ---
 
-### Step 2: Extract flat cursor math → `tui/cursor.go`
+### ~~Step 2: Extract flat cursor math → `tui/cursor.go`~~ ✅ DONE
 
-Convert methods on `Model` to standalone functions on `[]model.TimelineItem`:
-- `flatCursorCount` → `FlatCursorCount(items []model.TimelineItem) int`
-- `flatToItem` → `FlatToItem(items, flatIdx) (itemIdx, childIdx int)`
-- `itemToFlat` → `ItemToFlat(items, itemIdx) int`
-- `flatCursorLineRange` → `FlatCursorLineRange(items, flatIdx, compactView) (lineStart, lineCount int)`
-- `itemLineCount` → `ItemLineCount(item, compactView) int`
-- `totalLines` → `TotalLines(items, compactView) int`
-
-Update call sites to pass `items` and `compactView` explicitly.
-
-**Tests** (`tui/cursor_test.go`): empty items, standalone calls, expanded/collapsed groups, mixed items, roundtrip `FlatToItem`↔`ItemToFlat`.
+Extracted all 6 cursor functions to standalone functions in `tui/cursor.go`: `FlatCursorCount`, `FlatToItem`, `ItemToFlat`, `FlatCursorLineRange`, `ItemLineCount`, `TotalLines`. Added `selectedItems()` helper to Model. All call sites updated. `tui/cursor_test.go` has 26 tests covering empty, standalone, expanded/collapsed groups, mixed items, text blocks, compact view, out-of-range, and roundtrip consistency. `tui.go` reduced from ~1,220 to ~1,080 lines.
 
 ---
 
@@ -177,6 +167,7 @@ After step 10: full spec review pass.
 ## Previous Work (Completed)
 
 - **Step 1: Extract format helpers** — `FormatDuration`, `FormatDurationValue`, `FormatTokens`, `ToolIcon`, `GroupSummaryUnit`, `IsKnownTool` moved to `tui/format.go` with full test coverage in `tui/format_test.go`.
+- **Step 2: Extract cursor math** — `FlatCursorCount`, `FlatToItem`, `ItemToFlat`, `FlatCursorLineRange`, `ItemLineCount`, `TotalLines` extracted to `tui/cursor.go` as standalone functions. 26 tests in `tui/cursor_test.go`.
 - **Context window percentage in header** — `ContextWindow` field added to `ModelPricing`, latest usage tracked per assistant event, header centred with `ctx N%` display color-coded by threshold.
 - **Lint fixes** — golangci-lint v2 config migration, fixed `errcheck`, `gocritic`, and `nilerr` warnings.
 - **Config tests** — `TestDefaultPricing`, `TestLoadConfig_ContextWindowFromTOML`, `TestLoadConfig_NoConfigFile` added.

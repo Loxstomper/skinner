@@ -183,7 +183,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 			if m.selectedIter == idx && m.autoFollowRight {
-				m.rightCursor = m.flatCursorCount() - 1
+				m.rightCursor = FlatCursorCount(iter.Items) - 1
 				m.scrollToBottom()
 			}
 		}
@@ -321,7 +321,8 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			}
 			m.autoFollowLeft = (m.selectedIter == len(m.session.Iterations)-1)
 		} else {
-			maxPos := m.flatCursorCount() - 1
+			items := m.selectedItems()
+			maxPos := FlatCursorCount(items) - 1
 			if m.rightCursor < maxPos {
 				m.rightCursor++
 				m.ensureCursorVisible()
@@ -342,7 +343,7 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				m.rightCursor--
 				m.ensureCursorVisible()
 			}
-			m.autoFollowRight = (m.rightCursor >= m.flatCursorCount()-1)
+			m.autoFollowRight = (m.rightCursor >= FlatCursorCount(m.selectedItems())-1)
 		}
 
 	case "pgdown":
@@ -360,7 +361,7 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		} else {
 			m.scrollOffset += m.rightPaneHeight()
 			m.clampScroll()
-			total := m.totalLines()
+			total := TotalLines(m.selectedItems(), m.compactView)
 			m.autoFollowRight = (m.scrollOffset+m.rightPaneHeight() >= total)
 		}
 
@@ -389,7 +390,7 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.focusedPane = rightPane
 		} else if m.selectedIter < len(m.session.Iterations) {
 			iter := &m.session.Iterations[m.selectedIter]
-			itemIdx, childIdx := m.flatToItem(m.rightCursor)
+			itemIdx, childIdx := FlatToItem(iter.Items, m.rightCursor)
 			if itemIdx < len(iter.Items) {
 				switch it := iter.Items[itemIdx].(type) {
 				case *model.TextBlock:
@@ -402,7 +403,7 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 						if it.Expanded {
 							// Collapsing: move cursor to header position
 							it.Expanded = false
-							m.rightCursor = m.itemToFlat(itemIdx)
+							m.rightCursor = ItemToFlat(iter.Items, itemIdx)
 						} else {
 							it.Expanded = true
 						}
@@ -439,7 +440,7 @@ func (m *Model) jumpToBottom() {
 		}
 		m.autoFollowLeft = true
 	} else {
-		maxPos := m.flatCursorCount()
+		maxPos := FlatCursorCount(m.selectedItems())
 		if maxPos > 0 {
 			m.rightCursor = maxPos - 1
 			m.scrollToBottom()
@@ -1003,88 +1004,18 @@ func (m *Model) rightPaneHeight() int {
 	return 20
 }
 
-func (m *Model) itemLineCount(item model.TimelineItem) int {
-	switch it := item.(type) {
-	case *model.TextBlock:
-		lines := strings.Count(it.Text, "\n") + 1
-		maxLines := 3
-		if m.compactView {
-			maxLines = 1
-		}
-		if !it.Expanded && lines > maxLines {
-			return maxLines
-		}
-		return lines
-	case *model.ToolCall:
-		return 1
-	case *model.ToolCallGroup:
-		if it.Expanded {
-			return 1 + len(it.Children) // header + children
-		}
-		return 1 // collapsed: header only
-	}
-	return 1
-}
-
-func (m *Model) totalLines() int {
+// selectedItems returns the timeline items for the currently selected iteration,
+// or nil if the selection is out of range.
+func (m *Model) selectedItems() []model.TimelineItem {
 	if m.selectedIter >= len(m.session.Iterations) {
-		return 0
+		return nil
 	}
-	iter := m.session.Iterations[m.selectedIter]
-	total := 0
-	for _, item := range iter.Items {
-		total += m.itemLineCount(item)
-	}
-	return total
-}
-
-// flatCursorLineRange returns the start line and line count for the given flat cursor position.
-func (m *Model) flatCursorLineRange(flatIdx int) (lineStart int, lineCount int) {
-	if m.selectedIter >= len(m.session.Iterations) {
-		return 0, 1
-	}
-	iter := m.session.Iterations[m.selectedIter]
-
-	line := 0
-	pos := 0
-	for _, item := range iter.Items {
-		switch it := item.(type) {
-		case *model.TextBlock:
-			lc := m.itemLineCount(it)
-			if pos == flatIdx {
-				return line, lc
-			}
-			line += lc
-			pos++
-		case *model.ToolCall:
-			if pos == flatIdx {
-				return line, 1
-			}
-			line++
-			pos++
-		case *model.ToolCallGroup:
-			// Header
-			if pos == flatIdx {
-				return line, 1
-			}
-			line++
-			pos++
-			if it.Expanded {
-				for range it.Children {
-					if pos == flatIdx {
-						return line, 1
-					}
-					line++
-					pos++
-				}
-			}
-		}
-	}
-	return line, 1
+	return m.session.Iterations[m.selectedIter].Items
 }
 
 func (m *Model) ensureCursorVisible() {
-	lineStart, lc := m.flatCursorLineRange(m.rightCursor)
+	items := m.selectedItems()
+	lineStart, lc := FlatCursorLineRange(items, m.rightCursor, m.compactView)
 	lineEnd := lineStart + lc
 	if lineStart < m.scrollOffset {
 		m.scrollOffset = lineStart
@@ -1096,7 +1027,7 @@ func (m *Model) ensureCursorVisible() {
 }
 
 func (m *Model) scrollToBottom() {
-	total := m.totalLines()
+	total := TotalLines(m.selectedItems(), m.compactView)
 	visible := m.rightPaneHeight()
 	if total > visible {
 		m.scrollOffset = total - visible
@@ -1106,7 +1037,7 @@ func (m *Model) scrollToBottom() {
 }
 
 func (m *Model) clampScroll() {
-	total := m.totalLines()
+	total := TotalLines(m.selectedItems(), m.compactView)
 	maxScroll := total - m.rightPaneHeight()
 	if maxScroll < 0 {
 		maxScroll = 0
@@ -1116,89 +1047,9 @@ func (m *Model) clampScroll() {
 	}
 }
 
-// Flat cursor helpers: the flat cursor counts navigable positions across all
-// items, accounting for expanded groups (header + children).
-
-// flatCursorCount returns the total number of navigable positions for the selected iteration.
-func (m *Model) flatCursorCount() int {
-	if m.selectedIter >= len(m.session.Iterations) {
-		return 0
-	}
-	iter := m.session.Iterations[m.selectedIter]
-	count := 0
-	for _, item := range iter.Items {
-		switch it := item.(type) {
-		case *model.ToolCallGroup:
-			count++ // header
-			if it.Expanded {
-				count += len(it.Children)
-			}
-		default:
-			count++
-		}
-	}
-	return count
-}
-
-// flatToItem maps a flat cursor index to (item index, child index).
-// childIdx == -1 means non-group item or group header.
-// childIdx >= 0 means a group child.
-func (m *Model) flatToItem(flatIdx int) (itemIdx int, childIdx int) {
-	if m.selectedIter >= len(m.session.Iterations) {
-		return 0, -1
-	}
-	iter := m.session.Iterations[m.selectedIter]
-	pos := 0
-	for i, item := range iter.Items {
-		if group, ok := item.(*model.ToolCallGroup); ok {
-			if pos == flatIdx {
-				return i, -1 // group header
-			}
-			pos++
-			if group.Expanded {
-				for ci := range group.Children {
-					if pos == flatIdx {
-						return i, ci
-					}
-					pos++
-				}
-			}
-		} else {
-			if pos == flatIdx {
-				return i, -1
-			}
-			pos++
-		}
-	}
-	return 0, -1
-}
-
-// itemToFlat maps an item index to its flat cursor position (the header position for groups).
-func (m *Model) itemToFlat(itemIdx int) int {
-	if m.selectedIter >= len(m.session.Iterations) {
-		return 0
-	}
-	iter := m.session.Iterations[m.selectedIter]
-	pos := 0
-	for i, item := range iter.Items {
-		if i == itemIdx {
-			return pos
-		}
-		if group, ok := item.(*model.ToolCallGroup); ok {
-			pos++ // header
-			if group.Expanded {
-				pos += len(group.Children)
-			}
-		} else {
-			pos++
-		}
-	}
-	return pos
-}
-
 // isCursorOnGroup returns true if the flat cursor is on the group header or any of its children.
 func (m *Model) isCursorOnGroup(itemIdx int) bool {
-	curItemIdx, _ := m.flatToItem(m.rightCursor)
+	curItemIdx, _ := FlatToItem(m.selectedItems(), m.rightCursor)
 	return curItemIdx == itemIdx
 }
 
