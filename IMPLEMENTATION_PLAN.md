@@ -1,27 +1,18 @@
 # Implementation Plan
 
-## 1. Fix tool call row highlight (per-segment background)
+No outstanding tasks.
 
-**File**: `internal/tui/timeline.go` — `renderToolCallLine`, `renderGroupHeaderLine`
+## Completed
 
-- Add an optional background color parameter (e.g. `highlightBg string`) to both functions
-- When non-empty, apply `.Background(lipgloss.Color(highlightBg))` alongside each segment's `.Foreground()` style
-- This ensures the highlight background survives across all ANSI segments instead of being reset by inner escape codes
+### Fix tool call row highlight (per-segment background)
+Resolved in commit. The highlight background is now baked into each styled
+segment during rendering rather than applied as a post-hoc wrapper. This
+prevents inner ANSI resets from interrupting the highlight background.
 
-**File**: `internal/tui/timeline.go` — `renderTextBlockLines`
+## Known Issues
 
-- Add the same optional background color parameter for consistency (text blocks may work by accident today but should use the same approach)
-
-**File**: `internal/tui/timeline.go` — `View` method
-
-- When building `renderedLine` entries, pass the highlight background color for the row at the current cursor position
-- Store the highlight color in `renderedLine` (e.g. a `highlighted bool` field) so `renderWithLines` can use it
-
-**File**: `internal/tui/timeline.go` — `renderWithLines`
-
-- Remove the post-hoc `highlight.Render(text)` wrapping for highlighted rows (lines 522-528)
-- The highlight is now baked into each row during rendering, so padding to full width still needs to happen but no outer wrap is needed
-
-**Tests**:
-
-- Test that `renderToolCallLine` with a highlight background produces output where the background color spans the full row (verify ANSI sequences)
+### Integration test timeouts
+`TestIntegration_HelpModal_EnterDismisses` and `TestIntegration_ExitFlag_SingleIteration`
+occasionally hang on `bubbletea.Tick` channel receives. They do eventually pass
+within the 90s Go test timeout but slow down the test suite. The `make check`
+target completes successfully despite the delay.

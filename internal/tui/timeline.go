@@ -49,8 +49,9 @@ type TimelineProps struct {
 
 // renderedLine pairs a rendered text line with its flat cursor index.
 type renderedLine struct {
-	text    string
-	flatIdx int // flat cursor position (-1 for continuation lines of text blocks)
+	text        string
+	flatIdx     int  // flat cursor position (-1 for continuation lines of text blocks)
+	highlighted bool // true when highlight background is baked into the text
 }
 
 // InSubScroll returns true when the timeline is in sub-scroll mode.
@@ -347,30 +348,46 @@ func (tl *Timeline) View(props TimelineProps) string {
 	var lines []renderedLine
 	flatPos := 0
 	for _, item := range props.Items {
+		// Determine if this flat position is the highlighted cursor row.
+		hlBg := ""
+		isCursor := props.Focused && flatPos == tl.Cursor
+		if isCursor {
+			hlBg = props.Theme.Highlight
+		}
+
 		switch it := item.(type) {
 		case *model.TextBlock:
-			textLines := renderTextBlockLines(it, contentWidth, props.CompactView, props.Theme)
+			textLines := renderTextBlockLines(it, contentWidth, props.CompactView, props.Theme, hlBg)
 			for _, l := range textLines {
-				lines = append(lines, renderedLine{text: l, flatIdx: flatPos})
+				lines = append(lines, renderedLine{text: l, flatIdx: flatPos, highlighted: isCursor})
 			}
 			flatPos++
 		case *model.ToolCall:
-			l := renderToolCallLine(it, nameWidth, summaryWidth, durWidth, props.CompactView, props.Theme)
-			lines = append(lines, renderedLine{text: l, flatIdx: flatPos})
+			l := renderToolCallLine(it, nameWidth, summaryWidth, durWidth, props.CompactView, props.Theme, hlBg)
+			lines = append(lines, renderedLine{text: l, flatIdx: flatPos, highlighted: isCursor})
 			if it.Expanded {
 				lines = tl.appendExpandedLines(lines, it, flatPos, "", props, contentWidth)
 			}
 			flatPos++
 		case *model.ToolCallGroup:
-			l := renderGroupHeaderLine(it, nameWidth, summaryWidth, durWidth, props.CompactView, props.Theme)
-			lines = append(lines, renderedLine{text: l, flatIdx: flatPos})
+			l := renderGroupHeaderLine(it, nameWidth, summaryWidth, durWidth, props.CompactView, props.Theme, hlBg)
+			lines = append(lines, renderedLine{text: l, flatIdx: flatPos, highlighted: isCursor})
 			flatPos++
 			if it.Expanded {
 				for ci := range it.Children {
 					child := it.Children[ci]
-					cl := renderToolCallLine(child, nameWidth, childSummaryWidth, durWidth, props.CompactView, props.Theme)
-					cl = "  " + cl
-					lines = append(lines, renderedLine{text: cl, flatIdx: flatPos})
+					childHlBg := ""
+					childIsCursor := props.Focused && flatPos == tl.Cursor
+					if childIsCursor {
+						childHlBg = props.Theme.Highlight
+					}
+					cl := renderToolCallLine(child, nameWidth, childSummaryWidth, durWidth, props.CompactView, props.Theme, childHlBg)
+					if childHlBg != "" {
+						cl = lipgloss.NewStyle().Background(lipgloss.Color(childHlBg)).Render("  ") + cl
+					} else {
+						cl = "  " + cl
+					}
+					lines = append(lines, renderedLine{text: cl, flatIdx: flatPos, highlighted: childIsCursor})
 					if child.Expanded {
 						lines = tl.appendExpandedLines(lines, child, flatPos, "  ", props, contentWidth)
 					}
@@ -490,7 +507,7 @@ func (tl *Timeline) renderWithLines(lines []renderedLine, props TimelineProps) s
 	}
 
 	visible := lines[start:end]
-	highlight := lipgloss.NewStyle().Background(lipgloss.Color(props.Theme.Highlight))
+	hlBgStyle := lipgloss.NewStyle().Background(lipgloss.Color(props.Theme.Highlight))
 	highlightStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(props.Theme.Highlight))
 	dimStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(props.Theme.ForegroundDim))
 
@@ -508,7 +525,14 @@ func (tl *Timeline) renderWithLines(lines []renderedLine, props TimelineProps) s
 				}
 				num := fmt.Sprintf("%3d ", rel)
 				if rel == 0 {
-					gutter = highlightStyle.Render(num)
+					if line.highlighted {
+						gutter = lipgloss.NewStyle().
+							Foreground(lipgloss.Color(props.Theme.Highlight)).
+							Background(lipgloss.Color(props.Theme.Highlight)).
+							Render(num)
+					} else {
+						gutter = highlightStyle.Render(num)
+					}
 				} else {
 					gutter = dimStyle.Render(num)
 				}
@@ -519,12 +543,13 @@ func (tl *Timeline) renderWithLines(lines []renderedLine, props TimelineProps) s
 			text = gutter + text
 		}
 
-		if props.Focused && line.flatIdx >= 0 && line.flatIdx == tl.Cursor {
+		// For highlighted rows, the background is already baked into each
+		// segment. We just need to pad to full width with the same background.
+		if line.highlighted {
 			displayWidth := lipgloss.Width(text)
 			if displayWidth < props.Width {
-				text += strings.Repeat(" ", props.Width-displayWidth)
+				text += hlBgStyle.Render(strings.Repeat(" ", props.Width-displayWidth))
 			}
-			text = highlight.Render(text)
 		}
 		rendered = append(rendered, text)
 	}
@@ -867,7 +892,8 @@ func (tl *Timeline) clampScroll(props TimelineProps) {
 }
 
 // renderTextBlockLines renders a text block as one or more display lines.
-func renderTextBlockLines(tb *model.TextBlock, width int, compactView bool, th theme.Theme) []string {
+// When highlightBg is non-empty, each line gets the background color baked in.
+func renderTextBlockLines(tb *model.TextBlock, width int, compactView bool, th theme.Theme, highlightBg string) []string {
 	textLines := strings.Split(tb.Text, "\n")
 
 	maxLines := 3
@@ -880,6 +906,9 @@ func renderTextBlockLines(tb *model.TextBlock, width int, compactView bool, th t
 	}
 
 	textStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(th.TextBlock))
+	if highlightBg != "" {
+		textStyle = textStyle.Background(lipgloss.Color(highlightBg))
+	}
 
 	var result []string
 	for _, l := range textLines {
@@ -892,8 +921,12 @@ func renderTextBlockLines(tb *model.TextBlock, width int, compactView bool, th t
 	return result
 }
 
-// renderToolCallLine renders a single tool call row.
-func renderToolCallLine(tc *model.ToolCall, nameWidth, summaryWidth, durWidth int, compactView bool, th theme.Theme) string {
+// renderToolCallLine renders a single tool call row. When highlightBg is
+// non-empty, each segment gets the background color baked in so that inner
+// ANSI resets don't interrupt the highlight.
+//
+//nolint:unparam // nameWidth is kept as a parameter for consistency with renderGroupHeaderLine
+func renderToolCallLine(tc *model.ToolCall, nameWidth, summaryWidth, durWidth int, compactView bool, th theme.Theme, highlightBg string) string {
 	icon := ToolIcon(tc.Name)
 	isKnown := IsKnownTool(tc.Name)
 
@@ -945,14 +978,32 @@ func renderToolCallLine(tc *model.ToolCall, nameWidth, summaryWidth, durWidth in
 	dur := FormatDuration(tc.Duration, tc.Status == model.ToolCallRunning)
 	dur = fmt.Sprintf("%*s", durWidth, dur)
 
-	styledIcon := lipgloss.NewStyle().Foreground(lipgloss.Color(nameColor)).Render(icon)
-	styledSummary := lipgloss.NewStyle().Foreground(lipgloss.Color(th.ToolSummary)).Render(combined)
-	styledResult := lipgloss.NewStyle().Foreground(lipgloss.Color(resultColor)).Render(result)
-	styledDur := lipgloss.NewStyle().Foreground(lipgloss.Color(durColor)).Render(dur)
+	// Helper to build a style with foreground and optional highlight background.
+	styled := func(fg, text string) string {
+		s := lipgloss.NewStyle().Foreground(lipgloss.Color(fg))
+		if highlightBg != "" {
+			s = s.Background(lipgloss.Color(highlightBg))
+		}
+		return s.Render(text)
+	}
+
+	styledIcon := styled(nameColor, icon)
+	styledSummary := styled(th.ToolSummary, combined)
+	styledResult := styled(resultColor, result)
+	styledDur := styled(durColor, dur)
 
 	var styledTokens string
 	if tokenStr != "" {
-		styledTokens = " " + lipgloss.NewStyle().Foreground(lipgloss.Color(th.ForegroundDim)).Render(tokenStr)
+		styledTokens = " " + styled(th.ForegroundDim, tokenStr)
+	}
+
+	// When highlighting, plain spaces between segments need the background too.
+	space := " "
+	indent := "  "
+	if highlightBg != "" {
+		bgStyle := lipgloss.NewStyle().Background(lipgloss.Color(highlightBg))
+		space = bgStyle.Render(" ")
+		indent = bgStyle.Render("  ")
 	}
 
 	showName := !compactView || !isKnown
@@ -961,15 +1012,16 @@ func renderToolCallLine(tc *model.ToolCall, nameWidth, summaryWidth, durWidth in
 		if len(tc.Name) > nameWidth {
 			name = tc.Name[:nameWidth]
 		}
-		styledName := lipgloss.NewStyle().Foreground(lipgloss.Color(nameColor)).Render(name)
-		return fmt.Sprintf("  %s %s %s%s %s %s", styledIcon, styledName, styledSummary, styledTokens, styledResult, styledDur)
+		styledName := styled(nameColor, name)
+		return fmt.Sprintf("%s%s%s%s%s%s%s%s%s%s%s", indent, styledIcon, space, styledName, space, styledSummary, styledTokens, space, styledResult, space, styledDur)
 	}
 
-	return fmt.Sprintf("  %s %s%s %s %s", styledIcon, styledSummary, styledTokens, styledResult, styledDur)
+	return fmt.Sprintf("%s%s%s%s%s%s%s%s", indent, styledIcon, space, styledSummary, styledTokens, space, styledResult, space+styledDur)
 }
 
-// renderGroupHeaderLine renders a tool call group header row.
-func renderGroupHeaderLine(g *model.ToolCallGroup, nameWidth, summaryWidth, durWidth int, compactView bool, th theme.Theme) string {
+// renderGroupHeaderLine renders a tool call group header row. When highlightBg
+// is non-empty, each segment gets the background color baked in.
+func renderGroupHeaderLine(g *model.ToolCallGroup, nameWidth, summaryWidth, durWidth int, compactView bool, th theme.Theme, highlightBg string) string {
 	icon := ToolIcon(g.ToolName)
 	isKnown := IsKnownTool(g.ToolName)
 
@@ -1011,10 +1063,26 @@ func renderGroupHeaderLine(g *model.ToolCallGroup, nameWidth, summaryWidth, durW
 	dur := FormatDuration(g.GroupDuration(), status == model.ToolCallRunning)
 	dur = fmt.Sprintf("%*s", durWidth, dur)
 
-	styledIcon := lipgloss.NewStyle().Foreground(lipgloss.Color(nameColor)).Render(icon)
-	styledSummary := lipgloss.NewStyle().Foreground(lipgloss.Color(th.ToolSummary)).Render(summary)
-	styledResult := lipgloss.NewStyle().Foreground(lipgloss.Color(resultColor)).Render(result)
-	styledDur := lipgloss.NewStyle().Foreground(lipgloss.Color(durColor)).Render(dur)
+	styled := func(fg, text string) string {
+		s := lipgloss.NewStyle().Foreground(lipgloss.Color(fg))
+		if highlightBg != "" {
+			s = s.Background(lipgloss.Color(highlightBg))
+		}
+		return s.Render(text)
+	}
+
+	styledIcon := styled(nameColor, icon)
+	styledSummary := styled(th.ToolSummary, summary)
+	styledResult := styled(resultColor, result)
+	styledDur := styled(durColor, dur)
+
+	space := " "
+	indent := "  "
+	if highlightBg != "" {
+		bgStyle := lipgloss.NewStyle().Background(lipgloss.Color(highlightBg))
+		space = bgStyle.Render(" ")
+		indent = bgStyle.Render("  ")
+	}
 
 	showName := !compactView || !isKnown
 	if showName {
@@ -1022,9 +1090,9 @@ func renderGroupHeaderLine(g *model.ToolCallGroup, nameWidth, summaryWidth, durW
 		if len(g.ToolName) > nameWidth {
 			name = g.ToolName[:nameWidth]
 		}
-		styledName := lipgloss.NewStyle().Foreground(lipgloss.Color(nameColor)).Render(name)
-		return fmt.Sprintf("  %s %s %s %s %s", styledIcon, styledName, styledSummary, styledResult, styledDur)
+		styledName := styled(nameColor, name)
+		return fmt.Sprintf("%s%s%s%s%s%s%s%s%s%s", indent, styledIcon, space, styledName, space, styledSummary, space, styledResult, space, styledDur)
 	}
 
-	return fmt.Sprintf("  %s %s %s %s", styledIcon, styledSummary, styledResult, styledDur)
+	return fmt.Sprintf("%s%s%s%s%s%s%s%s", indent, styledIcon, space, styledSummary, space, styledResult, space, styledDur)
 }

@@ -7,6 +7,8 @@ import (
 	"time"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/muesli/termenv"
+
 	"github.com/loxstomper/skinner/internal/model"
 )
 
@@ -2083,5 +2085,184 @@ func TestTimeline_View_TokenAttributionInGroup(t *testing.T) {
 	}
 	if !strings.Contains(result, "⚡1.0k") {
 		t.Error("expected '⚡1.0k' cache token count in group children")
+	}
+}
+
+// highlightBgCode returns the ANSI TrueColor background escape code fragment
+// produced by lipgloss for the test theme's highlight color. We derive it
+// dynamically rather than hard-coding RGB values because lipgloss may apply
+// slight rounding during color conversion.
+func highlightBgCode() string {
+	lipgloss.SetColorProfile(termenv.TrueColor)
+	s := lipgloss.NewStyle().Background(lipgloss.Color(testTheme().Highlight))
+	rendered := s.Render("X")
+	// Extract "48;2;R;G;B" from the ANSI sequence.
+	idx := strings.Index(rendered, "48;2;")
+	if idx < 0 {
+		return "48;2;" // fallback prefix
+	}
+	// Find the 'm' that closes the SGR sequence.
+	end := strings.IndexByte(rendered[idx:], 'm')
+	if end < 0 {
+		return rendered[idx:]
+	}
+	return rendered[idx : idx+end]
+}
+
+// TestTimeline_View_HighlightPerSegmentBackground verifies that the cursor row
+// highlight background is baked into each rendered segment rather than applied
+// as an outer wrapper. With TrueColor forced, the background escape code
+// (48;2;R;G;B) should appear multiple times in the highlighted line — once per
+// styled segment — proving the background survives inner ANSI resets.
+func TestTimeline_View_HighlightPerSegmentBackground(t *testing.T) {
+	// Force ANSI output so we can inspect escape codes.
+	lipgloss.SetColorProfile(termenv.TrueColor)
+	defer lipgloss.SetColorProfile(termenv.Ascii) // restore for other tests
+
+	bgCode := highlightBgCode()
+
+	tl := NewTimeline()
+	items := []model.TimelineItem{
+		&model.ToolCall{
+			ID: "tc1", Name: "Read", Summary: "main.go",
+			Status: model.ToolCallDone, Duration: 2 * time.Second,
+		},
+	}
+	props := timelineProps(items)
+	props.Focused = true
+
+	result := tl.View(props)
+
+	// The highlighted row is the first (and only) line of actual content.
+	lines := strings.Split(result, "\n")
+	if len(lines) == 0 {
+		t.Fatal("expected at least one rendered line")
+	}
+	highlightedLine := lines[0]
+
+	occurrences := strings.Count(highlightedLine, bgCode)
+	if occurrences < 2 {
+		t.Errorf("expected background code %q to appear at least twice (once per segment), got %d occurrences in: %q",
+			bgCode, occurrences, highlightedLine)
+	}
+
+	// Content should still be present.
+	if !strings.Contains(result, "Read") {
+		t.Error("expected 'Read' tool name in highlighted row")
+	}
+	if !strings.Contains(result, "main.go") {
+		t.Error("expected 'main.go' summary in highlighted row")
+	}
+	if !strings.Contains(result, "✓") {
+		t.Error("expected success indicator ✓ in highlighted row")
+	}
+}
+
+// TestTimeline_View_HighlightBackgroundOnGroupChild verifies that per-segment
+// highlighting also works when the cursor is on a child within a group.
+func TestTimeline_View_HighlightBackgroundOnGroupChild(t *testing.T) {
+	lipgloss.SetColorProfile(termenv.TrueColor)
+	defer lipgloss.SetColorProfile(termenv.Ascii)
+
+	bgCode := highlightBgCode()
+
+	tl := NewTimeline()
+	items := []model.TimelineItem{
+		&model.ToolCallGroup{
+			ToolName: "Read",
+			Expanded: true,
+			Children: []*model.ToolCall{
+				{ID: "tc1", Name: "Read", Summary: "a.go", Status: model.ToolCallDone, Duration: time.Second},
+				{ID: "tc2", Name: "Read", Summary: "b.go", Status: model.ToolCallDone, Duration: time.Second},
+			},
+		},
+	}
+	props := timelineProps(items)
+	props.Focused = true
+
+	// Move cursor to the first child (flatPos 1).
+	tl.HandleAction("move_down", props)
+	if tl.Cursor != 1 {
+		t.Fatalf("expected cursor at 1, got %d", tl.Cursor)
+	}
+
+	result := tl.View(props)
+	lines := strings.Split(result, "\n")
+
+	// The child row should be line index 1 (after the group header at line 0).
+	if len(lines) < 2 {
+		t.Fatal("expected at least 2 rendered lines")
+	}
+	childLine := lines[1]
+
+	occurrences := strings.Count(childLine, bgCode)
+	if occurrences < 2 {
+		t.Errorf("expected background code in group child, got %d occurrences in: %q",
+			occurrences, childLine)
+	}
+
+	if !strings.Contains(childLine, "a.go") {
+		t.Error("expected 'a.go' summary in highlighted child row")
+	}
+}
+
+// TestTimeline_View_HighlightBackgroundOnTextBlock verifies that text block
+// lines get per-segment background when highlighted.
+func TestTimeline_View_HighlightBackgroundOnTextBlock(t *testing.T) {
+	lipgloss.SetColorProfile(termenv.TrueColor)
+	defer lipgloss.SetColorProfile(termenv.Ascii)
+
+	bgCode := highlightBgCode()
+
+	tl := NewTimeline()
+	items := []model.TimelineItem{
+		&model.TextBlock{Text: "Looking at the code"},
+	}
+	props := timelineProps(items)
+	props.Focused = true
+
+	result := tl.View(props)
+	lines := strings.Split(result, "\n")
+	if len(lines) == 0 {
+		t.Fatal("expected at least one rendered line")
+	}
+	highlightedLine := lines[0]
+
+	if !strings.Contains(highlightedLine, bgCode) {
+		t.Errorf("expected background code %q in text block line: %q", bgCode, highlightedLine)
+	}
+	if !strings.Contains(result, "Looking at the code") {
+		t.Error("expected text block content")
+	}
+}
+
+// TestRenderToolCallLine_HighlightBg_PerSegment directly tests that
+// renderToolCallLine with a highlightBg produces background codes in each
+// styled segment.
+func TestRenderToolCallLine_HighlightBg_PerSegment(t *testing.T) {
+	lipgloss.SetColorProfile(termenv.TrueColor)
+	defer lipgloss.SetColorProfile(termenv.Ascii)
+
+	bgCode := highlightBgCode()
+
+	tc := &model.ToolCall{
+		ID: "tc1", Name: "Read", Summary: "main.go",
+		Status: model.ToolCallDone, Duration: 2 * time.Second,
+	}
+	th := testTheme()
+
+	// Without highlight: no background codes expected.
+	noHighlight := renderToolCallLine(tc, 6, 40, 8, false, th, "")
+	if strings.Contains(noHighlight, "48;2;") {
+		t.Errorf("expected no background code without highlight, got: %q", noHighlight)
+	}
+
+	// With highlight: background codes should appear in each segment.
+	withHighlight := renderToolCallLine(tc, 6, 40, 8, false, th, th.Highlight)
+	occurrences := strings.Count(withHighlight, bgCode)
+	// At minimum: icon, name, summary, result, duration = 5 segments + spaces/indent
+	if occurrences < 5 {
+		t.Errorf("expected at least 5 background code occurrences (one per segment), got %d in: %q",
+			occurrences, withHighlight)
 	}
 }
