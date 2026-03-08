@@ -15,12 +15,20 @@ type Timeline struct {
 	Cursor     int
 	Scroll     int
 	AutoFollow AutoFollow
+
+	// Sub-scroll state: when a tool call's expanded content exceeds 40% of
+	// pane height, the user can enter sub-scroll mode to scroll within it.
+	// SubScrollIdx is the flat cursor index of the tool call in sub-scroll
+	// mode, or -1 when inactive.
+	SubScrollIdx    int
+	SubScrollOffset int
 }
 
 // NewTimeline creates a new Timeline with auto-follow enabled.
 func NewTimeline() Timeline {
 	return Timeline{
-		AutoFollow: NewAutoFollow(),
+		AutoFollow:   NewAutoFollow(),
+		SubScrollIdx: -1,
 	}
 }
 
@@ -40,8 +48,19 @@ type renderedLine struct {
 	flatIdx int // flat cursor position (-1 for continuation lines of text blocks)
 }
 
+// InSubScroll returns true when the timeline is in sub-scroll mode.
+func (tl *Timeline) InSubScroll() bool {
+	return tl.SubScrollIdx >= 0
+}
+
 // HandleAction processes a resolved action for the timeline.
 func (tl *Timeline) HandleAction(action string, props TimelineProps) {
+	// When in sub-scroll mode, route navigation to the sub-scroll handler.
+	if tl.InSubScroll() {
+		tl.handleSubScrollAction(action, props)
+		return
+	}
+
 	maxPos := FlatCursorCount(props.Items) - 1
 	atEnd := func() bool { return tl.Cursor >= maxPos }
 
@@ -92,7 +111,95 @@ func (tl *Timeline) HandleAction(action string, props TimelineProps) {
 	}
 }
 
-// handleEnter toggles expand/collapse on the selected item.
+// handleSubScrollAction processes actions while in sub-scroll mode.
+func (tl *Timeline) handleSubScrollAction(action string, props TimelineProps) {
+	tc := tl.subScrollToolCall(props)
+	if tc == nil {
+		tl.ExitSubScroll()
+		return
+	}
+	contentLen := len(expandedContentLines(tc))
+	maxViewport := subScrollViewportHeight(contentLen, props.Height)
+
+	switch action {
+	case "move_down":
+		if tl.SubScrollOffset < contentLen-maxViewport {
+			tl.SubScrollOffset++
+		}
+	case "move_up":
+		if tl.SubScrollOffset > 0 {
+			tl.SubScrollOffset--
+		}
+	case "jump_top":
+		tl.SubScrollOffset = 0
+	case "jump_bottom":
+		maxOffset := contentLen - maxViewport
+		if maxOffset < 0 {
+			maxOffset = 0
+		}
+		tl.SubScrollOffset = maxOffset
+	case "expand":
+		// Enter on sub-scroll: collapse and exit
+		tc.Expanded = false
+		tl.ExitSubScroll()
+		tl.ensureCursorVisible(props)
+	}
+	// escape is handled in root.go before reaching here
+}
+
+// subScrollToolCall returns the ToolCall currently in sub-scroll mode, or nil.
+func (tl *Timeline) subScrollToolCall(props TimelineProps) *model.ToolCall {
+	if tl.SubScrollIdx < 0 {
+		return nil
+	}
+	itemIdx, childIdx := FlatToItem(props.Items, tl.SubScrollIdx)
+	if itemIdx >= len(props.Items) {
+		return nil
+	}
+	switch it := props.Items[itemIdx].(type) {
+	case *model.ToolCall:
+		return it
+	case *model.ToolCallGroup:
+		if childIdx >= 0 && childIdx < len(it.Children) {
+			return it.Children[childIdx]
+		}
+	}
+	return nil
+}
+
+// ExitSubScroll leaves sub-scroll mode, returning to timeline navigation.
+func (tl *Timeline) ExitSubScroll() {
+	tl.SubScrollIdx = -1
+	tl.SubScrollOffset = 0
+}
+
+// subScrollViewportHeight returns the capped viewport height for sub-scroll.
+// Content exceeding 40% of pane height is capped at 70% of pane height.
+func subScrollViewportHeight(contentLines, paneHeight int) int {
+	threshold := paneHeight * 40 / 100
+	if contentLines <= threshold {
+		return contentLines
+	}
+	cap := paneHeight * 70 / 100
+	if cap < 1 {
+		cap = 1
+	}
+	if contentLines < cap {
+		return contentLines
+	}
+	return cap
+}
+
+// subScrollEnabled returns true if the expanded content lines exceed the
+// inline threshold (40% of pane height) and sub-scroll would be active.
+func subScrollEnabled(contentLines, paneHeight int) bool {
+	threshold := paneHeight * 40 / 100
+	return contentLines > threshold
+}
+
+// handleEnter toggles expand/collapse on the selected item. If the item is
+// already expanded and its content exceeds the inline threshold, enter
+// sub-scroll mode instead of collapsing.
 func (tl *Timeline) handleEnter(props TimelineProps) {
 	itemIdx, childIdx := FlatToItem(props.Items, tl.Cursor)
 	if itemIdx >= len(props.Items) {
@@ -103,7 +210,19 @@ func (tl *Timeline) handleEnter(props TimelineProps) {
 		it.Expanded = !it.Expanded
 		tl.ensureCursorVisible(props)
 	case *model.ToolCall:
-		it.Expanded = !it.Expanded
+		if it.Expanded {
+			// Already expanded: enter sub-scroll if content is large enough
+			content := expandedContentLines(it)
+			if subScrollEnabled(len(content), props.Height) {
+				tl.SubScrollIdx = tl.Cursor
+				tl.SubScrollOffset = 0
+				return
+			}
+			// Content is small — collapse
+			it.Expanded = false
+		} else {
+			it.Expanded = true
+		}
 		tl.ensureCursorVisible(props)
 	case *model.ToolCallGroup:
 		if childIdx == -1 {
@@ -118,8 +237,19 @@ func (tl *Timeline) handleEnter(props TimelineProps) {
 			}
 			tl.ensureCursorVisible(props)
 		} else if childIdx >= 0 && childIdx < len(it.Children) {
-			// On child row: toggle child tool call expansion
-			it.Children[childIdx].Expanded = !it.Children[childIdx].Expanded
+			child := it.Children[childIdx]
+			if child.Expanded {
+				// Already expanded: enter sub-scroll if large enough
+				content := expandedContentLines(child)
+				if subScrollEnabled(len(content), props.Height) {
+					tl.SubScrollIdx = tl.Cursor
+					tl.SubScrollOffset = 0
+					return
+				}
+				child.Expanded = false
+			} else {
+				child.Expanded = true
+			}
 			tl.ensureCursorVisible(props)
 		}
 	}
@@ -171,12 +301,8 @@ func (tl *Timeline) View(props TimelineProps) string {
 		case *model.ToolCall:
 			l := renderToolCallLine(it, nameWidth, summaryWidth, durWidth, props.CompactView, props.Theme)
 			lines = append(lines, renderedLine{text: l, flatIdx: flatPos})
-			// Render expanded content lines for standalone tool calls
 			if it.Expanded {
-				for _, cl := range expandedContentLines(it) {
-					rendered := renderExpandedContentLine(cl, it.Name, props.Width, props.Theme)
-					lines = append(lines, renderedLine{text: rendered, flatIdx: -1})
-				}
+				lines = tl.appendExpandedLines(lines, it, flatPos, "", props)
 			}
 			flatPos++
 		case *model.ToolCallGroup:
@@ -189,12 +315,8 @@ func (tl *Timeline) View(props TimelineProps) string {
 					cl := renderToolCallLine(child, nameWidth, childSummaryWidth, durWidth, props.CompactView, props.Theme)
 					cl = "  " + cl
 					lines = append(lines, renderedLine{text: cl, flatIdx: flatPos})
-					// Render expanded content lines for group children with extra indent
 					if child.Expanded {
-						for _, el := range expandedContentLines(child) {
-							rendered := "  " + renderExpandedContentLine(el, child.Name, props.Width-2, props.Theme)
-							lines = append(lines, renderedLine{text: rendered, flatIdx: -1})
-						}
+						lines = tl.appendExpandedLines(lines, child, flatPos, "  ", props)
 					}
 					flatPos++
 				}
@@ -203,6 +325,68 @@ func (tl *Timeline) View(props TimelineProps) string {
 	}
 
 	return tl.renderWithLines(lines, props)
+}
+
+// appendExpandedLines adds expanded content lines for a tool call, applying
+// sub-scroll viewport capping when in sub-scroll mode.
+func (tl *Timeline) appendExpandedLines(lines []renderedLine, tc *model.ToolCall, flatPos int, indent string, props TimelineProps) []renderedLine {
+	allContent := expandedContentLines(tc)
+	if len(allContent) == 0 {
+		return lines
+	}
+
+	inSubScroll := tl.SubScrollIdx == flatPos
+	contentWidth := props.Width - len(indent)
+	if contentWidth < 10 {
+		contentWidth = 10
+	}
+
+	if inSubScroll && subScrollEnabled(len(allContent), props.Height) {
+		// Sub-scroll mode: show capped viewport with border and indicator
+		vpHeight := subScrollViewportHeight(len(allContent), props.Height)
+		offset := tl.SubScrollOffset
+		// Clamp offset
+		maxOffset := len(allContent) - vpHeight
+		if maxOffset < 0 {
+			maxOffset = 0
+		}
+		if offset > maxOffset {
+			offset = maxOffset
+			tl.SubScrollOffset = offset
+		}
+
+		dimStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(props.Theme.ForegroundDim))
+		borderChar := dimStyle.Render("│")
+
+		visibleContent := allContent[offset : offset+vpHeight]
+		for i, cl := range visibleContent {
+			rendered := indent + borderChar + " " + renderExpandedContentLine(cl, tc.Name, contentWidth-3, props.Theme)
+
+			// Last line: append scroll indicator
+			if i == vpHeight-1 {
+				indicator := fmt.Sprintf("[%d/%d]", offset+vpHeight, len(allContent))
+				styledIndicator := dimStyle.Render(indicator)
+				lineWidth := lipgloss.Width(rendered)
+				indicatorWidth := lipgloss.Width(styledIndicator)
+				padding := props.Width - lineWidth - indicatorWidth
+				if padding > 0 {
+					rendered += strings.Repeat(" ", padding) + styledIndicator
+				} else {
+					rendered += " " + styledIndicator
+				}
+			}
+
+			lines = append(lines, renderedLine{text: rendered, flatIdx: -1})
+		}
+	} else {
+		// Normal inline display
+		for _, cl := range allContent {
+			rendered := indent + renderExpandedContentLine(cl, tc.Name, contentWidth, props.Theme)
+			lines = append(lines, renderedLine{text: rendered, flatIdx: -1})
+		}
+	}
+
+	return lines
 }
 
 // renderWithLines applies scroll and cursor highlighting.
@@ -274,11 +458,12 @@ func (tl *Timeline) JumpToBottom(props TimelineProps) {
 func (tl *Timeline) ResetPosition() {
 	tl.Cursor = 0
 	tl.Scroll = 0
+	tl.ExitSubScroll()
 }
 
 // ensureCursorVisible adjusts scroll to keep the cursor in view.
 func (tl *Timeline) ensureCursorVisible(props TimelineProps) {
-	lineStart, lc := FlatCursorLineRange(props.Items, tl.Cursor, props.CompactView)
+	lineStart, lc := tl.effectiveLineRange(props)
 	lineEnd := lineStart + lc
 	if lineStart < tl.Scroll {
 		tl.Scroll = lineStart
@@ -290,12 +475,115 @@ func (tl *Timeline) ensureCursorVisible(props TimelineProps) {
 
 // scrollToBottom sets scroll so the last line is visible.
 func (tl *Timeline) scrollToBottom(props TimelineProps) {
-	total := TotalLines(props.Items, props.CompactView)
+	total := tl.effectiveTotalLines(props)
 	if total > props.Height {
 		tl.Scroll = total - props.Height
 	} else {
 		tl.Scroll = 0
 	}
+}
+
+// effectiveTotalLines returns total rendered lines, accounting for sub-scroll
+// viewport capping on the active sub-scroll item.
+func (tl *Timeline) effectiveTotalLines(props TimelineProps) int {
+	if !tl.InSubScroll() {
+		return TotalLines(props.Items, props.CompactView)
+	}
+	return tl.totalLinesWithCap(props)
+}
+
+// effectiveLineRange returns the line range for the cursor item, accounting
+// for sub-scroll viewport capping.
+func (tl *Timeline) effectiveLineRange(props TimelineProps) (lineStart int, lineCount int) {
+	if !tl.InSubScroll() {
+		return FlatCursorLineRange(props.Items, tl.Cursor, props.CompactView)
+	}
+	return tl.lineRangeWithCap(props)
+}
+
+// totalLinesWithCap computes total lines with the sub-scroll item capped.
+func (tl *Timeline) totalLinesWithCap(props TimelineProps) int {
+	total := 0
+	flatPos := 0
+	for _, item := range props.Items {
+		switch it := item.(type) {
+		case *model.TextBlock:
+			total += ItemLineCount(it, props.CompactView)
+			flatPos++
+		case *model.ToolCall:
+			if flatPos == tl.SubScrollIdx {
+				total += toolCallLineCountCapped(it, props.Height)
+			} else {
+				total += toolCallLineCount(it)
+			}
+			flatPos++
+		case *model.ToolCallGroup:
+			total++ // header
+			flatPos++
+			if it.Expanded {
+				for _, child := range it.Children {
+					if flatPos == tl.SubScrollIdx {
+						total += toolCallLineCountCapped(child, props.Height)
+					} else {
+						total += toolCallLineCount(child)
+					}
+					flatPos++
+				}
+			}
+		}
+	}
+	return total
+}
+
+// lineRangeWithCap computes the line range for the cursor with sub-scroll capping.
+func (tl *Timeline) lineRangeWithCap(props TimelineProps) (lineStart int, lineCount int) {
+	line := 0
+	pos := 0
+	for _, item := range props.Items {
+		switch it := item.(type) {
+		case *model.TextBlock:
+			lc := ItemLineCount(it, props.CompactView)
+			if pos == tl.Cursor {
+				return line, lc
+			}
+			line += lc
+			pos++
+		case *model.ToolCall:
+			var lc int
+			if pos == tl.SubScrollIdx {
+				lc = toolCallLineCountCapped(it, props.Height)
+			} else {
+				lc = toolCallLineCount(it)
+			}
+			if pos == tl.Cursor {
+				return line, lc
+			}
+			line += lc
+			pos++
+		case *model.ToolCallGroup:
+			if pos == tl.Cursor {
+				return line, 1
+			}
+			line++
+			pos++
+			if it.Expanded {
+				for _, child := range it.Children {
+					var clc int
+					if pos == tl.SubScrollIdx {
+						clc = toolCallLineCountCapped(child, props.Height)
+					} else {
+						clc = toolCallLineCount(child)
+					}
+					if pos == tl.Cursor {
+						return line, clc
+					}
+					line += clc
+					pos++
+				}
+			}
+		}
+	}
+	return line, 1
 }
 
 // clampCursorToViewport moves the cursor into the visible viewport after
@@ -345,7 +633,7 @@ func (tl *Timeline) ClickRow(row int, props TimelineProps) bool {
 
 // clampScroll ensures scroll doesn't exceed the maximum.
 func (tl *Timeline) clampScroll(props TimelineProps) {
-	total := TotalLines(props.Items, props.CompactView)
+	total := tl.effectiveTotalLines(props)
 	maxScroll := total - props.Height
 	if maxScroll < 0 {
 		maxScroll = 0

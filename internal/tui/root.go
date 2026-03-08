@@ -233,6 +233,24 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		action = "page_down"
 	}
 
+	// When in sub-scroll mode, only allow specific actions.
+	if m.timeline.InSubScroll() {
+		switch action {
+		case config.ActionQuit:
+			m.activeModal = modalQuitConfirm
+		case config.ActionHelp:
+			m.activeModal = modalHelp
+		case config.ActionEscape:
+			m.timeline.ExitSubScroll()
+		case config.ActionMoveDown, config.ActionMoveUp,
+			config.ActionJumpTop, config.ActionJumpBottom,
+			config.ActionExpand:
+			m.timeline.HandleAction(action, m.currentTimelineProps())
+		}
+		// All other keys are ignored in sub-scroll mode.
+		return m, nil
+	}
+
 	switch action {
 	case config.ActionQuit:
 		m.activeModal = modalQuitConfirm

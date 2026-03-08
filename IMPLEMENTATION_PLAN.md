@@ -24,17 +24,17 @@ Implemented in `expand.go`:
 - `toolCallLineCount()` already uses actual content length via `expandedContentLines()` (no separate cap)
 - Updated tests: `TestExpandedContentLines_FullContent` verifies all 30 lines returned, `TestToolCallLineCount_ExpandedLargeContent` expects 31 (1 header + 30 content), `TestTimeline_View_ExpandedFullContent` verifies full content renders and no truncation footer appears
 
-### 3.2 Sub-Scroll for Expanded Content
-- [ ] Add `subScrollMode` bool and `subScrollOffset` int to `Timeline`
-- [ ] Track which tool call is in sub-scroll mode (by flat cursor index)
-- [ ] On `enter` for already-expanded tool call: enter sub-scroll mode
-- [ ] Adaptive sizing: if content ≤ 40% of pane height, show inline; if > 40%, cap viewport at 70% of pane height
-- [ ] In sub-scroll mode: `j`/`k` scroll within expanded content, `gg`/`G` jump within content
-- [ ] `escape` exits sub-scroll mode, returns to timeline navigation
-- [ ] Render scroll position indicator `[current/total]` in `ForegroundDim`
-- [ ] Render subtle border around expanded area when in sub-scroll mode
-- [ ] `q` in sub-scroll shows quit confirmation (not escape behavior)
-- [ ] Tests: enter/exit sub-scroll, scroll within content, adaptive threshold, escape returns to timeline
+### ~~3.2 Sub-Scroll for Expanded Content~~ ✅ DONE
+
+Implemented in `timeline.go` and `expand.go`:
+- `SubScrollIdx` (flat cursor index, -1 = inactive) and `SubScrollOffset` on `Timeline`
+- `subScrollViewportHeight()` and `subScrollEnabled()` implement adaptive sizing: content ≤ 40% of pane inline, > 40% capped at 70%
+- `handleEnter()` detects already-expanded tool call with large content → enters sub-scroll
+- `handleSubScrollAction()` routes j/k/gg/G within expanded content, enter collapses and exits
+- `root.go` intercepts escape to exit sub-scroll; q/? still show modals; all other keys ignored
+- `appendExpandedLines()` renders capped viewport with `│` border and `[current/total]` indicator in `ForegroundDim`
+- `toolCallLineCountCapped()` for sub-scroll-aware scroll management via `effectiveTotalLines()`/`effectiveLineRange()`
+- 17 tests: viewport height calc, enter/exit sub-scroll, move up/down, jump top/bottom, clamp, indicator rendering, group children, cursor stability, reset clears sub-scroll
 
 ### 3.3 Relative Line Numbers
 - [ ] Add `lineNumbers` bool to `Model` (from config `view.line_numbers`, default `true`)

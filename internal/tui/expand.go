@@ -111,12 +111,28 @@ func renderEditDiff(rawInput map[string]interface{}) []string {
 
 // toolCallLineCount returns the number of display lines a tool call occupies.
 // Returns 1 if collapsed, or 1 + number of content lines if expanded.
+// This returns the full (uncapped) count; see toolCallLineCountCapped for
+// sub-scroll viewport-aware counting.
 func toolCallLineCount(tc *model.ToolCall) int {
 	if !tc.Expanded {
 		return 1
 	}
 	content := expandedContentLines(tc)
 	return 1 + len(content)
+}
+
+// toolCallLineCountCapped returns the display line count for a tool call,
+// capping the expanded content height when it exceeds the sub-scroll
+// threshold (40% of paneHeight). Used by scroll management functions when
+// sub-scroll is active for this tool call.
+func toolCallLineCountCapped(tc *model.ToolCall, paneHeight int) int {
+	if !tc.Expanded {
+		return 1
+	}
+	content := expandedContentLines(tc)
+	contentLen := len(content)
+	vpHeight := subScrollViewportHeight(contentLen, paneHeight)
+	return 1 + vpHeight
 }
 
 // renderExpandedContentLine renders a single expanded content line with proper

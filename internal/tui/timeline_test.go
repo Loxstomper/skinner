@@ -851,3 +851,487 @@ func TestTimeline_PgDown_CursorAlreadyInViewport(t *testing.T) {
 		t.Errorf("expected cursor=20 after pgdown pushed cursor out, got %d", tl.Cursor)
 	}
 }
+
+// --- Sub-scroll tests ---
+
+// makeSubScrollItems creates a tool call with many content lines for sub-scroll testing.
+func makeSubScrollItems(contentLines int) []model.TimelineItem {
+	var sb strings.Builder
+	for i := 0; i < contentLines; i++ {
+		if i > 0 {
+			sb.WriteString("\n")
+		}
+		sb.WriteString(fmt.Sprintf("line %d", i+1))
+	}
+	return []model.TimelineItem{
+		&model.ToolCall{
+			ID: "tc1", Name: "Read", Summary: "big.go",
+			Status:        model.ToolCallDone,
+			ResultContent: sb.String(),
+			Expanded:      true,
+		},
+	}
+}
+
+func TestSubScrollViewportHeight(t *testing.T) {
+	// Content at 40% of pane (pane=100, threshold=40): at threshold, inline
+	if h := subScrollViewportHeight(40, 100); h != 40 {
+		t.Errorf("40 lines at 40%% threshold should be inline (40), got %d", h)
+	}
+	// Content at 41 lines (pane=100, threshold=40): exceeds threshold, but
+	// 41 < cap 70, so viewport = 41 (all content visible, sub-scroll border shown)
+	if h := subScrollViewportHeight(41, 100); h != 41 {
+		t.Errorf("41 lines (below cap 70) should return 41, got %d", h)
+	}
+	// Content at 50 lines (pane=100): exceeds threshold, 50 < cap 70
+	if h := subScrollViewportHeight(50, 100); h != 50 {
+		t.Errorf("50 lines (< cap 70) should return 50, got %d", h)
+	}
+	// Content at 200 lines (pane=100): exceeds cap → capped at 70
+	if h := subScrollViewportHeight(200, 100); h != 70 {
+		t.Errorf("200 lines should be capped at 70, got %d", h)
+	}
+	// Small pane (height=10): threshold=4, cap=7
+	// 5 lines > threshold 4, but 5 < cap 7, so viewport = 5
+	if h := subScrollViewportHeight(5, 10); h != 5 {
+		t.Errorf("5 lines with pane 10 should return 5 (below cap 7), got %d", h)
+	}
+	if h := subScrollViewportHeight(4, 10); h != 4 {
+		t.Errorf("4 lines with pane 10 should be inline (4), got %d", h)
+	}
+	// 8 lines, pane=10: exceeds cap → capped at 7
+	if h := subScrollViewportHeight(8, 10); h != 7 {
+		t.Errorf("8 lines with pane 10 should be capped at 7, got %d", h)
+	}
+}
+
+func TestSubScrollEnabled(t *testing.T) {
+	// Exactly at threshold: not enabled
+	if subScrollEnabled(40, 100) {
+		t.Error("40 lines at pane 100 should NOT enable sub-scroll (at threshold)")
+	}
+	// Just above threshold
+	if !subScrollEnabled(41, 100) {
+		t.Error("41 lines at pane 100 should enable sub-scroll")
+	}
+	// Well below
+	if subScrollEnabled(5, 100) {
+		t.Error("5 lines should NOT enable sub-scroll")
+	}
+}
+
+func TestTimeline_EnterOnExpandedToolCall_EntersSubScroll(t *testing.T) {
+	tl := NewTimeline()
+	// 50 content lines, pane height 20 → threshold 8, content 50 > 8 → sub-scroll enabled
+	items := makeSubScrollItems(50)
+	props := TimelineProps{
+		Items:   items,
+		Width:   80,
+		Height:  20,
+		Focused: true,
+		Theme:   testTheme(),
+	}
+
+	// Should NOT be in sub-scroll yet
+	if tl.InSubScroll() {
+		t.Fatal("should not be in sub-scroll before enter")
+	}
+
+	// First enter: tool call is already expanded, content exceeds threshold
+	tl.HandleAction("expand", props)
+	if !tl.InSubScroll() {
+		t.Error("expected sub-scroll mode after enter on expanded tool call with large content")
+	}
+	if tl.SubScrollIdx != 0 {
+		t.Errorf("expected SubScrollIdx=0, got %d", tl.SubScrollIdx)
+	}
+	if tl.SubScrollOffset != 0 {
+		t.Errorf("expected SubScrollOffset=0, got %d", tl.SubScrollOffset)
+	}
+}
+
+func TestTimeline_EnterOnExpandedToolCall_SmallContent_Collapses(t *testing.T) {
+	tl := NewTimeline()
+	// 3 content lines, pane height 20 → threshold 8, content 3 ≤ 8 → no sub-scroll
+	items := makeSubScrollItems(3)
+	props := TimelineProps{
+		Items:   items,
+		Width:   80,
+		Height:  20,
+		Focused: true,
+		Theme:   testTheme(),
+	}
+
+	tc := items[0].(*model.ToolCall)
+	// Already expanded
+	tl.HandleAction("expand", props)
+	if tl.InSubScroll() {
+		t.Error("small content should not trigger sub-scroll")
+	}
+	if tc.Expanded {
+		t.Error("enter on small expanded content should collapse")
+	}
+}
+
+func TestTimeline_SubScroll_MoveDown(t *testing.T) {
+	tl := NewTimeline()
+	items := makeSubScrollItems(50)
+	props := TimelineProps{
+		Items:   items,
+		Width:   80,
+		Height:  20,
+		Focused: true,
+		Theme:   testTheme(),
+	}
+
+	// Enter sub-scroll
+	tl.HandleAction("expand", props)
+	if !tl.InSubScroll() {
+		t.Fatal("expected sub-scroll mode")
+	}
+
+	// Move down within sub-scroll
+	tl.HandleAction("move_down", props)
+	if tl.SubScrollOffset != 1 {
+		t.Errorf("expected SubScrollOffset=1, got %d", tl.SubScrollOffset)
+	}
+
+	// Multiple moves
+	for i := 0; i < 5; i++ {
+		tl.HandleAction("move_down", props)
+	}
+	if tl.SubScrollOffset != 6 {
+		t.Errorf("expected SubScrollOffset=6, got %d", tl.SubScrollOffset)
+	}
+}
+
+func TestTimeline_SubScroll_MoveUp(t *testing.T) {
+	tl := NewTimeline()
+	items := makeSubScrollItems(50)
+	props := TimelineProps{
+		Items:   items,
+		Width:   80,
+		Height:  20,
+		Focused: true,
+		Theme:   testTheme(),
+	}
+
+	// Enter sub-scroll and move down a few
+	tl.HandleAction("expand", props)
+	for i := 0; i < 5; i++ {
+		tl.HandleAction("move_down", props)
+	}
+
+	// Move up
+	tl.HandleAction("move_up", props)
+	if tl.SubScrollOffset != 4 {
+		t.Errorf("expected SubScrollOffset=4, got %d", tl.SubScrollOffset)
+	}
+
+	// Move up past 0 — should clamp
+	for i := 0; i < 10; i++ {
+		tl.HandleAction("move_up", props)
+	}
+	if tl.SubScrollOffset != 0 {
+		t.Errorf("expected SubScrollOffset=0 (clamped), got %d", tl.SubScrollOffset)
+	}
+}
+
+func TestTimeline_SubScroll_JumpTopBottom(t *testing.T) {
+	tl := NewTimeline()
+	items := makeSubScrollItems(50)
+	props := TimelineProps{
+		Items:   items,
+		Width:   80,
+		Height:  20,
+		Focused: true,
+		Theme:   testTheme(),
+	}
+
+	// Enter sub-scroll
+	tl.HandleAction("expand", props)
+
+	// Jump to bottom
+	tl.HandleAction("jump_bottom", props)
+	// Viewport height: subScrollViewportHeight(50, 20) → threshold=8, cap=14
+	expectedMax := 50 - 14
+	if tl.SubScrollOffset != expectedMax {
+		t.Errorf("expected SubScrollOffset=%d after jump_bottom, got %d", expectedMax, tl.SubScrollOffset)
+	}
+
+	// Jump to top
+	tl.HandleAction("jump_top", props)
+	if tl.SubScrollOffset != 0 {
+		t.Errorf("expected SubScrollOffset=0 after jump_top, got %d", tl.SubScrollOffset)
+	}
+}
+
+func TestTimeline_SubScroll_MoveDownClamp(t *testing.T) {
+	tl := NewTimeline()
+	items := makeSubScrollItems(50)
+	props := TimelineProps{
+		Items:   items,
+		Width:   80,
+		Height:  20,
+		Focused: true,
+		Theme:   testTheme(),
+	}
+
+	// Enter sub-scroll and jump to bottom
+	tl.HandleAction("expand", props)
+	tl.HandleAction("jump_bottom", props)
+
+	// Try to go past bottom
+	offsetBefore := tl.SubScrollOffset
+	tl.HandleAction("move_down", props)
+	if tl.SubScrollOffset != offsetBefore {
+		t.Errorf("expected SubScrollOffset to stay at %d (clamped), got %d", offsetBefore, tl.SubScrollOffset)
+	}
+}
+
+func TestTimeline_ExitSubScroll(t *testing.T) {
+	tl := NewTimeline()
+	items := makeSubScrollItems(50)
+	props := TimelineProps{
+		Items:   items,
+		Width:   80,
+		Height:  20,
+		Focused: true,
+		Theme:   testTheme(),
+	}
+
+	// Enter sub-scroll
+	tl.HandleAction("expand", props)
+	if !tl.InSubScroll() {
+		t.Fatal("expected sub-scroll mode")
+	}
+
+	// Move around
+	tl.HandleAction("move_down", props)
+	tl.HandleAction("move_down", props)
+
+	// Exit
+	tl.ExitSubScroll()
+	if tl.InSubScroll() {
+		t.Error("expected sub-scroll mode to be exited")
+	}
+	if tl.SubScrollIdx != -1 {
+		t.Errorf("expected SubScrollIdx=-1, got %d", tl.SubScrollIdx)
+	}
+	if tl.SubScrollOffset != 0 {
+		t.Errorf("expected SubScrollOffset=0, got %d", tl.SubScrollOffset)
+	}
+}
+
+func TestTimeline_SubScroll_EnterToCollapse(t *testing.T) {
+	tl := NewTimeline()
+	items := makeSubScrollItems(50)
+	props := TimelineProps{
+		Items:   items,
+		Width:   80,
+		Height:  20,
+		Focused: true,
+		Theme:   testTheme(),
+	}
+
+	// Enter sub-scroll
+	tl.HandleAction("expand", props)
+	if !tl.InSubScroll() {
+		t.Fatal("expected sub-scroll mode")
+	}
+
+	// Press enter again in sub-scroll: collapses and exits
+	tl.HandleAction("expand", props)
+	if tl.InSubScroll() {
+		t.Error("expected sub-scroll to exit after enter in sub-scroll mode")
+	}
+	tc := items[0].(*model.ToolCall)
+	if tc.Expanded {
+		t.Error("expected tool call to be collapsed after enter in sub-scroll")
+	}
+}
+
+func TestTimeline_SubScroll_View_ShowsIndicator(t *testing.T) {
+	tl := NewTimeline()
+	items := makeSubScrollItems(50)
+	props := TimelineProps{
+		Items:   items,
+		Width:   80,
+		Height:  20,
+		Focused: true,
+		Theme:   testTheme(),
+	}
+
+	// Enter sub-scroll
+	tl.HandleAction("expand", props)
+	result := tl.View(props)
+
+	// Should show scroll indicator [14/50]
+	// viewport height = subScrollViewportHeight(50, 20) = 14 (cap = 14)
+	if !strings.Contains(result, "[14/50]") {
+		t.Errorf("expected scroll indicator [14/50], got: %s", result)
+	}
+
+	// Should contain first content line
+	if !strings.Contains(result, "line 1") {
+		t.Error("expected 'line 1' in sub-scroll view")
+	}
+}
+
+func TestTimeline_SubScroll_View_AfterScroll(t *testing.T) {
+	tl := NewTimeline()
+	items := makeSubScrollItems(50)
+	props := TimelineProps{
+		Items:   items,
+		Width:   80,
+		Height:  20,
+		Focused: true,
+		Theme:   testTheme(),
+	}
+
+	// Enter sub-scroll and scroll down
+	tl.HandleAction("expand", props)
+	for i := 0; i < 5; i++ {
+		tl.HandleAction("move_down", props)
+	}
+	result := tl.View(props)
+
+	// Indicator should update: [19/50] (offset 5, viewport 14)
+	if !strings.Contains(result, "[19/50]") {
+		t.Errorf("expected scroll indicator [19/50] after scrolling, got: %s", result)
+	}
+
+	// Should show content at offset 5
+	if !strings.Contains(result, "line 6") {
+		t.Error("expected 'line 6' visible after scrolling down 5")
+	}
+}
+
+func TestTimeline_SubScroll_View_ShowsBorder(t *testing.T) {
+	tl := NewTimeline()
+	items := makeSubScrollItems(50)
+	props := TimelineProps{
+		Items:   items,
+		Width:   80,
+		Height:  20,
+		Focused: true,
+		Theme:   testTheme(),
+	}
+
+	// Enter sub-scroll
+	tl.HandleAction("expand", props)
+	result := tl.View(props)
+
+	// The border character should be present (│)
+	if !strings.Contains(result, "│") {
+		t.Error("expected border character '│' in sub-scroll view")
+	}
+}
+
+func TestTimeline_SubScroll_GroupChild(t *testing.T) {
+	// Build a group with a child that has large content
+	var sb strings.Builder
+	for i := 0; i < 50; i++ {
+		if i > 0 {
+			sb.WriteString("\n")
+		}
+		sb.WriteString(fmt.Sprintf("child line %d", i+1))
+	}
+
+	items := []model.TimelineItem{
+		&model.ToolCallGroup{
+			ToolName: "Read",
+			Expanded: true,
+			Children: []*model.ToolCall{
+				{
+					ID: "tc1", Name: "Read", Summary: "big.go",
+					Status:        model.ToolCallDone,
+					ResultContent: sb.String(),
+					Expanded:      true,
+				},
+			},
+		},
+	}
+	props := TimelineProps{
+		Items:   items,
+		Width:   80,
+		Height:  20,
+		Focused: true,
+		Theme:   testTheme(),
+	}
+
+	tl := NewTimeline()
+	tl.Cursor = 1 // Move to child
+
+	// Enter sub-scroll on group child
+	tl.HandleAction("expand", props)
+	if !tl.InSubScroll() {
+		t.Error("expected sub-scroll mode on group child with large content")
+	}
+	if tl.SubScrollIdx != 1 {
+		t.Errorf("expected SubScrollIdx=1 for group child, got %d", tl.SubScrollIdx)
+	}
+}
+
+func TestTimeline_SubScroll_TimelineCursorUnchanged(t *testing.T) {
+	tl := NewTimeline()
+	items := makeSubScrollItems(50)
+	props := TimelineProps{
+		Items:   items,
+		Width:   80,
+		Height:  20,
+		Focused: true,
+		Theme:   testTheme(),
+	}
+
+	// Enter sub-scroll
+	tl.HandleAction("expand", props)
+
+	// Move within sub-scroll — timeline cursor should NOT change
+	cursorBefore := tl.Cursor
+	tl.HandleAction("move_down", props)
+	tl.HandleAction("move_down", props)
+	if tl.Cursor != cursorBefore {
+		t.Errorf("expected timeline cursor unchanged at %d during sub-scroll, got %d", cursorBefore, tl.Cursor)
+	}
+}
+
+func TestTimeline_ResetPosition_ClearsSubScroll(t *testing.T) {
+	tl := NewTimeline()
+	tl.SubScrollIdx = 5
+	tl.SubScrollOffset = 10
+
+	tl.ResetPosition()
+	if tl.InSubScroll() {
+		t.Error("expected ResetPosition to clear sub-scroll")
+	}
+}
+
+func TestTimeline_SubScroll_ToolCallLineCountCapped(t *testing.T) {
+	// 50 lines content, pane height 20 → threshold 8, cap 14
+	tc := &model.ToolCall{
+		Name:          "Read",
+		Expanded:      true,
+		ResultContent: strings.Repeat("x\n", 49) + "x", // 50 lines
+	}
+	full := toolCallLineCount(tc)
+	if full != 51 {
+		t.Errorf("expected full count 51 (1+50), got %d", full)
+	}
+	capped := toolCallLineCountCapped(tc, 20)
+	// cap = 20*70/100 = 14, so capped = 1 + 14 = 15
+	if capped != 15 {
+		t.Errorf("expected capped count 15 (1+14), got %d", capped)
+	}
+}
+
+func TestTimeline_InSubScroll(t *testing.T) {
+	tl := NewTimeline()
+	if tl.InSubScroll() {
+		t.Error("new timeline should not be in sub-scroll")
+	}
+	tl.SubScrollIdx = 0
+	if !tl.InSubScroll() {
+		t.Error("timeline with SubScrollIdx=0 should be in sub-scroll")
+	}
+}
