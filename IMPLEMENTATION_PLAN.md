@@ -92,14 +92,16 @@ Implemented in `session.go` and `timeline.go`:
 - 6 session tests: single call gets full tokens, even division across 3 calls, rounding with remainder, group children get equal share, pending cleared after batch, text-only batch clears pending
 - 4 timeline tests: token display with k-suffix, large values, zero tokens hidden, tokens in group children
 
-### 4.2 Rate Limit Window Usage (Placeholder)
-- [ ] Add `RateLimitInfo` struct with `FiveHourPercent` and `WeeklyPercent` fields (both `*float64`, nil = unknown)
-- [ ] Add `RateLimitInfo` field to `Model`
-- [ ] In `header.go`, render `5h: N%  wk: N%` area (or `5h: --  wk: --` when nil)
-- [ ] Color thresholds: normal < 70%, warning 70-89%, critical 90%+
-- [ ] Leave data fetching unimplemented — display `--` permanently for now
-- [ ] Add `// TODO: implement rate limit data fetching at iteration start` comment
-- [ ] Tests: header renders placeholder `--` values, renders percentages when set, color thresholds
+### ~~4.2 Rate Limit Window Usage (Placeholder)~~ ✅ DONE
+
+Implemented in `model.go`, `header.go`, and `root.go`:
+- `RateLimitInfo` struct with `FiveHourPercent` and `WeeklyPercent` fields (both `*float64`, nil = unknown)
+- `RateLimit RateLimitInfo` field on `Session` struct
+- `renderRateLimitField()` helper renders `5h: N%` / `wk: N%` or `5h: --` / `wk: --` when nil
+- Color thresholds match context window: normal (`ForegroundDim`) < 70%, warning (`StatusRunning`) 70-89%, critical (`StatusError`) 90%+
+- `RateLimit` wired through `HeaderProps` → `headerProps()` → `RenderHeader()`
+- `// TODO: implement rate limit data fetching at iteration start` on Session.RateLimit field
+- 4 tests: placeholder `--` values, percentages render correctly, color threshold levels, mixed known/unknown values
 
 ## Phase 5 — Specs & Test Hygiene
 

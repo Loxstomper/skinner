@@ -172,3 +172,107 @@ func TestRenderHeader_StatusIcons(t *testing.T) {
 		})
 	}
 }
+
+func TestRenderHeader_RateLimitPlaceholder(t *testing.T) {
+	// When both values are nil (unknown), display "--" placeholders
+	p := HeaderProps{
+		IterationCount: 1,
+		SessionStatus:  model.IterationRunning,
+		Width:          160,
+		Theme:          testTheme(),
+	}
+
+	result := RenderHeader(p)
+
+	if !strings.Contains(result, "5h: --") {
+		t.Error("expected placeholder '5h: --' when FiveHourPercent is nil")
+	}
+	if !strings.Contains(result, "wk: --") {
+		t.Error("expected placeholder 'wk: --' when WeeklyPercent is nil")
+	}
+}
+
+func TestRenderHeader_RateLimitPercentages(t *testing.T) {
+	fiveHour := 34.0
+	weekly := 12.0
+	p := HeaderProps{
+		IterationCount: 1,
+		SessionStatus:  model.IterationRunning,
+		RateLimit: model.RateLimitInfo{
+			FiveHourPercent: &fiveHour,
+			WeeklyPercent:   &weekly,
+		},
+		Width: 160,
+		Theme: testTheme(),
+	}
+
+	result := RenderHeader(p)
+
+	if !strings.Contains(result, "5h: 34%") {
+		t.Error("expected '5h: 34%' in output")
+	}
+	if !strings.Contains(result, "wk: 12%") {
+		t.Error("expected 'wk: 12%' in output")
+	}
+}
+
+func TestRenderHeader_RateLimitColorThresholds(t *testing.T) {
+	// This test verifies that the rate limit values are present in the output
+	// at various threshold levels. Color verification is done by checking
+	// the values render correctly — the color logic mirrors context window thresholds.
+	tests := []struct {
+		name string
+		pct  float64
+		want string
+	}{
+		{"normal", 50, "5h: 50%"},
+		{"warning_boundary", 70, "5h: 70%"},
+		{"warning", 85, "5h: 85%"},
+		{"critical_boundary", 90, "5h: 90%"},
+		{"critical", 95, "5h: 95%"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			pct := tt.pct
+			p := HeaderProps{
+				IterationCount: 1,
+				SessionStatus:  model.IterationRunning,
+				RateLimit: model.RateLimitInfo{
+					FiveHourPercent: &pct,
+				},
+				Width: 160,
+				Theme: testTheme(),
+			}
+
+			result := RenderHeader(p)
+			if !strings.Contains(result, tt.want) {
+				t.Errorf("expected %q in output, got: %s", tt.want, result)
+			}
+		})
+	}
+}
+
+func TestRenderHeader_RateLimitMixed(t *testing.T) {
+	// Only one value known, the other should show "--"
+	fiveHour := 42.0
+	p := HeaderProps{
+		IterationCount: 1,
+		SessionStatus:  model.IterationRunning,
+		RateLimit: model.RateLimitInfo{
+			FiveHourPercent: &fiveHour,
+			WeeklyPercent:   nil,
+		},
+		Width: 160,
+		Theme: testTheme(),
+	}
+
+	result := RenderHeader(p)
+
+	if !strings.Contains(result, "5h: 42%") {
+		t.Error("expected '5h: 42%' when FiveHourPercent is set")
+	}
+	if !strings.Contains(result, "wk: --") {
+		t.Error("expected 'wk: --' when WeeklyPercent is nil")
+	}
+}

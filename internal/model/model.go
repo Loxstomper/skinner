@@ -128,6 +128,13 @@ func (iter *Iteration) ToolCallCount() int {
 	return count
 }
 
+// RateLimitInfo holds API rate limit window utilization percentages.
+// Nil pointer fields indicate unknown/unfetched values.
+type RateLimitInfo struct {
+	FiveHourPercent *float64 // 5-hour rolling window utilization, nil = unknown
+	WeeklyPercent   *float64 // weekly rolling window utilization, nil = unknown
+}
+
 type Session struct {
 	Iterations    []Iteration
 	Mode          string // "build" or "plan"
@@ -144,6 +151,10 @@ type Session struct {
 	// Latest usage from most recent assistant event (replaced, not accumulated)
 	LastInputTokens     int64
 	LastCacheReadTokens int64
+
+	// Rate limit window utilization
+	// TODO: implement rate limit data fetching at iteration start
+	RateLimit RateLimitInfo
 
 	StartTime time.Time
 }

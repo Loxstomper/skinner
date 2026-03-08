@@ -18,6 +18,7 @@ type HeaderProps struct {
 	ContextPercent  int // -1 if unknown
 	TotalCost       float64
 	HasKnownModel   bool
+	RateLimit       model.RateLimitInfo
 	IterationCount  int
 	MaxIterations   int
 	SessionStatus   model.IterationStatus
@@ -54,6 +55,10 @@ func RenderHeader(p HeaderProps) string {
 	if p.HasKnownModel {
 		centreRendered += dim.Render(fmt.Sprintf("   ~$%.2f", p.TotalCost))
 	}
+
+	// Rate limit windows
+	centreRendered += renderRateLimitField("5h", p.RateLimit.FiveHourPercent, p.Theme)
+	centreRendered += renderRateLimitField("wk", p.RateLimit.WeeklyPercent, p.Theme)
 
 	// Right side: iteration progress + status icon
 	iterCount := p.IterationCount
@@ -97,4 +102,25 @@ func RenderHeader(p HeaderProps) string {
 	}
 
 	return strings.Repeat(" ", leftPad) + centreRendered + strings.Repeat(" ", gap) + rightRendered
+}
+
+// renderRateLimitField renders a single rate limit field (e.g. "5h: 34%" or "5h: --").
+func renderRateLimitField(label string, pct *float64, th theme.Theme) string {
+	if pct == nil {
+		return lipgloss.NewStyle().
+			Foreground(lipgloss.Color(th.ForegroundDim)).
+			Render(fmt.Sprintf("   %s: --", label))
+	}
+
+	text := fmt.Sprintf("   %s: %.0f%%", label, *pct)
+	var color string
+	switch {
+	case *pct >= 90:
+		color = th.StatusError
+	case *pct >= 70:
+		color = th.StatusRunning
+	default:
+		color = th.ForegroundDim
+	}
+	return lipgloss.NewStyle().Foreground(lipgloss.Color(color)).Render(text)
 }

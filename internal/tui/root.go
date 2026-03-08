@@ -534,6 +534,7 @@ func (m *Model) headerProps() HeaderProps {
 		ContextPercent:  contextPercent,
 		TotalCost:       sess.TotalCost,
 		HasKnownModel:   m.controller.HasKnownModel(),
+		RateLimit:       sess.RateLimit,
 		IterationCount:  len(sess.Iterations),
 		MaxIterations:   sess.MaxIterations,
 		SessionStatus:   sessionStatus,
