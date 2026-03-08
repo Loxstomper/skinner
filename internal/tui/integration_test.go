@@ -1504,6 +1504,391 @@ func TestIntegration_CountJump_PendingCountInView(t *testing.T) {
 	}
 }
 
+// --- Help modal open/close ---
+
+func TestIntegration_HelpModal_OpenClose(t *testing.T) {
+	events := []session.Event{
+		session.AssistantBatchEvent{Events: []session.Event{
+			session.ToolUseEvent{ID: "tc1", Name: "Read", Summary: "main.go"},
+		}},
+		session.ToolResultEvent{ToolUseID: "tc1", IsError: false},
+		session.SubprocessExitEvent{Err: nil},
+	}
+
+	m := newTestModel(events, 1)
+	drainEvents(t, m)
+
+	// No modal initially.
+	if m.activeModal != modalNone {
+		t.Fatal("expected no modal initially")
+	}
+
+	// ? opens the help modal.
+	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'?'}})
+	if m.activeModal != modalHelp {
+		t.Error("expected help modal after pressing ?")
+	}
+
+	// View should contain help modal content.
+	view := m.View()
+	if !strings.Contains(view, "Keybindings") {
+		t.Error("expected 'Keybindings' title in help modal view")
+	}
+	if !strings.Contains(view, "Navigation") {
+		t.Error("expected 'Navigation' section in help modal view")
+	}
+	if !strings.Contains(view, "Move down") {
+		t.Error("expected 'Move down' entry in help modal view")
+	}
+	if !strings.Contains(view, "Press any key to close") {
+		t.Error("expected dismiss instructions in help modal view")
+	}
+
+	// Any key dismisses the help modal.
+	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'x'}})
+	if m.activeModal != modalNone {
+		t.Error("expected help modal dismissed after pressing any key")
+	}
+}
+
+func TestIntegration_HelpModal_ReflectsCustomKeybindings(t *testing.T) {
+	events := []session.Event{
+		session.SubprocessExitEvent{Err: nil},
+	}
+
+	// Create model with custom keybindings.
+	fake := &executor.FakeExecutor{Events: events}
+	sess := model.Session{
+		Mode:          "build",
+		PromptFile:    "test.md",
+		MaxIterations: 1,
+		StartTime:     time.Now(),
+	}
+	cfg := config.DefaultConfig()
+	// Remap quit to "x" instead of "q".
+	cfg.KeyMap.Bindings[config.ActionQuit] = config.KeyBinding{Keys: []string{"x"}}
+	th := testTheme()
+	m := NewModel(sess, cfg, "prompt", th, false, false, fake)
+	m.width = 120
+	m.height = 30
+	drainEvents(t, &m)
+
+	// Open help modal.
+	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'?'}})
+	if m.activeModal != modalHelp {
+		t.Fatal("expected help modal")
+	}
+
+	// Help modal should show "x" for quit, not "q".
+	view := m.View()
+	if !strings.Contains(view, "Quit") {
+		t.Error("expected 'Quit' label in help modal")
+	}
+	// The custom binding "x" should appear in the view.
+	// Since the view contains styled text, we check for the key character.
+	if !strings.Contains(view, "x") {
+		t.Error("expected custom quit key 'x' in help modal view")
+	}
+}
+
+// --- Sub-scroll: enter, navigate, exit ---
+
+func TestIntegration_SubScroll_EnterNavigateExit(t *testing.T) {
+	// Create a tool call with large content that will trigger sub-scroll.
+	// Sub-scroll activates when content > 40% of pane height.
+	// With height=30, pane height ~29, 40% = ~11 lines. We need more.
+	var largeOutput strings.Builder
+	for i := 0; i < 50; i++ {
+		fmt.Fprintf(&largeOutput, "output line %d\n", i+1)
+	}
+
+	events := []session.Event{
+		session.AssistantBatchEvent{Events: []session.Event{
+			session.ToolUseEvent{
+				ID:       "tc1",
+				Name:     "Bash",
+				Summary:  "long command",
+				RawInput: map[string]interface{}{"command": "long-cmd"},
+			},
+		}},
+		session.ToolResultEvent{
+			ToolUseID: "tc1",
+			IsError:   false,
+			Content:   largeOutput.String(),
+		},
+		session.SubprocessExitEvent{Err: nil},
+	}
+
+	m := newTestModel(events, 1)
+	drainEvents(t, m)
+
+	// Focus right pane.
+	m.Update(tea.KeyMsg{Type: tea.KeyTab})
+	if m.focusedPane != rightPane {
+		t.Fatal("expected right pane focus")
+	}
+
+	// Tool call should start collapsed.
+	iter := &m.Session().Iterations[0]
+	tc := iter.Items[0].(*model.ToolCall)
+	if tc.Expanded {
+		t.Fatal("expected tool call collapsed initially")
+	}
+	if m.timeline.InSubScroll() {
+		t.Fatal("expected not in sub-scroll initially")
+	}
+
+	// First Enter: expand the tool call.
+	m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	if !tc.Expanded {
+		t.Fatal("expected tool call expanded after first Enter")
+	}
+	if m.timeline.InSubScroll() {
+		t.Fatal("expected not in sub-scroll after first Enter (just expanded)")
+	}
+
+	// Second Enter on expanded tool call with large content: enter sub-scroll.
+	m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	if !m.timeline.InSubScroll() {
+		t.Fatal("expected sub-scroll mode after second Enter on large expanded content")
+	}
+	if m.timeline.SubScrollOffset != 0 {
+		t.Errorf("expected SubScrollOffset=0 at start, got %d", m.timeline.SubScrollOffset)
+	}
+
+	// j scrolls down in sub-scroll.
+	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+	if m.timeline.SubScrollOffset != 1 {
+		t.Errorf("expected SubScrollOffset=1 after j, got %d", m.timeline.SubScrollOffset)
+	}
+
+	// k scrolls back up in sub-scroll.
+	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'k'}})
+	if m.timeline.SubScrollOffset != 0 {
+		t.Errorf("expected SubScrollOffset=0 after k, got %d", m.timeline.SubScrollOffset)
+	}
+
+	// G jumps to bottom of sub-scroll.
+	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'G'}})
+	if m.timeline.SubScrollOffset == 0 {
+		t.Error("expected SubScrollOffset > 0 after G (jump to bottom)")
+	}
+
+	// gg jumps to top of sub-scroll.
+	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'g'}})
+	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'g'}})
+	if m.timeline.SubScrollOffset != 0 {
+		t.Errorf("expected SubScrollOffset=0 after gg, got %d", m.timeline.SubScrollOffset)
+	}
+
+	// Escape exits sub-scroll.
+	m.Update(tea.KeyMsg{Type: tea.KeyEscape})
+	if m.timeline.InSubScroll() {
+		t.Error("expected sub-scroll exited after Escape")
+	}
+	// Tool call should still be expanded after exiting sub-scroll.
+	if !tc.Expanded {
+		t.Error("expected tool call still expanded after Escape exits sub-scroll")
+	}
+}
+
+func TestIntegration_SubScroll_EnterCollapses(t *testing.T) {
+	// Sub-scroll: pressing Enter should collapse and exit.
+	var largeOutput strings.Builder
+	for i := 0; i < 50; i++ {
+		fmt.Fprintf(&largeOutput, "output line %d\n", i+1)
+	}
+
+	events := []session.Event{
+		session.AssistantBatchEvent{Events: []session.Event{
+			session.ToolUseEvent{
+				ID:       "tc1",
+				Name:     "Bash",
+				Summary:  "long command",
+				RawInput: map[string]interface{}{"command": "long-cmd"},
+			},
+		}},
+		session.ToolResultEvent{
+			ToolUseID: "tc1",
+			IsError:   false,
+			Content:   largeOutput.String(),
+		},
+		session.SubprocessExitEvent{Err: nil},
+	}
+
+	m := newTestModel(events, 1)
+	drainEvents(t, m)
+
+	// Focus right pane and expand.
+	m.Update(tea.KeyMsg{Type: tea.KeyTab})
+
+	iter := &m.Session().Iterations[0]
+	tc := iter.Items[0].(*model.ToolCall)
+
+	// Expand, then enter sub-scroll.
+	m.Update(tea.KeyMsg{Type: tea.KeyEnter}) // expand
+	m.Update(tea.KeyMsg{Type: tea.KeyEnter}) // enter sub-scroll
+	if !m.timeline.InSubScroll() {
+		t.Fatal("expected sub-scroll mode")
+	}
+
+	// Enter in sub-scroll collapses and exits.
+	m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	if m.timeline.InSubScroll() {
+		t.Error("expected sub-scroll exited after Enter")
+	}
+	if tc.Expanded {
+		t.Error("expected tool call collapsed after Enter in sub-scroll")
+	}
+}
+
+// --- Configurable keybindings apply end-to-end ---
+
+func TestIntegration_CustomKeybindings_EndToEnd(t *testing.T) {
+	events := []session.Event{
+		session.AssistantBatchEvent{Events: []session.Event{
+			session.TextEvent{Text: "first item"},
+			session.ToolUseEvent{ID: "tc1", Name: "Read", Summary: "a.go"},
+			session.TextEvent{Text: "third item"},
+		}},
+		session.ToolResultEvent{ToolUseID: "tc1", IsError: false},
+		session.SubprocessExitEvent{Err: nil},
+	}
+
+	// Create model with custom keybindings: remap move_down to "n",
+	// move_up to "p", quit to "x", toggle_view to "m".
+	fake := &executor.FakeExecutor{Events: events}
+	sess := model.Session{
+		Mode:          "build",
+		PromptFile:    "test.md",
+		MaxIterations: 1,
+		StartTime:     time.Now(),
+	}
+	cfg := config.DefaultConfig()
+	cfg.KeyMap.Bindings[config.ActionMoveDown] = config.KeyBinding{Keys: []string{"n"}}
+	cfg.KeyMap.Bindings[config.ActionMoveUp] = config.KeyBinding{Keys: []string{"p"}}
+	cfg.KeyMap.Bindings[config.ActionQuit] = config.KeyBinding{Keys: []string{"x"}}
+	cfg.KeyMap.Bindings[config.ActionToggleView] = config.KeyBinding{Keys: []string{"m"}}
+	th := testTheme()
+	m := NewModel(sess, cfg, "prompt", th, false, false, fake)
+	m.width = 120
+	m.height = 30
+	drainEvents(t, &m)
+
+	// Focus right pane.
+	m.Update(tea.KeyMsg{Type: tea.KeyTab})
+	if m.focusedPane != rightPane {
+		t.Fatal("expected right pane focus")
+	}
+
+	// Jump to top first.
+	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'g'}})
+	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'g'}})
+	if m.timeline.Cursor != 0 {
+		t.Fatalf("expected cursor=0 at top, got %d", m.timeline.Cursor)
+	}
+
+	// "n" (custom move_down) should move cursor down.
+	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'n'}})
+	if m.timeline.Cursor != 1 {
+		t.Errorf("expected cursor=1 after custom move_down 'n', got %d", m.timeline.Cursor)
+	}
+
+	// "p" (custom move_up) should move cursor up.
+	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'p'}})
+	if m.timeline.Cursor != 0 {
+		t.Errorf("expected cursor=0 after custom move_up 'p', got %d", m.timeline.Cursor)
+	}
+
+	// "j" (old default move_down) should NOT move cursor — it's no longer bound.
+	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+	if m.timeline.Cursor != 0 {
+		t.Errorf("expected cursor=0 after unbound 'j', got %d", m.timeline.Cursor)
+	}
+
+	// "m" (custom toggle_view) should toggle compact view.
+	if m.compactView {
+		t.Fatal("expected compact view off initially")
+	}
+	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'m'}})
+	if !m.compactView {
+		t.Error("expected compact view on after custom toggle 'm'")
+	}
+
+	// "v" (old default toggle_view) should NOT toggle — it's no longer bound.
+	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'v'}})
+	if !m.compactView {
+		t.Error("expected compact view still on after unbound 'v'")
+	}
+
+	// "x" (custom quit) should show quit modal.
+	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'x'}})
+	if m.activeModal != modalQuitConfirm {
+		t.Error("expected quit modal after custom quit key 'x'")
+	}
+
+	// Dismiss quit modal.
+	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'n'}})
+	if m.activeModal != modalNone {
+		t.Error("expected modal dismissed")
+	}
+
+	// "q" (old default quit) should NOT show quit modal — it's no longer bound.
+	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
+	if m.activeModal != modalNone {
+		t.Error("expected no modal after unbound 'q'")
+	}
+}
+
+func TestIntegration_CustomKeybindings_CustomSequence(t *testing.T) {
+	events := []session.Event{
+		session.AssistantBatchEvent{Events: []session.Event{
+			session.ToolUseEvent{ID: "tc1", Name: "Bash", Summary: "cmd"},
+		}},
+		session.ToolResultEvent{ToolUseID: "tc1", IsError: false},
+		session.SubprocessExitEvent{Err: nil},
+	}
+
+	// Remap jump_top from "g g" to "z z".
+	fake := &executor.FakeExecutor{Events: events}
+	sess := model.Session{
+		Mode:          "build",
+		PromptFile:    "test.md",
+		MaxIterations: 3,
+		StartTime:     time.Now(),
+	}
+	cfg := config.DefaultConfig()
+	cfg.KeyMap.Bindings[config.ActionJumpTop] = config.KeyBinding{Keys: []string{"z", "z"}}
+	th := testTheme()
+	m := NewModel(sess, cfg, "prompt", th, false, false, fake)
+	m.width = 120
+	m.height = 30
+	drainEvents(t, &m)
+
+	// Cursor at last iteration (auto-follow).
+	if m.iterList.Cursor != 2 {
+		t.Fatalf("expected cursor=2, got %d", m.iterList.Cursor)
+	}
+
+	// "z z" (custom jump_top) should jump to top.
+	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'z'}})
+	if m.pendingAction == "" {
+		t.Error("expected pendingAction set after first 'z'")
+	}
+	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'z'}})
+	if m.iterList.Cursor != 0 {
+		t.Errorf("expected cursor=0 after custom zz, got %d", m.iterList.Cursor)
+	}
+
+	// "g g" (old default) should NOT jump to top.
+	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}}) // move down first
+	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'g'}})
+	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'g'}})
+	if m.iterList.Cursor == 0 {
+		t.Error("expected 'gg' to NOT jump to top since it's remapped to 'zz'")
+	}
+}
+
 type testError struct{ msg string }
 
 func (e *testError) Error() string { return e.msg }

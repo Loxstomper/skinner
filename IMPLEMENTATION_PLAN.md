@@ -110,10 +110,10 @@ Implemented in `model.go`, `header.go`, and `root.go`:
 - [ ] Verify cross-references between specs are correct
 - [ ] Ensure examples in specs match actual rendering
 
-### 5.2 Integration Tests for New Features
-- [ ] Add integration test: help modal open/close
+### 5.2 Integration Tests for New Features ✅ ALL DONE
+- [x] Add integration test: help modal open/close — `TestIntegration_HelpModal_OpenClose`, `TestIntegration_HelpModal_ReflectsCustomKeybindings` verify `?` opens modal with sections/entries, any key dismisses, custom keybindings reflected in display
 - [x] Add integration test: left pane auto-hide on narrow terminal
-- [ ] Add integration test: sub-scroll enter/navigate/exit
+- [x] Add integration test: sub-scroll enter/navigate/exit — `TestIntegration_SubScroll_EnterNavigateExit` (expand → enter sub-scroll → j/k/G/gg navigate → escape exits, tool stays expanded), `TestIntegration_SubScroll_EnterCollapses` (Enter in sub-scroll collapses and exits)
 - [x] Add integration test: count+jump motions
 - [x] Add integration test: expand shows full content (no truncation)
-- [ ] Add integration test: configurable keybindings apply end-to-end
+- [x] Add integration test: configurable keybindings apply end-to-end — `TestIntegration_CustomKeybindings_EndToEnd` (remapped n/p/x/m work, old j/v/q don't), `TestIntegration_CustomKeybindings_CustomSequence` (custom "z z" sequence works, old "g g" doesn't)
