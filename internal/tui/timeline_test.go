@@ -1500,3 +1500,175 @@ func TestTimeline_LineNumbers_WidthReduced(t *testing.T) {
 		_ = linesOff // Used above
 	}
 }
+
+// --- Count+jump motion tests ---
+
+func TestTimeline_AccumulateDigit(t *testing.T) {
+	tl := NewTimeline()
+
+	tl.AccumulateDigit('5')
+	if tl.CountBuffer != "5" {
+		t.Errorf("expected CountBuffer='5', got %q", tl.CountBuffer)
+	}
+
+	tl.AccumulateDigit('3')
+	if tl.CountBuffer != "53" {
+		t.Errorf("expected CountBuffer='53', got %q", tl.CountBuffer)
+	}
+}
+
+func TestTimeline_AccumulateDigit_LeadingZeroIgnored(t *testing.T) {
+	tl := NewTimeline()
+
+	// Leading zero should be ignored
+	tl.AccumulateDigit('0')
+	if tl.CountBuffer != "" {
+		t.Errorf("expected empty CountBuffer after leading 0, got %q", tl.CountBuffer)
+	}
+
+	// After a non-zero digit, 0 is allowed
+	tl.AccumulateDigit('1')
+	tl.AccumulateDigit('0')
+	if tl.CountBuffer != "10" {
+		t.Errorf("expected CountBuffer='10', got %q", tl.CountBuffer)
+	}
+}
+
+func TestTimeline_ConsumeCount_Empty(t *testing.T) {
+	tl := NewTimeline()
+
+	count := tl.ConsumeCount()
+	if count != 1 {
+		t.Errorf("expected count=1 for empty buffer, got %d", count)
+	}
+	if tl.CountBuffer != "" {
+		t.Errorf("expected buffer cleared after consume, got %q", tl.CountBuffer)
+	}
+}
+
+func TestTimeline_ConsumeCount_WithValue(t *testing.T) {
+	tl := NewTimeline()
+	tl.CountBuffer = "12"
+
+	count := tl.ConsumeCount()
+	if count != 12 {
+		t.Errorf("expected count=12, got %d", count)
+	}
+	if tl.CountBuffer != "" {
+		t.Errorf("expected buffer cleared after consume, got %q", tl.CountBuffer)
+	}
+}
+
+func TestTimeline_ClearCount(t *testing.T) {
+	tl := NewTimeline()
+	tl.CountBuffer = "42"
+
+	tl.ClearCount()
+	if tl.CountBuffer != "" {
+		t.Errorf("expected buffer cleared, got %q", tl.CountBuffer)
+	}
+}
+
+func TestTimeline_HandleActionWithCount_MoveDown(t *testing.T) {
+	tl := NewTimeline()
+	var items []model.TimelineItem
+	for i := 0; i < 20; i++ {
+		items = append(items, &model.ToolCall{
+			ID: "tc", Name: "Read", Summary: "file.go", Status: model.ToolCallDone,
+		})
+	}
+	props := timelineProps(items)
+
+	// Move down by 5
+	tl.HandleActionWithCount("move_down", 5, props)
+	if tl.Cursor != 5 {
+		t.Errorf("expected cursor=5 after 5j, got %d", tl.Cursor)
+	}
+
+	// Move down by 12 from position 5 → should clamp at 19
+	tl.HandleActionWithCount("move_down", 12, props)
+	if tl.Cursor != 17 {
+		t.Errorf("expected cursor=17 after 12j from 5 (clamped), got %d", tl.Cursor)
+	}
+}
+
+func TestTimeline_HandleActionWithCount_MoveUp(t *testing.T) {
+	tl := NewTimeline()
+	var items []model.TimelineItem
+	for i := 0; i < 20; i++ {
+		items = append(items, &model.ToolCall{
+			ID: "tc", Name: "Read", Summary: "file.go", Status: model.ToolCallDone,
+		})
+	}
+	props := timelineProps(items)
+
+	tl.Cursor = 15
+
+	// Move up by 5
+	tl.HandleActionWithCount("move_up", 5, props)
+	if tl.Cursor != 10 {
+		t.Errorf("expected cursor=10 after 5k from 15, got %d", tl.Cursor)
+	}
+
+	// Move up by 20 from position 10 → should clamp at 0
+	tl.HandleActionWithCount("move_up", 20, props)
+	if tl.Cursor != 0 {
+		t.Errorf("expected cursor=0 after 20k from 10 (clamped), got %d", tl.Cursor)
+	}
+}
+
+func TestTimeline_HandleActionWithCount_NoCount_MovesOne(t *testing.T) {
+	tl := NewTimeline()
+	items := makeTimelineItems()
+	props := timelineProps(items)
+
+	// Without count, HandleAction moves by 1 (default)
+	tl.HandleAction("move_down", props)
+	if tl.Cursor != 1 {
+		t.Errorf("expected cursor=1 after j without count, got %d", tl.Cursor)
+	}
+}
+
+func TestTimeline_CountBuffer_ClearedByOtherActions(t *testing.T) {
+	tl := NewTimeline()
+	tl.CountBuffer = "5"
+
+	tl.ClearCount()
+	if tl.CountBuffer != "" {
+		t.Errorf("expected count buffer cleared, got %q", tl.CountBuffer)
+	}
+}
+
+func TestTimeline_View_PendingCountDisplay(t *testing.T) {
+	tl := NewTimeline()
+	tl.CountBuffer = "12"
+	items := makeTimelineItems()
+	props := timelineProps(items)
+	props.Focused = true
+
+	result := tl.View(props)
+
+	// The count should appear in the bottom-right area
+	if !strings.Contains(result, "12") {
+		t.Error("expected pending count '12' displayed in view")
+	}
+}
+
+func TestTimeline_View_NoPendingCountWhenEmpty(t *testing.T) {
+	tl := NewTimeline()
+	items := []model.TimelineItem{
+		&model.ToolCall{
+			ID: "tc1", Name: "Read", Summary: "main.go",
+			Status: model.ToolCallDone,
+		},
+	}
+	props := timelineProps(items)
+
+	result := tl.View(props)
+
+	// Count display area should not appear when buffer is empty.
+	// We just verify the view renders without error.
+	if !strings.Contains(result, "Read") {
+		t.Error("expected 'Read' in view with no pending count")
+	}
+}

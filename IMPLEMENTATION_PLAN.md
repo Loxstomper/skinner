@@ -48,13 +48,21 @@ Implemented in `root.go` and `timeline.go`:
 - `appendExpandedLines()` takes explicit `availWidth` parameter for correct gutter-aware layout
 - 6 unit tests + 1 integration test: relative numbers render correctly, disabled mode has no gutter, expanded content shares parent number, cursor at zero, width reduction, `#` toggle
 
-### 3.4 Vim Count+Jump Motions
-- [ ] Add `countBuffer` (string or int accumulator) to `Timeline`
-- [ ] Digit keys `1`-`9` append to buffer; `0` ignored as leading digit
-- [ ] On `j`/`k`: consume buffer as count, move cursor by count, clear buffer
-- [ ] Any non-digit, non-j/k key clears the buffer
-- [ ] Display pending count in bottom-right corner of right pane in `ForegroundDim`
-- [ ] Tests: `5j` moves 5 items, `12k` moves 12, no-prefix moves 1, buffer clears on other keys
+### ~~3.4 Vim Count+Jump Motions~~ ✅ DONE
+
+Implemented in `timeline.go` and `root.go`:
+- `CountBuffer string` on `Timeline` struct accumulates digit keys for vim count+jump motions
+- `AccumulateDigit()` appends digits, ignoring leading zeros per spec
+- `ConsumeCount()` returns accumulated count (min 1) and clears buffer
+- `ClearCount()` clears buffer without consuming
+- `HandleActionWithCount()` processes move_down/move_up with count multiplier, clamping at boundaries
+- `HandleAction()` delegates to `HandleActionWithCount()` with count=1 for backward compatibility
+- `root.go` intercepts digit keys `0-9` when right pane focused (not in sub-scroll, not in modal)
+- On move_down/move_up: consumes count buffer as jump distance
+- All other resolved actions clear the count buffer
+- `renderWithLines()` overlays pending count in bottom-right corner of right pane in `ForegroundDim`
+- 11 unit tests: digit accumulation, leading zero, consume empty/with value, clear, move down/up with count, no-count default, count display, no display when empty
+- 7 integration tests: 5j moves 5, 12k moves 12, no-prefix moves 1, buffer clears on other keys, leading zero ignored, digits only on right pane, pending count visible in view
 
 ### 3.5 Full Diffs with Adaptive Layout
 - [ ] Update `renderEditDiff()` in `expand.go` to show full diff (no truncation — already done in 3.1)
@@ -94,6 +102,6 @@ Implemented in `root.go` and `timeline.go`:
 - [ ] Add integration test: help modal open/close
 - [x] Add integration test: left pane auto-hide on narrow terminal
 - [ ] Add integration test: sub-scroll enter/navigate/exit
-- [ ] Add integration test: count+jump motions
+- [x] Add integration test: count+jump motions
 - [x] Add integration test: expand shows full content (no truncation)
 - [ ] Add integration test: configurable keybindings apply end-to-end

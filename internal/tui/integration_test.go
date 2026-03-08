@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -1267,6 +1268,239 @@ func TestIntegration_HashTogglesLineNumbers(t *testing.T) {
 	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'#'}})
 	if !m.lineNumbers {
 		t.Error("expected line numbers on after second #")
+	}
+}
+
+// --- Count+jump motions ---
+
+func TestIntegration_CountJump_5jMovesDown5(t *testing.T) {
+	// Create enough items for count+jump testing.
+	events := []session.Event{
+		session.AssistantBatchEvent{Events: []session.Event{
+			session.TextEvent{Text: "item 1"},
+			session.ToolUseEvent{ID: "tc1", Name: "Read", Summary: "a.go"},
+			session.ToolUseEvent{ID: "tc2", Name: "Read", Summary: "b.go"},
+			session.ToolUseEvent{ID: "tc3", Name: "Edit", Summary: "c.go"},
+			session.ToolUseEvent{ID: "tc4", Name: "Bash", Summary: "test"},
+			session.TextEvent{Text: "item 6"},
+			session.ToolUseEvent{ID: "tc5", Name: "Read", Summary: "d.go"},
+			session.ToolUseEvent{ID: "tc6", Name: "Read", Summary: "e.go"},
+		}},
+		session.ToolResultEvent{ToolUseID: "tc1", IsError: false},
+		session.ToolResultEvent{ToolUseID: "tc2", IsError: false},
+		session.ToolResultEvent{ToolUseID: "tc3", IsError: false},
+		session.ToolResultEvent{ToolUseID: "tc4", IsError: false},
+		session.ToolResultEvent{ToolUseID: "tc5", IsError: false},
+		session.ToolResultEvent{ToolUseID: "tc6", IsError: false},
+		session.SubprocessExitEvent{Err: nil},
+	}
+
+	m := newTestModel(events, 1)
+	drainEvents(t, m)
+
+	// Focus right pane.
+	m.Update(tea.KeyMsg{Type: tea.KeyTab})
+	if m.focusedPane != rightPane {
+		t.Fatal("expected right pane focus")
+	}
+
+	// Move to top first.
+	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'g'}})
+	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'g'}})
+	if m.timeline.Cursor != 0 {
+		t.Fatalf("expected cursor=0 at top, got %d", m.timeline.Cursor)
+	}
+
+	// Type "5j" — should move down 5 items.
+	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'5'}})
+	if m.timeline.CountBuffer != "5" {
+		t.Errorf("expected CountBuffer='5', got %q", m.timeline.CountBuffer)
+	}
+	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+	if m.timeline.Cursor != 5 {
+		t.Errorf("expected cursor=5 after 5j, got %d", m.timeline.Cursor)
+	}
+	if m.timeline.CountBuffer != "" {
+		t.Errorf("expected count buffer cleared after j, got %q", m.timeline.CountBuffer)
+	}
+}
+
+func TestIntegration_CountJump_12kMovesUp12(t *testing.T) {
+	// Create enough items.
+	var evts []session.Event
+	var toolUses []session.Event
+	var toolResults []session.Event
+	for i := 0; i < 15; i++ {
+		id := fmt.Sprintf("tc%d", i)
+		toolUses = append(toolUses, session.ToolUseEvent{
+			ID: id, Name: "Read", Summary: fmt.Sprintf("file%d.go", i),
+		})
+		toolResults = append(toolResults, session.ToolResultEvent{
+			ToolUseID: id, IsError: false,
+		})
+	}
+	evts = append(evts, session.AssistantBatchEvent{Events: toolUses})
+	evts = append(evts, toolResults...)
+	evts = append(evts, session.SubprocessExitEvent{Err: nil})
+
+	m := newTestModel(evts, 1)
+	drainEvents(t, m)
+
+	// Focus right pane.
+	m.Update(tea.KeyMsg{Type: tea.KeyTab})
+
+	// Jump to bottom.
+	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'G'}})
+
+	// The items are grouped (15 consecutive Reads), so there's 1 group.
+	// We need individual items for count testing. Let's use the cursor position.
+	cursorAtBottom := m.timeline.Cursor
+
+	// Type "12k" — should move up 12 items (or clamp).
+	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'1'}})
+	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'2'}})
+	if m.timeline.CountBuffer != "12" {
+		t.Errorf("expected CountBuffer='12', got %q", m.timeline.CountBuffer)
+	}
+	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'k'}})
+	expected := cursorAtBottom - 12
+	if expected < 0 {
+		expected = 0
+	}
+	if m.timeline.Cursor != expected {
+		t.Errorf("expected cursor=%d after 12k from %d, got %d", expected, cursorAtBottom, m.timeline.Cursor)
+	}
+}
+
+func TestIntegration_CountJump_NoPrefix_MovesOne(t *testing.T) {
+	events := []session.Event{
+		session.AssistantBatchEvent{Events: []session.Event{
+			session.TextEvent{Text: "first"},
+			session.ToolUseEvent{ID: "tc1", Name: "Read", Summary: "a.go"},
+			session.TextEvent{Text: "third"},
+		}},
+		session.ToolResultEvent{ToolUseID: "tc1", IsError: false},
+		session.SubprocessExitEvent{Err: nil},
+	}
+
+	m := newTestModel(events, 1)
+	drainEvents(t, m)
+
+	// Focus right pane, jump to top.
+	m.Update(tea.KeyMsg{Type: tea.KeyTab})
+	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'g'}})
+	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'g'}})
+
+	// j without count moves 1.
+	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+	if m.timeline.Cursor != 1 {
+		t.Errorf("expected cursor=1 after j without count, got %d", m.timeline.Cursor)
+	}
+}
+
+func TestIntegration_CountJump_BufferClearsOnOtherKeys(t *testing.T) {
+	events := []session.Event{
+		session.AssistantBatchEvent{Events: []session.Event{
+			session.TextEvent{Text: "item"},
+		}},
+		session.SubprocessExitEvent{Err: nil},
+	}
+
+	m := newTestModel(events, 1)
+	drainEvents(t, m)
+
+	// Focus right pane.
+	m.Update(tea.KeyMsg{Type: tea.KeyTab})
+
+	// Type "5" to start count buffer.
+	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'5'}})
+	if m.timeline.CountBuffer != "5" {
+		t.Errorf("expected CountBuffer='5', got %q", m.timeline.CountBuffer)
+	}
+
+	// Press v (toggle view) — should clear the count buffer.
+	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'v'}})
+	if m.timeline.CountBuffer != "" {
+		t.Errorf("expected count buffer cleared after v, got %q", m.timeline.CountBuffer)
+	}
+}
+
+func TestIntegration_CountJump_LeadingZeroIgnored(t *testing.T) {
+	events := []session.Event{
+		session.AssistantBatchEvent{Events: []session.Event{
+			session.TextEvent{Text: "item 1"},
+			session.ToolUseEvent{ID: "tc1", Name: "Read", Summary: "a.go"},
+			session.TextEvent{Text: "item 3"},
+		}},
+		session.ToolResultEvent{ToolUseID: "tc1", IsError: false},
+		session.SubprocessExitEvent{Err: nil},
+	}
+
+	m := newTestModel(events, 1)
+	drainEvents(t, m)
+
+	// Focus right pane.
+	m.Update(tea.KeyMsg{Type: tea.KeyTab})
+	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'g'}})
+	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'g'}})
+
+	// Type "05j" — leading 0 is ignored, so it's "5j".
+	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'0'}})
+	if m.timeline.CountBuffer != "" {
+		t.Errorf("expected empty CountBuffer after leading 0, got %q", m.timeline.CountBuffer)
+	}
+	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'5'}})
+	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+	// Should move down by 5 (clamped to max 2 since only 3 items)
+	if m.timeline.Cursor != 2 {
+		t.Errorf("expected cursor=2 after 05j (clamped), got %d", m.timeline.Cursor)
+	}
+}
+
+func TestIntegration_CountJump_DigitsOnlyOnRightPane(t *testing.T) {
+	events := []session.Event{
+		session.AssistantBatchEvent{Events: []session.Event{
+			session.ToolUseEvent{ID: "tc1", Name: "Read", Summary: "a.go"},
+		}},
+		session.ToolResultEvent{ToolUseID: "tc1", IsError: false},
+		session.SubprocessExitEvent{Err: nil},
+	}
+
+	m := newTestModel(events, 1)
+	drainEvents(t, m)
+
+	// Focus left pane (default).
+	if m.focusedPane != leftPane {
+		t.Fatal("expected left pane focus")
+	}
+
+	// Type "5" on left pane — should NOT accumulate count buffer.
+	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'5'}})
+	if m.timeline.CountBuffer != "" {
+		t.Errorf("expected no count buffer on left pane, got %q", m.timeline.CountBuffer)
+	}
+}
+
+func TestIntegration_CountJump_PendingCountInView(t *testing.T) {
+	events := []session.Event{
+		session.AssistantBatchEvent{Events: []session.Event{
+			session.TextEvent{Text: "some text"},
+			session.ToolUseEvent{ID: "tc1", Name: "Read", Summary: "a.go"},
+		}},
+		session.ToolResultEvent{ToolUseID: "tc1", IsError: false},
+		session.SubprocessExitEvent{Err: nil},
+	}
+
+	m := newTestModel(events, 1)
+	drainEvents(t, m)
+
+	// Focus right pane and type a count.
+	m.Update(tea.KeyMsg{Type: tea.KeyTab})
+	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'7'}})
+
+	view := m.View()
+	if !strings.Contains(view, "7") {
+		t.Error("expected pending count '7' visible in view")
 	}
 }
 

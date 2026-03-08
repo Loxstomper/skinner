@@ -235,8 +235,22 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		action = "page_down"
 	}
 
+	// Intercept digit keys for count buffer when right pane is focused
+	// and no action was resolved yet.
+	if action == "" && newPending == "" && m.focusedPane == rightPane && !m.timeline.InSubScroll() {
+		if len(key) == 1 && key[0] >= '0' && key[0] <= '9' {
+			m.timeline.AccumulateDigit(rune(key[0]))
+			return m, nil
+		}
+	}
+
+	// Any resolved action (or unrecognized key) clears the count buffer,
+	// except for move_down/move_up which consume it.
+	clearCount := true
+
 	// When in sub-scroll mode, only allow specific actions.
 	if m.timeline.InSubScroll() {
+		m.timeline.ClearCount()
 		switch action {
 		case config.ActionQuit:
 			m.activeModal = modalQuitConfirm
@@ -255,10 +269,12 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	switch action {
 	case config.ActionQuit:
+		m.timeline.ClearCount()
 		m.activeModal = modalQuitConfirm
 		return m, nil
 
 	case config.ActionHelp:
+		m.timeline.ClearCount()
 		m.activeModal = modalHelp
 		return m, nil
 
@@ -316,8 +332,20 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.timeline.JumpToBottom(m.currentTimelineProps())
 		}
 
-	case config.ActionMoveDown, config.ActionMoveUp,
-		"page_up", "page_down":
+	case config.ActionMoveDown, config.ActionMoveUp:
+		if m.focusedPane == leftPane {
+			oldCursor := m.iterList.Cursor
+			m.iterList.HandleAction(action, m.iterListProps())
+			if m.iterList.Cursor != oldCursor {
+				m.timeline.ResetPosition()
+			}
+		} else {
+			count := m.timeline.ConsumeCount()
+			clearCount = false // ConsumeCount already cleared
+			m.timeline.HandleActionWithCount(action, count, m.currentTimelineProps())
+		}
+
+	case "page_up", "page_down":
 		if m.focusedPane == leftPane {
 			oldCursor := m.iterList.Cursor
 			m.iterList.HandleAction(action, m.iterListProps())
@@ -327,6 +355,10 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		} else {
 			m.timeline.HandleAction(action, m.currentTimelineProps())
 		}
+	}
+
+	if clearCount {
+		m.timeline.ClearCount()
 	}
 
 	return m, nil

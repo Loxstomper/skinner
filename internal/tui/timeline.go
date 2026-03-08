@@ -22,6 +22,10 @@ type Timeline struct {
 	// mode, or -1 when inactive.
 	SubScrollIdx    int
 	SubScrollOffset int
+
+	// CountBuffer accumulates digit keys for vim count+jump motions.
+	// When j/k is pressed, the buffer is consumed as the move count.
+	CountBuffer string
 }
 
 // NewTimeline creates a new Timeline with auto-follow enabled.
@@ -54,8 +58,42 @@ func (tl *Timeline) InSubScroll() bool {
 	return tl.SubScrollIdx >= 0
 }
 
+// AccumulateDigit adds a digit to the count buffer. Leading zeros are ignored.
+func (tl *Timeline) AccumulateDigit(digit rune) {
+	if tl.CountBuffer == "" && digit == '0' {
+		return // ignore leading zero
+	}
+	tl.CountBuffer += string(digit)
+}
+
+// ConsumeCount returns the accumulated count (minimum 1) and clears the buffer.
+func (tl *Timeline) ConsumeCount() int {
+	if tl.CountBuffer == "" {
+		return 1
+	}
+	n := 0
+	for _, c := range tl.CountBuffer {
+		n = n*10 + int(c-'0')
+	}
+	tl.CountBuffer = ""
+	if n < 1 {
+		return 1
+	}
+	return n
+}
+
+// ClearCount clears the count buffer without consuming it.
+func (tl *Timeline) ClearCount() {
+	tl.CountBuffer = ""
+}
+
 // HandleAction processes a resolved action for the timeline.
 func (tl *Timeline) HandleAction(action string, props TimelineProps) {
+	tl.HandleActionWithCount(action, 1, props)
+}
+
+// HandleActionWithCount processes a resolved action with a count multiplier.
+func (tl *Timeline) HandleActionWithCount(action string, count int, props TimelineProps) {
 	// When in sub-scroll mode, route navigation to the sub-scroll handler.
 	if tl.InSubScroll() {
 		tl.handleSubScrollAction(action, props)
@@ -67,17 +105,22 @@ func (tl *Timeline) HandleAction(action string, props TimelineProps) {
 
 	switch action {
 	case "move_down":
-		if tl.Cursor < maxPos {
-			tl.Cursor++
-			tl.ensureCursorVisible(props)
+		tl.Cursor += count
+		if tl.Cursor > maxPos {
+			tl.Cursor = maxPos
 		}
+		if tl.Cursor < 0 {
+			tl.Cursor = 0
+		}
+		tl.ensureCursorVisible(props)
 		tl.AutoFollow.OnManualMove(atEnd())
 
 	case "move_up":
-		if tl.Cursor > 0 {
-			tl.Cursor--
-			tl.ensureCursorVisible(props)
+		tl.Cursor -= count
+		if tl.Cursor < 0 {
+			tl.Cursor = 0
 		}
+		tl.ensureCursorVisible(props)
 		tl.AutoFollow.OnManualMove(atEnd())
 
 	case "jump_bottom":
@@ -456,6 +499,22 @@ func (tl *Timeline) renderWithLines(lines []renderedLine, props TimelineProps) s
 			text = highlight.Render(text)
 		}
 		rendered = append(rendered, text)
+	}
+
+	// Overlay pending count buffer in bottom-right corner.
+	if tl.CountBuffer != "" && len(rendered) > 0 {
+		lastIdx := len(rendered) - 1
+		countStr := dimStyle.Render(tl.CountBuffer)
+		countWidth := lipgloss.Width(countStr)
+		lastLine := rendered[lastIdx]
+		lastLineWidth := lipgloss.Width(lastLine)
+		padding := props.Width - lastLineWidth - countWidth
+		if padding > 0 {
+			rendered[lastIdx] = lastLine + strings.Repeat(" ", padding) + countStr
+		} else {
+			// Overwrite the end of the last line with the count indicator.
+			rendered[lastIdx] = lastLine + " " + countStr
+		}
 	}
 
 	content := strings.Join(rendered, "\n")
