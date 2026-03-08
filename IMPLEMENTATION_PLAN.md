@@ -1,79 +1,18 @@
 # Implementation Plan
 
-## Phase 1 — Foundation & Quick Wins
+## Phase 1 — Foundation & Quick Wins ✅ ALL DONE
 
-### ~~1.1 Configurable Keymappings~~ ✅ DONE
+- ~~1.1 Configurable Keymappings~~ — `internal/config/keymap.go` with `KeyMap`, `Resolve()`, `ParseKeyBinding()`, TOML overrides, 22 tests
+- ~~1.2 Full Row Highlight~~ — already implemented in `timeline.go` `renderWithLines()`
+- ~~1.3 Verify `--exit` Flag~~ — confirmed no hang bug; `subprocessExitMsg` → `tea.Quit` path works correctly; `--exit` only applies with `maxIterations > 0`; 4 integration tests added
+- ~~1.4 Auto-Hide Left Pane~~ — `leftPaneVisible` toggle, auto-hide < 80 cols, focus auto-switch, 7 integration tests
 
-Implemented in `internal/config/keymap.go`:
-- `KeyMap` type with `Bindings map[string]KeyBinding` and `Resolve()` method for sequence-aware key dispatch
-- `ParseKeyBinding()` supports single keys, modifiers (`ctrl+c`), and sequences (`g g`)
-- `[keybindings]` TOML section parsed in `LoadConfig()`, merging overrides with defaults
-- `Config` now includes `KeyMap` and `LineNumbers` fields
-- `root.go` `handleKey()` uses `KeyMap.Resolve()` instead of hardcoded switch cases
-- `timeline.go` and `iterlist.go` refactored from `Update(tea.KeyMsg)` to `HandleAction(string)` — actions dispatched by root
-- Arrow keys (`←`/`→`/`↑`/`↓`) always active as alternates via `HasAlternateArrowKey()`
-- `ctrl+c` always quits (not configurable per spec)
-- 22 tests in `keymap_test.go`: default bindings, parsing, resolve, remapping, sequence abort, TOML overrides, line_numbers config
+## Phase 2 — Modals ✅ ALL DONE
 
-### ~~1.2 Full Row Highlight~~ ✅ DONE (previously implemented)
-
-Full-width row highlighting already works in `timeline.go` `renderWithLines()`.
-
-### 1.3 Fix `--exit` Flag
-- [ ] Debug why `--exit` hangs after iterations complete — investigate `subprocessExitMsg` handling in `root.go`
-- [ ] Ensure `tea.Quit` is returned reliably after final iteration with `exitOnComplete`
-- [ ] Verify no pending tick or event commands keep the program alive
-- [ ] Tests: integration test that `--exit` model returns `tea.Quit` after last iteration completes
-
-### ~~1.4 Auto-Hide Left Pane~~ ✅ DONE
-
-Implemented in `root.go`:
-- `leftPaneVisible` bool field on `Model`, defaults `true`
-- `leftPaneWidth()` and `rightPaneWidth()` helpers replace all hardcoded `leftWidth := 32`
-- `WindowSizeMsg` handler: auto-hides left pane when width < 80, re-shows at ≥ 80
-- `ActionToggleLeftPane` (`[` key) toggles `leftPaneVisible` at any width
-- `View()` renders full-width right pane when left pane hidden (no separator, no left pane)
-- Focus auto-switches to right pane when left pane hides (both resize and toggle)
-- `tab` and `h` (focus left) are no-ops when left pane is hidden
-- Mouse handling: all clicks target right pane when left pane is hidden
-- 7 integration tests: auto-hide below 80, toggle with `[`, focus auto-switch on resize, focus auto-switch on toggle, tab skips hidden pane, h key skips hidden pane, mouse targets right pane when hidden
-
-## Phase 2 — Modals
-
-### ~~2.1 Modal Infrastructure~~ ✅ DONE
-
-Implemented in `internal/tui/modal.go` and `root.go`:
-- `modalType` enum (`modalNone`, `modalQuitConfirm`, `modalHelp`)
-- `activeModal` and `lastCtrlCAt` fields added to `Model`
-- `handleKey()` checks `m.activeModal != modalNone` and routes to `handleModalKey()` — all normal keybindings are blocked while a modal is active
-- `View()` renders the modal overlay instead of the normal TUI when a modal is active
-- `centerOverlay()` utility centers any rendered block horizontally and vertically in the terminal
-- `RenderQuitConfirmModal()` renders the quit confirmation with theme-aware styling
-
-### ~~2.2 Quit Confirmation Modal~~ ✅ DONE
-
-Implemented in `root.go` and `modal.go`:
-- `q` (via `ActionQuit`) opens quit confirmation modal instead of quitting directly
-- `ctrl+c` (single) shows the quit confirmation modal, records `lastCtrlCAt` timestamp
-- `ctrl+c` (double within 500ms) force-quits immediately — no modal shown
-- Modal keys: `y` → kill subprocess + `tea.Quit`; `n` or `esc` → dismiss modal; all others ignored
-- `--exit` bypasses modal entirely (existing `exitOnComplete` path unchanged)
-- 10 integration tests in `modal_test.go`: q shows modal, y quits, n dismisses, esc dismisses, other keys ignored, blocks navigation, single ctrl+c shows modal, double ctrl+c force-quits, expired ctrl+c window, --exit bypasses
-
-**Bug fixed**: Bubble Tea uses `"esc"` not `"escape"` for the Escape key string. Updated `DefaultKeyMap()` to use `"esc"` and added `normalizeKeyName()` to `ParseKeyBinding()` so user config `escape = "escape"` still works. Added `DisplayString()` to `KeyBinding` for user-friendly display (maps `"esc"` back to `"escape"`).
-
-### ~~2.3 Help Modal~~ ✅ DONE
-
-Implemented in `modal.go` and `root.go`:
-- `RenderHelpModal()` renders centered overlay with four sections: Navigation, Focus, Actions, Global
-- `buildHelpSections()` constructs section data from `KeyMap`, reflecting user-configured bindings
-- `actionDisplayName()` maps action constants to human-readable labels
-- Arrow key alternates (↑/↓/←/→) shown alongside letter keys for navigation/focus actions
-- `?` (via `ActionHelp`) sets `activeModal = modalHelp`
-- Any key press dismisses the help modal (unlike quit modal which only accepts y/n/esc)
-- Title "Keybindings" injected into top border via `replaceInLine()`
-- Footer "Press any key to close" in `ForegroundDim`
-- 7 tests: render content, custom bindings reflected, `?` opens, j/escape/enter dismiss, blocks navigation
+- ~~2.1 Modal Infrastructure~~ — `modal.go`: `modalType` enum, `centerOverlay()`, modal routing in `handleKey()`
+- ~~2.2 Quit Confirmation Modal~~ — q/ctrl+c shows modal, y quits, n/esc dismisses, double ctrl+c force-quits, `--exit` bypasses; 10 tests
+- ~~2.3 Help Modal~~ — `?` opens, any key dismisses, 4 sections reflecting `KeyMap` bindings; 7 tests
+- **Note**: Bubble Tea uses `"esc"` not `"escape"` — `normalizeKeyName()` and `DisplayString()` handle this
 
 ## Phase 3 — Content & Display
 

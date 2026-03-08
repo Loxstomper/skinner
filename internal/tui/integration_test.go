@@ -15,6 +15,11 @@ import (
 // newTestModel creates a Model wired to a FakeExecutor for integration testing.
 // It sets a default window size so View() produces meaningful output.
 func newTestModel(events []session.Event, maxIterations int) *Model {
+	return newTestModelWithExit(events, maxIterations, false)
+}
+
+// newTestModelWithExit creates a test Model with configurable exitOnComplete.
+func newTestModelWithExit(events []session.Event, maxIterations int, exitOnComplete bool) *Model {
 	fake := &executor.FakeExecutor{Events: events}
 	sess := model.Session{
 		Mode:          "build",
@@ -24,7 +29,7 @@ func newTestModel(events []session.Event, maxIterations int) *Model {
 	}
 	cfg := config.DefaultConfig()
 	th := testTheme()
-	m := NewModel(sess, cfg, "test prompt content", th, false, false, fake)
+	m := NewModel(sess, cfg, "test prompt content", th, false, exitOnComplete, fake)
 	m.width = 120
 	m.height = 30
 	return &m
@@ -35,6 +40,14 @@ func newTestModel(events []session.Event, maxIterations int) *Model {
 // This simulates a full Bubble Tea event loop for the given canned events.
 func drainEvents(t *testing.T, m *Model) {
 	t.Helper()
+	drainEventsTrackQuit(t, m)
+}
+
+// drainEventsTrackQuit is like drainEvents but returns true if any Update()
+// call produced a tea.QuitMsg. This verifies that the model actually produces
+// tea.Quit (not just sets m.quitting=true).
+func drainEventsTrackQuit(t *testing.T, m *Model) bool {
+	t.Helper()
 
 	// Run Init to start the first iteration and event forwarding.
 	cmd := m.Init()
@@ -44,6 +57,7 @@ func drainEvents(t *testing.T, m *Model) {
 
 	// Execute all batched commands and collect messages.
 	msgs := executeBatchCmd(cmd)
+	quitReturned := false
 
 	// Process messages until we've drained everything.
 	for len(msgs) > 0 {
@@ -53,6 +67,11 @@ func drainEvents(t *testing.T, m *Model) {
 			if _, ok := msg.(tickMsg); ok {
 				continue
 			}
+			// Check if we received a QuitMsg (produced by tea.Quit).
+			if _, ok := msg.(tea.QuitMsg); ok {
+				quitReturned = true
+				continue
+			}
 			_, cmd = m.Update(msg)
 			if cmd != nil {
 				nextMsgs = append(nextMsgs, executeBatchCmd(cmd)...)
@@ -60,6 +79,8 @@ func drainEvents(t *testing.T, m *Model) {
 		}
 		msgs = nextMsgs
 	}
+
+	return quitReturned
 }
 
 // executeBatchCmd executes a tea.Cmd and collects all resulting messages.
@@ -1109,6 +1130,115 @@ func TestIntegration_MouseClickRightPaneWhenLeftHidden(t *testing.T) {
 	})
 	if m.focusedPane != rightPane {
 		t.Error("expected right pane focus after clicking when left pane is hidden")
+	}
+}
+
+// --- --exit flag: single iteration produces tea.Quit ---
+
+func TestIntegration_ExitFlag_SingleIteration(t *testing.T) {
+	events := []session.Event{
+		session.AssistantBatchEvent{Events: []session.Event{
+			session.ToolUseEvent{ID: "tc1", Name: "Bash", Summary: "make test"},
+		}},
+		session.ToolResultEvent{ToolUseID: "tc1", IsError: false},
+		session.SubprocessExitEvent{Err: nil},
+	}
+
+	m := newTestModelWithExit(events, 1, true)
+	quitReturned := drainEventsTrackQuit(t, m)
+
+	if !m.quitting {
+		t.Error("expected quitting=true with --exit flag")
+	}
+	if !quitReturned {
+		t.Error("expected tea.Quit cmd to be returned with --exit flag")
+	}
+	if m.activeModal != modalNone {
+		t.Error("expected no modal with --exit flag")
+	}
+	if len(m.Session().Iterations) != 1 {
+		t.Errorf("expected 1 iteration, got %d", len(m.Session().Iterations))
+	}
+	if m.Session().Iterations[0].Status != model.IterationCompleted {
+		t.Errorf("expected iteration completed, got %d", m.Session().Iterations[0].Status)
+	}
+}
+
+// --- --exit flag: multi-iteration completes all iterations then produces tea.Quit ---
+
+func TestIntegration_ExitFlag_MultiIteration(t *testing.T) {
+	events := []session.Event{
+		session.AssistantBatchEvent{Events: []session.Event{
+			session.ToolUseEvent{ID: "tc1", Name: "Bash", Summary: "make test"},
+		}},
+		session.ToolResultEvent{ToolUseID: "tc1", IsError: false},
+		session.SubprocessExitEvent{Err: nil},
+	}
+
+	m := newTestModelWithExit(events, 3, true)
+	quitReturned := drainEventsTrackQuit(t, m)
+
+	if !m.quitting {
+		t.Error("expected quitting=true after all iterations with --exit flag")
+	}
+	if !quitReturned {
+		t.Error("expected tea.Quit cmd after all iterations complete")
+	}
+
+	// All 3 iterations should have completed before exiting.
+	sess := m.Session()
+	if len(sess.Iterations) != 3 {
+		t.Fatalf("expected 3 iterations, got %d", len(sess.Iterations))
+	}
+	for i, iter := range sess.Iterations {
+		if iter.Status != model.IterationCompleted {
+			t.Errorf("iteration %d: expected completed, got %d", i, iter.Status)
+		}
+	}
+}
+
+// --- --exit flag: exits after last iteration fails ---
+
+func TestIntegration_ExitFlag_LastIterationFails(t *testing.T) {
+	events := []session.Event{
+		session.AssistantBatchEvent{Events: []session.Event{
+			session.ToolUseEvent{ID: "tc1", Name: "Bash", Summary: "make test"},
+		}},
+		session.ToolResultEvent{ToolUseID: "tc1", IsError: true},
+		session.SubprocessExitEvent{Err: &testError{"process exited with code 1"}},
+	}
+
+	m := newTestModelWithExit(events, 1, true)
+	quitReturned := drainEventsTrackQuit(t, m)
+
+	if !m.quitting {
+		t.Error("expected quitting=true with --exit flag after failure")
+	}
+	if !quitReturned {
+		t.Error("expected tea.Quit cmd even when last iteration fails")
+	}
+
+	iter := m.Session().Iterations[0]
+	if iter.Status != model.IterationFailed {
+		t.Errorf("expected IterationFailed, got %d", iter.Status)
+	}
+}
+
+// --- --exit flag: without flag, model stays alive after iterations complete ---
+
+func TestIntegration_NoExitFlag_StaysAlive(t *testing.T) {
+	events := []session.Event{
+		session.SubprocessExitEvent{Err: nil},
+	}
+
+	m := newTestModel(events, 1)
+	quitReturned := drainEventsTrackQuit(t, m)
+
+	if m.quitting {
+		t.Error("expected quitting=false without --exit flag")
+	}
+	if quitReturned {
+		t.Error("expected no tea.Quit cmd without --exit flag")
 	}
 }
 
