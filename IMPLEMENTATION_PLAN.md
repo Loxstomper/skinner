@@ -62,12 +62,18 @@ Implemented in `root.go` and `modal.go`:
 
 **Bug fixed**: Bubble Tea uses `"esc"` not `"escape"` for the Escape key string. Updated `DefaultKeyMap()` to use `"esc"` and added `normalizeKeyName()` to `ParseKeyBinding()` so user config `escape = "escape"` still works. Added `DisplayString()` to `KeyBinding` for user-friendly display (maps `"esc"` back to `"escape"`).
 
-### 2.3 Help Modal
-- [ ] On `?` (via `KeyMap`): set `activeModal = help`
-- [ ] Modal view: centered overlay listing all actions with their resolved key bindings from `KeyMap`
-- [ ] Render sections: Navigation, Focus, Actions, View, Global
-- [ ] Any key press dismisses the modal
-- [ ] Tests: `?` opens modal, any key closes, displayed bindings match configured `KeyMap`
+### ~~2.3 Help Modal~~ ✅ DONE
+
+Implemented in `modal.go` and `root.go`:
+- `RenderHelpModal()` renders centered overlay with four sections: Navigation, Focus, Actions, Global
+- `buildHelpSections()` constructs section data from `KeyMap`, reflecting user-configured bindings
+- `actionDisplayName()` maps action constants to human-readable labels
+- Arrow key alternates (↑/↓/←/→) shown alongside letter keys for navigation/focus actions
+- `?` (via `ActionHelp`) sets `activeModal = modalHelp`
+- Any key press dismisses the help modal (unlike quit modal which only accepts y/n/esc)
+- Title "Keybindings" injected into top border via `replaceInLine()`
+- Footer "Press any key to close" in `ForegroundDim`
+- 7 tests: render content, custom bindings reflected, `?` opens, j/escape/enter dismiss, blocks navigation
 
 ## Phase 3 — Content & Display
 

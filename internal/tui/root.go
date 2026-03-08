@@ -238,6 +238,10 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.activeModal = modalQuitConfirm
 		return m, nil
 
+	case config.ActionHelp:
+		m.activeModal = modalHelp
+		return m, nil
+
 	case config.ActionToggleLeftPane:
 		m.leftPaneVisible = !m.leftPaneVisible
 		if !m.leftPaneVisible && m.focusedPane == leftPane {
@@ -319,9 +323,16 @@ func (m *Model) handleModalKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.activeModal = modalNone
 			return m, nil
 		}
+		// All other keys are ignored in quit modal.
+		return m, nil
 	}
 
-	// All other keys are ignored while a modal is open.
+	if m.activeModal == modalHelp {
+		// Any key dismisses the help modal.
+		m.activeModal = modalNone
+		return m, nil
+	}
+
 	return m, nil
 }
 
@@ -427,8 +438,11 @@ func (m *Model) View() string {
 	view := header + "\n" + panes
 
 	// Render modal overlay if active.
-	if m.activeModal == modalQuitConfirm {
+	switch m.activeModal {
+	case modalQuitConfirm:
 		view = RenderQuitConfirmModal(m.width, m.height, m.theme)
+	case modalHelp:
+		view = RenderHelpModal(m.width, m.height, m.theme, &m.config.KeyMap)
 	}
 
 	return view

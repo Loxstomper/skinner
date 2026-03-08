@@ -239,6 +239,165 @@ func TestIntegration_DoubleCtrlCExpired(t *testing.T) {
 	}
 }
 
+func TestRenderHelpModal(t *testing.T) {
+	th := testTheme()
+	km := config.DefaultKeyMap()
+	result := RenderHelpModal(80, 24, th, &km)
+
+	// Check that section headers are present.
+	if !strings.Contains(result, "Navigation") {
+		t.Error("expected 'Navigation' section in help modal")
+	}
+	if !strings.Contains(result, "Focus") {
+		t.Error("expected 'Focus' section in help modal")
+	}
+	if !strings.Contains(result, "Actions") {
+		t.Error("expected 'Actions' section in help modal")
+	}
+	if !strings.Contains(result, "Global") {
+		t.Error("expected 'Global' section in help modal")
+	}
+
+	// Check some keybinding entries are present.
+	if !strings.Contains(result, "Move down") {
+		t.Error("expected 'Move down' in help modal")
+	}
+	if !strings.Contains(result, "Quit") {
+		t.Error("expected 'Quit' in help modal")
+	}
+	if !strings.Contains(result, "Press any key to close") {
+		t.Error("expected footer text in help modal")
+	}
+	if !strings.Contains(result, "Keybindings") {
+		t.Error("expected 'Keybindings' title in help modal")
+	}
+}
+
+func TestRenderHelpModal_ReflectsCustomBindings(t *testing.T) {
+	th := testTheme()
+	km := config.DefaultKeyMap()
+	// Remap quit from q to x.
+	km.Bindings[config.ActionQuit] = config.ParseKeyBinding("x")
+
+	result := RenderHelpModal(80, 24, th, &km)
+
+	if !strings.Contains(result, "x") {
+		t.Error("expected remapped key 'x' in help modal")
+	}
+}
+
+func TestIntegration_HelpModal_QuestionMarkOpens(t *testing.T) {
+	events := []session.Event{
+		session.SubprocessExitEvent{Err: nil},
+	}
+
+	m := newTestModel(events, 1)
+	drainEvents(t, m)
+
+	// ? should open help modal.
+	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'?'}})
+	if m.activeModal != modalHelp {
+		t.Error("expected help modal after pressing ?")
+	}
+
+	// View should show the help modal content.
+	view := m.View()
+	if !strings.Contains(view, "Keybindings") {
+		t.Error("expected help modal content in view after pressing ?")
+	}
+	if !strings.Contains(view, "Navigation") {
+		t.Error("expected Navigation section in help modal view")
+	}
+}
+
+func TestIntegration_HelpModal_AnyKeyDismisses(t *testing.T) {
+	events := []session.Event{
+		session.SubprocessExitEvent{Err: nil},
+	}
+
+	m := newTestModel(events, 1)
+	drainEvents(t, m)
+
+	// Open help modal.
+	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'?'}})
+	if m.activeModal != modalHelp {
+		t.Fatal("expected help modal")
+	}
+
+	// Any key dismisses.
+	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+	if m.activeModal != modalNone {
+		t.Error("expected modal dismissed after pressing j")
+	}
+}
+
+func TestIntegration_HelpModal_EscapeDismisses(t *testing.T) {
+	events := []session.Event{
+		session.SubprocessExitEvent{Err: nil},
+	}
+
+	m := newTestModel(events, 1)
+	drainEvents(t, m)
+
+	// Open help modal.
+	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'?'}})
+	if m.activeModal != modalHelp {
+		t.Fatal("expected help modal")
+	}
+
+	// Escape dismisses.
+	m.Update(tea.KeyMsg{Type: tea.KeyEscape})
+	if m.activeModal != modalNone {
+		t.Error("expected modal dismissed after escape")
+	}
+}
+
+func TestIntegration_HelpModal_EnterDismisses(t *testing.T) {
+	events := []session.Event{
+		session.SubprocessExitEvent{Err: nil},
+	}
+
+	m := newTestModel(events, 1)
+	drainEvents(t, m)
+
+	// Open help modal.
+	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'?'}})
+	if m.activeModal != modalHelp {
+		t.Fatal("expected help modal")
+	}
+
+	// Enter dismisses.
+	m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	if m.activeModal != modalNone {
+		t.Error("expected modal dismissed after enter")
+	}
+}
+
+func TestIntegration_HelpModal_BlocksNavigation(t *testing.T) {
+	events := []session.Event{
+		session.AssistantBatchEvent{Events: []session.Event{
+			session.ToolUseEvent{ID: "tc1", Name: "Read", Summary: "main.go"},
+		}},
+		session.ToolResultEvent{ToolUseID: "tc1", IsError: false},
+		session.SubprocessExitEvent{Err: nil},
+	}
+
+	m := newTestModel(events, 3)
+	drainEvents(t, m)
+
+	savedCursor := m.iterList.Cursor
+
+	// Open help modal.
+	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'?'}})
+
+	// Note: pressing j will dismiss the help modal (any key dismisses),
+	// but should NOT move the cursor during the modal-handling step.
+	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+	if m.iterList.Cursor != savedCursor {
+		t.Error("expected cursor unchanged when key dismissed help modal")
+	}
+}
+
 func TestIntegration_ExitFlagBypassesModal(t *testing.T) {
 	events := []session.Event{
 		session.SubprocessExitEvent{Err: nil},
