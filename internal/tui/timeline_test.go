@@ -821,6 +821,100 @@ func TestTimeline_ClickRow_AtEnd_ContinuesAutoFollow(t *testing.T) {
 	}
 }
 
+func TestTimeline_ClickRow_ExpandsAlreadySelectedToolCall(t *testing.T) {
+	tl := NewTimeline()
+	items := []model.TimelineItem{
+		&model.ToolCall{
+			ID: "tc1", Name: "Read", Summary: "main.go",
+			Status:        model.ToolCallDone,
+			ResultContent: "file content",
+		},
+	}
+	props := timelineProps(items)
+
+	// First click: selects row 0 (cursor moves from 0 to 0 — same position)
+	// Since cursor was already at 0, this triggers expand.
+	tc := items[0].(*model.ToolCall)
+	tl.ClickRow(0, props)
+	if !tc.Expanded {
+		t.Error("expected tool call to expand on click of already-selected row")
+	}
+
+	// Click again: still selected, triggers collapse.
+	tl.ClickRow(0, props)
+	if tc.Expanded {
+		t.Error("expected tool call to collapse on second click of selected row")
+	}
+}
+
+func TestTimeline_ClickRow_DoesNotExpandOnFirstClick(t *testing.T) {
+	tl := NewTimeline()
+	items := []model.TimelineItem{
+		&model.ToolCall{
+			ID: "tc1", Name: "Read", Summary: "main.go",
+			Status:        model.ToolCallDone,
+			ResultContent: "content",
+		},
+		&model.ToolCall{
+			ID: "tc2", Name: "Edit", Summary: "other.go",
+			Status:        model.ToolCallDone,
+			ResultContent: "content",
+		},
+	}
+	props := timelineProps(items)
+
+	// Cursor starts at 0. Click row 1 to select the second item.
+	tl.ClickRow(1, props)
+	if tl.Cursor != 1 {
+		t.Fatalf("expected cursor=1, got %d", tl.Cursor)
+	}
+	// The second item should NOT be expanded (cursor changed).
+	tc2 := items[1].(*model.ToolCall)
+	if tc2.Expanded {
+		t.Error("expected tool call NOT to expand when cursor changes on click")
+	}
+}
+
+func TestTimeline_ClickRow_ExpandsTextBlock(t *testing.T) {
+	tl := NewTimeline()
+	items := []model.TimelineItem{
+		&model.TextBlock{Text: "line1\nline2\nline3\nline4\nline5"},
+	}
+	props := timelineProps(items)
+
+	// Cursor starts at 0, click row 0 → same position → triggers enter.
+	tb := items[0].(*model.TextBlock)
+	if tb.Expanded {
+		t.Fatal("expected text block not expanded initially")
+	}
+	tl.ClickRow(0, props)
+	if !tb.Expanded {
+		t.Error("expected text block to expand on click of already-selected row")
+	}
+}
+
+func TestTimeline_ClickRow_ExpandsGroupHeader(t *testing.T) {
+	tl := NewTimeline()
+	items := []model.TimelineItem{
+		&model.ToolCallGroup{
+			ToolName: "Read",
+			Children: []*model.ToolCall{
+				{ID: "c1", Name: "Read", Summary: "a.go", Status: model.ToolCallDone},
+				{ID: "c2", Name: "Read", Summary: "b.go", Status: model.ToolCallDone},
+			},
+			Expanded: false,
+		},
+	}
+	props := timelineProps(items)
+
+	// Cursor at 0, click row 0 → triggers enter on group header → expands.
+	group := items[0].(*model.ToolCallGroup)
+	tl.ClickRow(0, props)
+	if !group.Expanded {
+		t.Error("expected group to expand on click of already-selected header row")
+	}
+}
+
 func TestTimeline_PgDown_CursorAlreadyInViewport(t *testing.T) {
 	tl := NewTimeline()
 
@@ -1334,6 +1428,114 @@ func TestTimeline_InSubScroll(t *testing.T) {
 	tl.SubScrollIdx = 0
 	if !tl.InSubScroll() {
 		t.Error("timeline with SubScrollIdx=0 should be in sub-scroll")
+	}
+}
+
+func TestTimeline_ClickRowSubScroll_SummaryRow_ExitsAndCollapses(t *testing.T) {
+	tl := NewTimeline()
+	// 50 content lines, pane height 20 → sub-scroll enabled
+	items := makeSubScrollItems(50)
+	props := TimelineProps{
+		Items:   items,
+		Width:   80,
+		Height:  20,
+		Focused: true,
+		Theme:   testTheme(),
+	}
+
+	// Enter sub-scroll mode
+	tl.HandleAction("expand", props)
+	if !tl.InSubScroll() {
+		t.Fatal("expected sub-scroll mode after enter on expanded tool call")
+	}
+
+	// Click the summary row (row 0 with scroll 0 → line 0 = summary row of item at flat 0)
+	tl.ClickRowSubScroll(0, props)
+	if tl.InSubScroll() {
+		t.Error("expected sub-scroll to exit after clicking summary row")
+	}
+	tc := items[0].(*model.ToolCall)
+	if tc.Expanded {
+		t.Error("expected tool call to be collapsed after clicking summary row in sub-scroll")
+	}
+}
+
+func TestTimeline_ClickRowSubScroll_ExpandedContent_NoOp(t *testing.T) {
+	tl := NewTimeline()
+	// 50 content lines, pane height 20
+	items := makeSubScrollItems(50)
+	props := TimelineProps{
+		Items:   items,
+		Width:   80,
+		Height:  20,
+		Focused: true,
+		Theme:   testTheme(),
+	}
+
+	// Enter sub-scroll mode
+	tl.HandleAction("expand", props)
+	if !tl.InSubScroll() {
+		t.Fatal("expected sub-scroll mode")
+	}
+
+	// Click on expanded content area (row 1 = first content line)
+	tl.ClickRowSubScroll(1, props)
+	if !tl.InSubScroll() {
+		t.Error("expected sub-scroll to remain active after clicking expanded content")
+	}
+	tc := items[0].(*model.ToolCall)
+	if !tc.Expanded {
+		t.Error("expected tool call to remain expanded after clicking content area")
+	}
+}
+
+func TestTimeline_ClickRowSubScroll_OtherRow_ExitsAndSelects(t *testing.T) {
+	tl := NewTimeline()
+	// Create two items: first has sub-scroll content, second is a simple tool call.
+	var sb strings.Builder
+	for i := 0; i < 50; i++ {
+		if i > 0 {
+			sb.WriteString("\n")
+		}
+		sb.WriteString(fmt.Sprintf("line %d", i+1))
+	}
+	items := []model.TimelineItem{
+		&model.ToolCall{
+			ID: "tc1", Name: "Read", Summary: "big.go",
+			Status:        model.ToolCallDone,
+			ResultContent: sb.String(),
+			Expanded:      true,
+		},
+		&model.ToolCall{
+			ID: "tc2", Name: "Read", Summary: "small.go",
+			Status: model.ToolCallDone,
+		},
+	}
+	props := TimelineProps{
+		Items:   items,
+		Width:   80,
+		Height:  20,
+		Focused: true,
+		Theme:   testTheme(),
+	}
+
+	// Enter sub-scroll on first item
+	tl.HandleAction("expand", props)
+	if !tl.InSubScroll() {
+		t.Fatal("expected sub-scroll mode")
+	}
+
+	// In sub-scroll, the first item is capped. The second item is after
+	// the capped area. We need to find its row position.
+	// Item 0: 1 summary line + capped content lines
+	// Cap = 20*70/100 = 14, so total lines for item 0 = 1 + 14 = 15
+	// Item 1 starts at line 15, which is pane row 15 (scroll=0).
+	tl.ClickRowSubScroll(15, props)
+	if tl.InSubScroll() {
+		t.Error("expected sub-scroll to exit after clicking another row")
+	}
+	if tl.Cursor != 1 {
+		t.Errorf("expected cursor=1 after clicking second item, got %d", tl.Cursor)
 	}
 }
 

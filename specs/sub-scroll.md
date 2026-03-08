@@ -34,9 +34,9 @@ The indicator `[current/total]` is rendered in `ForegroundDim`.
 
 When an expanded tool call's content exceeds the inline threshold, the user can enter sub-scroll mode:
 
-1. **Entering**: Press `enter` on an already-expanded tool call to enter sub-scroll mode. The expanded area receives a subtle border (using `ForegroundDim`) to indicate it is the active scroll target.
+1. **Entering**: Press `enter` on an already-expanded tool call (or click an already-selected expanded tool call) to enter sub-scroll mode. The expanded area receives a subtle border (using `ForegroundDim`) to indicate it is the active scroll target.
 2. **Navigating**: While in sub-scroll mode, `j`/`k`/`↑`/`↓` scroll within the expanded content. `g g` and `G` jump to the top and bottom of the expanded content.
-3. **Exiting**: Press `escape` to exit sub-scroll mode and return focus to the main timeline. The cursor remains on the tool call row.
+3. **Exiting**: Press `escape` to exit sub-scroll mode and return focus to the main timeline. The cursor remains on the tool call row. Alternatively, clicking the summary row of the sub-scrolled item exits sub-scroll and collapses the item, and clicking any other timeline row exits sub-scroll and selects that row (see [mouse.md](mouse.md)).
 
 While in sub-scroll mode:
 - Main timeline navigation is disabled.
@@ -45,12 +45,14 @@ While in sub-scroll mode:
 
 ## Interaction with Other Keys
 
-| Key | Behavior in sub-scroll |
-|-----|----------------------|
+| Input | Behavior in sub-scroll |
+|-------|----------------------|
 | `j`/`k`/`↑`/`↓` | Scroll within expanded content |
 | `g g` | Jump to top of expanded content |
 | `G` | Jump to bottom of expanded content |
 | `escape` | Exit sub-scroll, return to timeline |
+| Click summary row | Exit sub-scroll and collapse the item |
+| Click other row | Exit sub-scroll and select clicked row |
 | `q` | Show quit confirmation (see [quit-confirmation.md](quit-confirmation.md)) |
 | `?` | Show help modal (see [help-modal.md](help-modal.md)) |
 | All other keys | Ignored while in sub-scroll |

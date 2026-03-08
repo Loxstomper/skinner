@@ -437,7 +437,12 @@ func (m *Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 				}
 			}
 		} else {
-			m.timeline.ClickRow(paneRow, m.currentTimelineProps())
+			props := m.currentTimelineProps()
+			if m.timeline.InSubScroll() {
+				m.timeline.ClickRowSubScroll(paneRow, props)
+			} else {
+				m.timeline.ClickRow(paneRow, props)
+			}
 		}
 	}
 

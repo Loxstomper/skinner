@@ -107,7 +107,7 @@ Pressing `enter` on any tool call row (standalone or group child) toggles an exp
 
 **Cursor behavior**: Expanded content lines are **not individually selectable** — the tool call remains a single cursor position regardless of expansion state. However, the expanded lines count toward the item's display height for scroll calculations (the cursor "covers" the header + all expanded lines, similar to multi-line text blocks). Pressing `enter` on an already-expanded tool call enters sub-scroll mode — see [sub-scroll.md](sub-scroll.md).
 
-**Highlighting**: When the cursor is on a tool call row, the **entire row** is highlighted with the theme's `Highlight` background, padded to the full width of the right pane regardless of content length. The expanded content lines below are not highlighted.
+**Highlighting**: When the cursor is on a tool call row, the **entire row** is highlighted with the theme's `Highlight` background, padded to the full width of the right pane regardless of content length. Because tool call rows are composed of multiple individually-styled segments (icon, name, summary, tokens, result, duration), the `Highlight` background must be applied to each segment individually rather than wrapping the concatenated string — wrapping would cause inner ANSI reset codes to clear the background after the first segment. The same per-segment approach applies to group header rows. The expanded content lines below are not highlighted.
 
 #### Edit Diff Format
 

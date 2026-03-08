@@ -742,17 +742,116 @@ func (tl *Timeline) ScrollBy(delta int, props TimelineProps) {
 
 // ClickRow handles a mouse click on the given pane-relative row.
 // It maps scroll+row to the flat cursor position and sets the cursor if valid.
-// Returns true if the cursor changed.
+// If the row was already selected, it triggers expand/collapse (like Enter).
+// Returns true if the click was handled.
 func (tl *Timeline) ClickRow(row int, props TimelineProps) bool {
 	line := tl.Scroll + row
 	total := TotalLines(props.Items, props.CompactView)
 	if line < 0 || line >= total {
 		return false
 	}
+	oldCursor := tl.Cursor
 	tl.Cursor = LineToFlatCursor(props.Items, line, props.CompactView)
 	maxPos := FlatCursorCount(props.Items) - 1
 	tl.AutoFollow.OnManualMove(tl.Cursor >= maxPos)
+	if tl.Cursor == oldCursor {
+		tl.handleEnter(props)
+	}
 	return true
+}
+
+// ClickRowSubScroll handles a mouse click while in sub-scroll mode.
+// It determines what was clicked relative to the sub-scrolled item:
+//   - Summary row: exit sub-scroll and collapse the item
+//   - Expanded content area: no-op
+//   - Any other row: exit sub-scroll and select the clicked row
+func (tl *Timeline) ClickRowSubScroll(row int, props TimelineProps) {
+	line := tl.Scroll + row
+	total := tl.effectiveTotalLines(props)
+	if line < 0 || line >= total {
+		return
+	}
+
+	// Find the sub-scrolled item's line range (with viewport cap).
+	subStart, subCount := tl.lineRangeWithCap(props)
+
+	switch {
+	case line == subStart:
+		// Clicked the summary row: collapse and exit sub-scroll.
+		tc := tl.subScrollToolCall(props)
+		if tc != nil {
+			tc.Expanded = false
+		}
+		tl.ExitSubScroll()
+		tl.ensureCursorVisible(props)
+	case line > subStart && line < subStart+subCount:
+		// Clicked inside expanded content area: no-op.
+	default:
+		// Clicked another row: resolve flat cursor using capped geometry
+		// (before exiting sub-scroll, since the line layout changes after exit).
+		targetCursor := tl.lineToFlatCursorWithCap(line, props)
+		tl.ExitSubScroll()
+		tl.Cursor = targetCursor
+		maxPos := FlatCursorCount(props.Items) - 1
+		tl.AutoFollow.OnManualMove(tl.Cursor >= maxPos)
+		tl.ensureCursorVisible(props)
+	}
+}
+
+// lineToFlatCursorWithCap maps a rendered line to a flat cursor position
+// using the capped line count for the sub-scrolled item.
+func (tl *Timeline) lineToFlatCursorWithCap(line int, props TimelineProps) int {
+	currentLine := 0
+	flatPos := 0
+	for _, item := range props.Items {
+		switch it := item.(type) {
+		case *model.TextBlock:
+			lc := ItemLineCount(it, props.CompactView)
+			if line < currentLine+lc {
+				return flatPos
+			}
+			currentLine += lc
+			flatPos++
+		case *model.ToolCall:
+			var lc int
+			if flatPos == tl.SubScrollIdx {
+				lc = toolCallLineCountCapped(it, props.Height)
+			} else {
+				lc = toolCallLineCount(it)
+			}
+			if line < currentLine+lc {
+				return flatPos
+			}
+			currentLine += lc
+			flatPos++
+		case *model.ToolCallGroup:
+			if line < currentLine+1 {
+				return flatPos
+			}
+			currentLine++
+			flatPos++
+			if it.Expanded {
+				for _, child := range it.Children {
+					var clc int
+					if flatPos == tl.SubScrollIdx {
+						clc = toolCallLineCountCapped(child, props.Height)
+					} else {
+						clc = toolCallLineCount(child)
+					}
+					if line < currentLine+clc {
+						return flatPos
+					}
+					currentLine += clc
+					flatPos++
+				}
+			}
+		}
+	}
+	total := FlatCursorCount(props.Items)
+	if total > 0 {
+		return total - 1
+	}
+	return 0
 }
 
 // clampScroll ensures scroll doesn't exceed the maximum.
