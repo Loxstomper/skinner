@@ -5,7 +5,6 @@ import (
 	"strings"
 	"time"
 
-	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/loxstomper/skinner/internal/model"
 	"github.com/loxstomper/skinner/internal/theme"
@@ -35,44 +34,39 @@ type IterListProps struct {
 	Theme      theme.Theme
 }
 
-// Update handles key events for the iteration list.
-// Returns a command (always nil for now) and whether the right pane cursor
-// should be reset (when the selected iteration changes).
-func (il *IterList) Update(msg tea.KeyMsg, props IterListProps) tea.Cmd {
-	key := msg.String()
+// HandleAction processes a resolved action for the iteration list.
+func (il *IterList) HandleAction(action string, props IterListProps) {
 	count := len(props.Iterations)
 	atEnd := func() bool { return il.Cursor == count-1 }
 
-	switch key {
-	case "j", "down":
+	switch action {
+	case "move_down":
 		if il.Cursor < count-1 {
 			il.Cursor++
 		}
 		il.ensureCursorVisible(props)
 		il.AutoFollow.OnManualMove(atEnd())
 
-	case "k", "up":
+	case "move_up":
 		if il.Cursor > 0 {
 			il.Cursor--
 		}
 		il.ensureCursorVisible(props)
 		il.AutoFollow.OnManualMove(atEnd())
 
-	case "g":
-		// gg handled by root — root calls JumpToTop
-	case "G", "end":
+	case "jump_bottom":
 		if count > 0 {
 			il.Cursor = count - 1
 		}
 		il.ensureCursorVisible(props)
 		il.AutoFollow.JumpToEnd()
 
-	case "home":
+	case "jump_top":
 		il.Cursor = 0
 		il.Scroll = 0
 		il.AutoFollow.OnManualMove(atEnd())
 
-	case "pgdown":
+	case "page_down":
 		il.Cursor += props.Height
 		if il.Cursor >= count {
 			il.Cursor = count - 1
@@ -83,19 +77,14 @@ func (il *IterList) Update(msg tea.KeyMsg, props IterListProps) tea.Cmd {
 		il.ensureCursorVisible(props)
 		il.AutoFollow.OnManualMove(atEnd())
 
-	case "pgup":
+	case "page_up":
 		il.Cursor -= props.Height
 		if il.Cursor < 0 {
 			il.Cursor = 0
 		}
 		il.ensureCursorVisible(props)
 		il.AutoFollow.OnManualMove(atEnd())
-
-	case "enter":
-		// Enter on left pane focuses right pane — handled by root
 	}
-
-	return nil
 }
 
 // View renders the iteration list, showing only the visible slice based on scroll offset.

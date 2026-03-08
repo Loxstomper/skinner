@@ -5,7 +5,6 @@ import (
 	"testing"
 	"time"
 
-	tea "github.com/charmbracelet/bubbletea"
 	"github.com/loxstomper/skinner/internal/model"
 )
 
@@ -37,12 +36,12 @@ func TestIterList_CursorDown(t *testing.T) {
 	iters := makeIterations(5)
 	props := iterListProps(iters)
 
-	il.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}}, props)
+	il.HandleAction("move_down", props)
 	if il.Cursor != 1 {
 		t.Errorf("expected cursor=1 after j, got %d", il.Cursor)
 	}
 
-	il.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}}, props)
+	il.HandleAction("move_down", props)
 	if il.Cursor != 2 {
 		t.Errorf("expected cursor=2 after second j, got %d", il.Cursor)
 	}
@@ -54,7 +53,7 @@ func TestIterList_CursorUp(t *testing.T) {
 	iters := makeIterations(5)
 	props := iterListProps(iters)
 
-	il.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'k'}}, props)
+	il.HandleAction("move_up", props)
 	if il.Cursor != 2 {
 		t.Errorf("expected cursor=2 after k, got %d", il.Cursor)
 	}
@@ -66,7 +65,7 @@ func TestIterList_CursorBounds(t *testing.T) {
 		iters := makeIterations(3)
 		props := iterListProps(iters)
 
-		il.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'k'}}, props)
+		il.HandleAction("move_up", props)
 		if il.Cursor != 0 {
 			t.Errorf("expected cursor=0 at top, got %d", il.Cursor)
 		}
@@ -78,7 +77,7 @@ func TestIterList_CursorBounds(t *testing.T) {
 		iters := makeIterations(3)
 		props := iterListProps(iters)
 
-		il.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}}, props)
+		il.HandleAction("move_down", props)
 		if il.Cursor != 2 {
 			t.Errorf("expected cursor=2 at bottom, got %d", il.Cursor)
 		}
@@ -97,7 +96,7 @@ func TestIterList_AutoFollow(t *testing.T) {
 	iters := makeIterations(5)
 	props := iterListProps(iters)
 	il.Cursor = 3
-	il.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'k'}}, props)
+	il.HandleAction("move_up", props)
 	if il.AutoFollow.Following() {
 		t.Error("expected auto-follow to pause after moving up")
 	}
@@ -286,7 +285,7 @@ func TestIterList_PageDown(t *testing.T) {
 	props := iterListProps(iters)
 	props.Height = 10
 
-	il.Update(tea.KeyMsg{Type: tea.KeyPgDown}, props)
+	il.HandleAction("page_down", props)
 	if il.Cursor != 10 {
 		t.Errorf("expected cursor=10 after pgdown with height=10, got %d", il.Cursor)
 	}
@@ -299,7 +298,7 @@ func TestIterList_PageUp(t *testing.T) {
 	props := iterListProps(iters)
 	props.Height = 10
 
-	il.Update(tea.KeyMsg{Type: tea.KeyPgUp}, props)
+	il.HandleAction("page_up", props)
 	if il.Cursor != 5 {
 		t.Errorf("expected cursor=5 after pgup from 15 with height=10, got %d", il.Cursor)
 	}
@@ -315,7 +314,7 @@ func TestIterList_ScrollDown_CursorBelowViewport(t *testing.T) {
 
 	// Move cursor beyond the viewport (height=5, so visible rows 0-4)
 	for i := 0; i < 6; i++ {
-		il.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}}, props)
+		il.HandleAction("move_down", props)
 	}
 
 	if il.Cursor != 6 {
@@ -337,7 +336,7 @@ func TestIterList_ScrollUp_CursorAboveViewport(t *testing.T) {
 
 	// Move cursor up above the viewport
 	for i := 0; i < 3; i++ {
-		il.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'k'}}, props)
+		il.HandleAction("move_up", props)
 	}
 
 	if il.Cursor != 7 {
@@ -369,7 +368,7 @@ func TestIterList_PageDown_ScrollsViewport(t *testing.T) {
 	props := iterListProps(iters)
 	props.Height = 10
 
-	il.Update(tea.KeyMsg{Type: tea.KeyPgDown}, props)
+	il.HandleAction("page_down", props)
 	// Cursor moved to 10, scroll should keep cursor visible
 	if il.Cursor != 10 {
 		t.Errorf("expected cursor=10, got %d", il.Cursor)
@@ -387,7 +386,7 @@ func TestIterList_PageUp_ScrollsViewport(t *testing.T) {
 	props := iterListProps(iters)
 	props.Height = 10
 
-	il.Update(tea.KeyMsg{Type: tea.KeyPgUp}, props)
+	il.HandleAction("page_up", props)
 	// Cursor moved to 10
 	if il.Cursor != 10 {
 		t.Errorf("expected cursor=10, got %d", il.Cursor)

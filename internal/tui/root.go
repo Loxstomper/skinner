@@ -49,8 +49,8 @@ type Model struct {
 	focusedPane   paneID
 	compactView   bool
 
-	// gg state machine
-	gPending bool
+	// KeyMap-driven sequence state machine (replaces hardcoded gPending)
+	pendingAction string
 
 	// Event channel for bridging executor events to Bubble Tea
 	eventCh chan tea.Msg
@@ -163,63 +163,78 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	key := msg.String()
+	km := &m.config.KeyMap
 
-	// gg state machine: if gPending and key is "g", jump to top
-	if m.gPending {
-		m.gPending = false
-		if key == "g" {
-			if m.focusedPane == leftPane {
-				m.iterList.JumpToTop()
-				m.timeline.ResetPosition()
-			} else {
-				m.timeline.JumpToTop()
-			}
-			return m, nil
-		}
-		// Any other key: clear gPending, fall through to normal handling
+	// ctrl+c is always quit (not configurable per spec)
+	if key == "ctrl+c" {
+		m.quitting = true
+		_ = m.exec.Kill()
+		return m, tea.Quit
 	}
 
-	switch key {
-	case "q", "ctrl+c":
+	// Resolve the key through the KeyMap, handling sequence state.
+	action, newPending := km.Resolve(key, m.pendingAction)
+	m.pendingAction = newPending
+
+	// If we just set a pending action (sequence started), wait for next key.
+	if action == "" && newPending != "" {
+		return m, nil
+	}
+
+	// If no action matched via KeyMap, check arrow key alternates.
+	// Arrow keys are always active alongside their letter equivalents per spec.
+	if action == "" {
+		if alt := config.HasAlternateArrowKey(key); alt != "" {
+			action, _ = km.Resolve(alt, "")
+		}
+	}
+
+	// Also handle "home" as an alternate for jump_top (always active).
+	if action == "" && key == "home" {
+		action = config.ActionJumpTop
+	}
+	// "end" as an alternate for jump_bottom (always active).
+	if action == "" && key == "end" {
+		action = config.ActionJumpBottom
+	}
+	// pgup/pgdn — delegate directly to focused component.
+	if action == "" && key == "pgup" {
+		action = "page_up"
+	}
+	if action == "" && key == "pgdown" {
+		action = "page_down"
+	}
+
+	switch action {
+	case config.ActionQuit:
 		m.quitting = true
 		_ = m.exec.Kill()
 		return m, tea.Quit
 
-	case "tab":
+	case config.ActionFocusToggle:
 		if m.focusedPane == leftPane {
 			m.focusedPane = rightPane
 		} else {
 			m.focusedPane = leftPane
 		}
 
-	case "h", "left":
+	case config.ActionFocusLeft:
 		m.focusedPane = leftPane
 
-	case "l", "right":
+	case config.ActionFocusRight:
 		m.focusedPane = rightPane
 
-	case "g":
-		m.gPending = true
-
-	case "v":
+	case config.ActionToggleView:
 		m.compactView = !m.compactView
 
-	case "enter":
+	case config.ActionExpand:
 		if m.focusedPane == leftPane {
 			m.focusedPane = rightPane
 		} else {
-			m.timeline.Update(msg, m.currentTimelineProps())
+			m.timeline.HandleAction("expand", m.currentTimelineProps())
 		}
 
-	case "G", "end":
-		if m.focusedPane == leftPane {
-			m.iterList.JumpToBottom(len(m.controller.Session.Iterations), m.rightPaneHeight())
-			m.timeline.ResetPosition()
-		} else {
-			m.timeline.JumpToBottom(m.currentTimelineProps())
-		}
-
-	case "home":
+	case config.ActionJumpTop:
 		if m.focusedPane == leftPane {
 			m.iterList.JumpToTop()
 			m.timeline.ResetPosition()
@@ -227,16 +242,24 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.timeline.JumpToTop()
 		}
 
-	default:
-		// Delegate navigation keys to the focused component
+	case config.ActionJumpBottom:
+		if m.focusedPane == leftPane {
+			m.iterList.JumpToBottom(len(m.controller.Session.Iterations), m.rightPaneHeight())
+			m.timeline.ResetPosition()
+		} else {
+			m.timeline.JumpToBottom(m.currentTimelineProps())
+		}
+
+	case config.ActionMoveDown, config.ActionMoveUp,
+		"page_up", "page_down":
 		if m.focusedPane == leftPane {
 			oldCursor := m.iterList.Cursor
-			m.iterList.Update(msg, m.iterListProps())
+			m.iterList.HandleAction(action, m.iterListProps())
 			if m.iterList.Cursor != oldCursor {
 				m.timeline.ResetPosition()
 			}
 		} else {
-			m.timeline.Update(msg, m.currentTimelineProps())
+			m.timeline.HandleAction(action, m.currentTimelineProps())
 		}
 	}
 

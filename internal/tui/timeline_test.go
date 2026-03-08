@@ -5,7 +5,6 @@ import (
 	"testing"
 	"time"
 
-	tea "github.com/charmbracelet/bubbletea"
 	"github.com/loxstomper/skinner/internal/model"
 )
 
@@ -40,12 +39,12 @@ func TestTimeline_CursorDown(t *testing.T) {
 	items := makeTimelineItems()
 	props := timelineProps(items)
 
-	tl.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}}, props)
+	tl.HandleAction("move_down", props)
 	if tl.Cursor != 1 {
 		t.Errorf("expected cursor=1 after j, got %d", tl.Cursor)
 	}
 
-	tl.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}}, props)
+	tl.HandleAction("move_down", props)
 	if tl.Cursor != 2 {
 		t.Errorf("expected cursor=2 after second j, got %d", tl.Cursor)
 	}
@@ -57,7 +56,7 @@ func TestTimeline_CursorUp(t *testing.T) {
 	items := makeTimelineItems()
 	props := timelineProps(items)
 
-	tl.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'k'}}, props)
+	tl.HandleAction("move_up", props)
 	if tl.Cursor != 2 {
 		t.Errorf("expected cursor=2 after k, got %d", tl.Cursor)
 	}
@@ -69,7 +68,7 @@ func TestTimeline_CursorBounds(t *testing.T) {
 		items := makeTimelineItems()
 		props := timelineProps(items)
 
-		tl.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'k'}}, props)
+		tl.HandleAction("move_up", props)
 		if tl.Cursor != 0 {
 			t.Errorf("expected cursor=0 at top, got %d", tl.Cursor)
 		}
@@ -81,7 +80,7 @@ func TestTimeline_CursorBounds(t *testing.T) {
 		tl.Cursor = len(items) - 1
 		props := timelineProps(items)
 
-		tl.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}}, props)
+		tl.HandleAction("move_down", props)
 		if tl.Cursor != len(items)-1 {
 			t.Errorf("expected cursor=%d at bottom, got %d", len(items)-1, tl.Cursor)
 		}
@@ -100,12 +99,12 @@ func TestTimeline_EnterExpandCollapse_TextBlock(t *testing.T) {
 		t.Error("text block should start collapsed")
 	}
 
-	tl.Update(tea.KeyMsg{Type: tea.KeyEnter}, props)
+	tl.HandleAction("expand", props)
 	if !tb.Expanded {
 		t.Error("text block should be expanded after enter")
 	}
 
-	tl.Update(tea.KeyMsg{Type: tea.KeyEnter}, props)
+	tl.HandleAction("expand", props)
 	if tb.Expanded {
 		t.Error("text block should be collapsed after second enter")
 	}
@@ -128,7 +127,7 @@ func TestTimeline_EnterExpandCollapse_Group(t *testing.T) {
 	group := items[0].(*model.ToolCallGroup)
 
 	// Cursor is on group header (flatIdx 0)
-	tl.Update(tea.KeyMsg{Type: tea.KeyEnter}, props)
+	tl.HandleAction("expand", props)
 	if group.Expanded {
 		t.Error("group should be collapsed after enter on header")
 	}
@@ -136,7 +135,7 @@ func TestTimeline_EnterExpandCollapse_Group(t *testing.T) {
 		t.Error("group should have ManualToggle set")
 	}
 
-	tl.Update(tea.KeyMsg{Type: tea.KeyEnter}, props)
+	tl.HandleAction("expand", props)
 	if !group.Expanded {
 		t.Error("group should be expanded after second enter")
 	}
@@ -164,7 +163,7 @@ func TestTimeline_EnterOnGroupChild_TogglesChildExpansion(t *testing.T) {
 
 	// Move cursor to first child (flatIdx 1) and press Enter
 	tl.Cursor = 1
-	tl.Update(tea.KeyMsg{Type: tea.KeyEnter}, props)
+	tl.HandleAction("expand", props)
 	if !child.Expanded {
 		t.Error("child should be expanded after enter")
 	}
@@ -173,7 +172,7 @@ func TestTimeline_EnterOnGroupChild_TogglesChildExpansion(t *testing.T) {
 	}
 
 	// Press Enter again to collapse
-	tl.Update(tea.KeyMsg{Type: tea.KeyEnter}, props)
+	tl.HandleAction("expand", props)
 	if child.Expanded {
 		t.Error("child should be collapsed after second enter")
 	}
@@ -196,12 +195,12 @@ func TestTimeline_EnterOnToolCall_TogglesExpansion(t *testing.T) {
 		t.Error("tool call should start collapsed")
 	}
 
-	tl.Update(tea.KeyMsg{Type: tea.KeyEnter}, props)
+	tl.HandleAction("expand", props)
 	if !tc.Expanded {
 		t.Error("tool call should be expanded after enter")
 	}
 
-	tl.Update(tea.KeyMsg{Type: tea.KeyEnter}, props)
+	tl.HandleAction("expand", props)
 	if tc.Expanded {
 		t.Error("tool call should be collapsed after second enter")
 	}
@@ -217,7 +216,7 @@ func TestTimeline_AutoFollow(t *testing.T) {
 	items := makeTimelineItems()
 	props := timelineProps(items)
 	tl.Cursor = 1
-	tl.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'k'}}, props)
+	tl.HandleAction("move_up", props)
 	if tl.AutoFollow.Following() {
 		t.Error("expected auto-follow to pause after moving up")
 	}
@@ -582,12 +581,12 @@ func TestTimeline_Scroll(t *testing.T) {
 		Theme:  testTheme(),
 	}
 
-	tl.Update(tea.KeyMsg{Type: tea.KeyPgDown}, props)
+	tl.HandleAction("page_down", props)
 	if tl.Scroll != 10 {
 		t.Errorf("expected scroll=10 after pgdown, got %d", tl.Scroll)
 	}
 
-	tl.Update(tea.KeyMsg{Type: tea.KeyPgUp}, props)
+	tl.HandleAction("page_up", props)
 	if tl.Scroll != 0 {
 		t.Errorf("expected scroll=0 after pgup, got %d", tl.Scroll)
 	}
@@ -617,7 +616,7 @@ func TestTimeline_PgDown_ClampsCursorIntoViewport(t *testing.T) {
 	// Cursor starts at 0, pgdown scrolls to line 10.
 	// Cursor at flat 0 (line 0) is now above viewport (line 10-19).
 	// Cursor should be clamped to the first visible position.
-	tl.Update(tea.KeyMsg{Type: tea.KeyPgDown}, props)
+	tl.HandleAction("page_down", props)
 	if tl.Cursor < 10 || tl.Cursor > 19 {
 		t.Errorf("expected cursor in viewport [10,19] after pgdown, got %d", tl.Cursor)
 	}
@@ -653,7 +652,7 @@ func TestTimeline_PgUp_ClampsCursorIntoViewport(t *testing.T) {
 
 	// pgup scrolls to 10. Cursor at 29 (line 29) is below viewport (lines 10-19).
 	// Cursor should clamp to last visible position.
-	tl.Update(tea.KeyMsg{Type: tea.KeyPgUp}, props)
+	tl.HandleAction("page_up", props)
 	if tl.Scroll != 10 {
 		t.Errorf("expected scroll=10 after pgup, got %d", tl.Scroll)
 	}
@@ -842,7 +841,7 @@ func TestTimeline_PgDown_CursorAlreadyInViewport(t *testing.T) {
 	tl.Scroll = 10
 
 	// pgdown scrolls to 20 (viewport lines 20-29). Cursor 15 is now above viewport.
-	tl.Update(tea.KeyMsg{Type: tea.KeyPgDown}, props)
+	tl.HandleAction("page_down", props)
 	if tl.Cursor != 20 {
 		t.Errorf("expected cursor=20 after pgdown pushed cursor out, got %d", tl.Cursor)
 	}

@@ -454,14 +454,14 @@ func TestIntegration_GGJumpsToTop(t *testing.T) {
 		t.Fatalf("expected cursor=2, got %d", m.iterList.Cursor)
 	}
 
-	// gg: first g sets pending, second g jumps to top.
+	// gg: first g sets pending action, second g jumps to top.
 	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'g'}})
-	if !m.gPending {
-		t.Error("expected gPending after first g")
+	if m.pendingAction == "" {
+		t.Error("expected pendingAction set after first g")
 	}
 	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'g'}})
-	if m.gPending {
-		t.Error("expected gPending cleared after second g")
+	if m.pendingAction != "" {
+		t.Error("expected pendingAction cleared after second g")
 	}
 	if m.iterList.Cursor != 0 {
 		t.Errorf("expected cursor=0 after gg, got %d", m.iterList.Cursor)

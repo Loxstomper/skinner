@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"strings"
 
-	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/loxstomper/skinner/internal/model"
 	"github.com/loxstomper/skinner/internal/theme"
@@ -41,50 +40,46 @@ type renderedLine struct {
 	flatIdx int // flat cursor position (-1 for continuation lines of text blocks)
 }
 
-// Update handles key events for the timeline.
-func (tl *Timeline) Update(msg tea.KeyMsg, props TimelineProps) tea.Cmd {
-	key := msg.String()
+// HandleAction processes a resolved action for the timeline.
+func (tl *Timeline) HandleAction(action string, props TimelineProps) {
 	maxPos := FlatCursorCount(props.Items) - 1
 	atEnd := func() bool { return tl.Cursor >= maxPos }
 
-	switch key {
-	case "j", "down":
+	switch action {
+	case "move_down":
 		if tl.Cursor < maxPos {
 			tl.Cursor++
 			tl.ensureCursorVisible(props)
 		}
 		tl.AutoFollow.OnManualMove(atEnd())
 
-	case "k", "up":
+	case "move_up":
 		if tl.Cursor > 0 {
 			tl.Cursor--
 			tl.ensureCursorVisible(props)
 		}
 		tl.AutoFollow.OnManualMove(atEnd())
 
-	case "g":
-		// gg handled by root — root calls JumpToTop
-
-	case "G", "end":
+	case "jump_bottom":
 		if maxPos >= 0 {
 			tl.Cursor = maxPos
 			tl.scrollToBottom(props)
 		}
 		tl.AutoFollow.JumpToEnd()
 
-	case "home":
+	case "jump_top":
 		tl.Cursor = 0
 		tl.Scroll = 0
 		tl.AutoFollow.OnManualMove(false)
 
-	case "pgdown":
+	case "page_down":
 		tl.Scroll += props.Height
 		tl.clampScroll(props)
 		tl.clampCursorToViewport(props)
 		total := TotalLines(props.Items, props.CompactView)
 		tl.AutoFollow.OnManualMove(tl.Scroll+props.Height >= total)
 
-	case "pgup":
+	case "page_up":
 		tl.Scroll -= props.Height
 		if tl.Scroll < 0 {
 			tl.Scroll = 0
@@ -92,11 +87,9 @@ func (tl *Timeline) Update(msg tea.KeyMsg, props TimelineProps) tea.Cmd {
 		tl.clampCursorToViewport(props)
 		tl.AutoFollow.OnManualMove(false)
 
-	case "enter":
+	case "expand":
 		tl.handleEnter(props)
 	}
-
-	return nil
 }
 
 // handleEnter toggles expand/collapse on the selected item.

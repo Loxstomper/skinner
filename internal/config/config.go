@@ -17,16 +17,20 @@ type ModelPricing struct {
 }
 
 type Config struct {
-	ViewMode  string // "full" or "compact"
-	ThemeName string
-	Pricing   map[string]ModelPricing
+	ViewMode    string // "full" or "compact"
+	LineNumbers bool   // show relative line numbers in right pane
+	ThemeName   string
+	KeyMap      KeyMap
+	Pricing     map[string]ModelPricing
 }
 
 func DefaultConfig() Config {
 	return Config{
-		ViewMode:  "full",
-		ThemeName: "solarized-dark",
-		Pricing:   DefaultPricing(),
+		ViewMode:    "full",
+		LineNumbers: true,
+		ThemeName:   "solarized-dark",
+		KeyMap:      DefaultKeyMap(),
+		Pricing:     DefaultPricing(),
 	}
 }
 
@@ -104,9 +108,17 @@ func LoadConfig() Config {
 			if key == "mode" && (value == "full" || value == "compact") {
 				cfg.ViewMode = value
 			}
+			if key == "line_numbers" {
+				cfg.LineNumbers = value == "true"
+			}
 		case section == "theme":
 			if key == "name" && value != "" {
 				cfg.ThemeName = value
+			}
+		case section == "keybindings":
+			// Validate that the action name is known before overriding.
+			if _, ok := cfg.KeyMap.Bindings[key]; ok {
+				cfg.KeyMap.Bindings[key] = ParseKeyBinding(value)
 			}
 		case strings.HasPrefix(section, "pricing."):
 			modelName := strings.TrimPrefix(section, "pricing.")
