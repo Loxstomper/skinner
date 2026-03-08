@@ -930,6 +930,188 @@ func TestIntegration_ExpandToolCallShowsContent(t *testing.T) {
 	}
 }
 
+// --- Left pane auto-hides below 80 columns ---
+
+func TestIntegration_LeftPaneHiddenBelow80Cols(t *testing.T) {
+	events := []session.Event{
+		session.AssistantBatchEvent{Events: []session.Event{
+			session.ToolUseEvent{ID: "tc1", Name: "Read", Summary: "main.go"},
+		}},
+		session.ToolResultEvent{ToolUseID: "tc1", IsError: false},
+		session.SubprocessExitEvent{Err: nil},
+	}
+
+	m := newTestModel(events, 1)
+	drainEvents(t, m)
+
+	// At 120 columns, left pane should be visible.
+	if !m.leftPaneVisible {
+		t.Error("expected left pane visible at 120 columns")
+	}
+
+	// Resize to 79 columns — left pane should auto-hide.
+	m.Update(tea.WindowSizeMsg{Width: 79, Height: 30})
+	if m.leftPaneVisible {
+		t.Error("expected left pane hidden at 79 columns")
+	}
+
+	// View should not contain the separator.
+	view := m.View()
+	if strings.Contains(view, "│") {
+		t.Error("expected no separator when left pane is hidden")
+	}
+
+	// Resize back to 80 columns — left pane should reappear.
+	m.Update(tea.WindowSizeMsg{Width: 80, Height: 30})
+	if !m.leftPaneVisible {
+		t.Error("expected left pane visible at 80 columns")
+	}
+}
+
+// --- Toggle left pane with [ key ---
+
+func TestIntegration_ToggleLeftPaneWithBracket(t *testing.T) {
+	events := []session.Event{
+		session.SubprocessExitEvent{Err: nil},
+	}
+
+	m := newTestModel(events, 1)
+	drainEvents(t, m)
+
+	if !m.leftPaneVisible {
+		t.Fatal("expected left pane visible initially")
+	}
+
+	// [ hides the left pane.
+	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'['}})
+	if m.leftPaneVisible {
+		t.Error("expected left pane hidden after [")
+	}
+
+	// [ again shows the left pane.
+	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'['}})
+	if !m.leftPaneVisible {
+		t.Error("expected left pane visible after second [")
+	}
+}
+
+// --- Focus auto-switches to right pane when left pane hides ---
+
+func TestIntegration_FocusSwitchesWhenLeftPaneHides(t *testing.T) {
+	events := []session.Event{
+		session.SubprocessExitEvent{Err: nil},
+	}
+
+	m := newTestModel(events, 1)
+	drainEvents(t, m)
+
+	// Start on left pane.
+	if m.focusedPane != leftPane {
+		t.Fatal("expected left pane focus")
+	}
+
+	// Hide left pane via resize — focus should auto-switch to right.
+	m.Update(tea.WindowSizeMsg{Width: 60, Height: 30})
+	if m.focusedPane != rightPane {
+		t.Error("expected right pane focus after left pane auto-hides")
+	}
+}
+
+// --- Focus auto-switches when toggling left pane off while focused ---
+
+func TestIntegration_FocusSwitchesWhenTogglingLeftPaneOff(t *testing.T) {
+	events := []session.Event{
+		session.SubprocessExitEvent{Err: nil},
+	}
+
+	m := newTestModel(events, 1)
+	drainEvents(t, m)
+
+	// Start on left pane.
+	if m.focusedPane != leftPane {
+		t.Fatal("expected left pane focus")
+	}
+
+	// Toggle left pane off — focus should switch to right.
+	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'['}})
+	if m.focusedPane != rightPane {
+		t.Error("expected right pane focus after toggling left pane off")
+	}
+}
+
+// --- Tab doesn't toggle to hidden left pane ---
+
+func TestIntegration_TabSkipsHiddenLeftPane(t *testing.T) {
+	events := []session.Event{
+		session.SubprocessExitEvent{Err: nil},
+	}
+
+	m := newTestModel(events, 1)
+	drainEvents(t, m)
+
+	// Hide left pane and switch to right pane.
+	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'['}})
+	if m.focusedPane != rightPane {
+		t.Fatal("expected right pane focus")
+	}
+
+	// Tab should not switch to hidden left pane.
+	m.Update(tea.KeyMsg{Type: tea.KeyTab})
+	if m.focusedPane != rightPane {
+		t.Error("expected right pane focus after tab with hidden left pane")
+	}
+}
+
+// --- h key doesn't focus hidden left pane ---
+
+func TestIntegration_HKeySkipsHiddenLeftPane(t *testing.T) {
+	events := []session.Event{
+		session.SubprocessExitEvent{Err: nil},
+	}
+
+	m := newTestModel(events, 1)
+	drainEvents(t, m)
+
+	// Hide left pane and switch to right.
+	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'['}})
+	m.focusedPane = rightPane
+
+	// h should not switch to hidden left pane.
+	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'h'}})
+	if m.focusedPane != rightPane {
+		t.Error("expected right pane focus after h with hidden left pane")
+	}
+}
+
+// --- Mouse click targets right pane when left pane hidden ---
+
+func TestIntegration_MouseClickRightPaneWhenLeftHidden(t *testing.T) {
+	events := []session.Event{
+		session.AssistantBatchEvent{Events: []session.Event{
+			session.ToolUseEvent{ID: "tc1", Name: "Read", Summary: "main.go"},
+		}},
+		session.ToolResultEvent{ToolUseID: "tc1", IsError: false},
+		session.SubprocessExitEvent{Err: nil},
+	}
+
+	m := newTestModel(events, 1)
+	drainEvents(t, m)
+
+	// Hide left pane.
+	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'['}})
+
+	// Click at X=5 — should target right pane since left is hidden.
+	m.Update(tea.MouseMsg{
+		X:      5,
+		Y:      2,
+		Button: tea.MouseButtonLeft,
+		Action: tea.MouseActionPress,
+	})
+	if m.focusedPane != rightPane {
+		t.Error("expected right pane focus after clicking when left pane is hidden")
+	}
+}
+
 type testError struct{ msg string }
 
 func (e *testError) Error() string { return e.msg }

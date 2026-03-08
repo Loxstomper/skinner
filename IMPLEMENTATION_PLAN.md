@@ -25,13 +25,18 @@ Full-width row highlighting already works in `timeline.go` `renderWithLines()`.
 - [ ] Verify no pending tick or event commands keep the program alive
 - [ ] Tests: integration test that `--exit` model returns `tea.Quit` after last iteration completes
 
-### 1.4 Auto-Hide Left Pane
-- [ ] Add `leftPaneVisible` bool to `Model` in `root.go`, default `true`
-- [ ] On `WindowSizeMsg`, set `leftPaneVisible = false` when width < 80 columns
-- [ ] Add `[` keybind (via `KeyMap`) to toggle `leftPaneVisible`
-- [ ] Update `View()` to render full-width right pane when left pane is hidden
-- [ ] When left pane is hidden and focused, auto-switch focus to right pane
-- [ ] Tests: pane hidden below 80 cols, toggle with `[`, focus auto-switches
+### ~~1.4 Auto-Hide Left Pane~~ ✅ DONE
+
+Implemented in `root.go`:
+- `leftPaneVisible` bool field on `Model`, defaults `true`
+- `leftPaneWidth()` and `rightPaneWidth()` helpers replace all hardcoded `leftWidth := 32`
+- `WindowSizeMsg` handler: auto-hides left pane when width < 80, re-shows at ≥ 80
+- `ActionToggleLeftPane` (`[` key) toggles `leftPaneVisible` at any width
+- `View()` renders full-width right pane when left pane hidden (no separator, no left pane)
+- Focus auto-switches to right pane when left pane hides (both resize and toggle)
+- `tab` and `h` (focus left) are no-ops when left pane is hidden
+- Mouse handling: all clicks target right pane when left pane is hidden
+- 7 integration tests: auto-hide below 80, toggle with `[`, focus auto-switch on resize, focus auto-switch on toggle, tab skips hidden pane, h key skips hidden pane, mouse targets right pane when hidden
 
 ## Phase 2 — Modals
 
@@ -136,7 +141,7 @@ Implemented in `root.go` and `modal.go`:
 
 ### 5.2 Integration Tests for New Features
 - [ ] Add integration test: help modal open/close
-- [ ] Add integration test: left pane auto-hide on narrow terminal
+- [x] Add integration test: left pane auto-hide on narrow terminal
 - [ ] Add integration test: sub-scroll enter/navigate/exit
 - [ ] Add integration test: count+jump motions
 - [ ] Add integration test: expand shows full content (no truncation)

@@ -45,9 +45,10 @@ type Model struct {
 	timeline Timeline
 
 	// UI state
-	width, height int
-	focusedPane   paneID
-	compactView   bool
+	width, height   int
+	focusedPane     paneID
+	compactView     bool
+	leftPaneVisible bool
 
 	// KeyMap-driven sequence state machine (replaces hardcoded gPending)
 	pendingAction string
@@ -70,17 +71,18 @@ func NewModel(sess model.Session, cfg config.Config, promptContent string, th th
 	sessionPtr := &sess
 	ctrl := session.NewController(sessionPtr, cfg, nil)
 	return Model{
-		controller:     ctrl,
-		exec:           exec,
-		config:         cfg,
-		promptContent:  promptContent,
-		theme:          th,
-		compactView:    compactView,
-		exitOnComplete: exitOnComplete,
-		eventCh:        make(chan tea.Msg, 100),
-		focusedPane:    leftPane,
-		iterList:       NewIterList(),
-		timeline:       NewTimeline(),
+		controller:      ctrl,
+		exec:            exec,
+		config:          cfg,
+		promptContent:   promptContent,
+		theme:           th,
+		compactView:     compactView,
+		leftPaneVisible: true,
+		exitOnComplete:  exitOnComplete,
+		eventCh:         make(chan tea.Msg, 100),
+		focusedPane:     leftPane,
+		iterList:        NewIterList(),
+		timeline:        NewTimeline(),
 	}
 }
 
@@ -102,6 +104,14 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
+		if msg.Width < 80 {
+			m.leftPaneVisible = false
+			if m.focusedPane == leftPane {
+				m.focusedPane = rightPane
+			}
+		} else {
+			m.leftPaneVisible = true
+		}
 		return m, nil
 
 	case tickMsg:
@@ -228,7 +238,17 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.activeModal = modalQuitConfirm
 		return m, nil
 
+	case config.ActionToggleLeftPane:
+		m.leftPaneVisible = !m.leftPaneVisible
+		if !m.leftPaneVisible && m.focusedPane == leftPane {
+			m.focusedPane = rightPane
+		}
+
 	case config.ActionFocusToggle:
+		if !m.leftPaneVisible {
+			// Can't toggle to hidden pane.
+			break
+		}
 		if m.focusedPane == leftPane {
 			m.focusedPane = rightPane
 		} else {
@@ -236,7 +256,9 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 
 	case config.ActionFocusLeft:
-		m.focusedPane = leftPane
+		if m.leftPaneVisible {
+			m.focusedPane = leftPane
+		}
 
 	case config.ActionFocusRight:
 		m.focusedPane = rightPane
@@ -313,10 +335,10 @@ func (m *Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 	}
 
 	// Determine target pane by X coordinate
-	leftWidth := 32
-	targetPane := leftPane
-	if msg.X >= leftWidth {
-		targetPane = rightPane
+	leftWidth := m.leftPaneWidth()
+	targetPane := rightPane
+	if leftWidth > 0 && msg.X < leftWidth {
+		targetPane = leftPane
 	}
 
 	switch {
@@ -367,20 +389,8 @@ func (m *Model) View() string {
 	header := RenderHeader(m.headerProps())
 
 	paneHeight := m.height - 1 // subtract 1 for the header line
-
-	leftWidth := 32
-	rightWidth := m.width - leftWidth - 1 // 1 for separator
-	if rightWidth < 20 {
-		rightWidth = 20
-	}
-
-	left := m.iterList.View(IterListProps{
-		Iterations: m.controller.Session.Iterations,
-		Width:      leftWidth,
-		Height:     paneHeight,
-		Focused:    m.focusedPane == leftPane,
-		Theme:      m.theme,
-	})
+	leftWidth := m.leftPaneWidth()
+	rightWidth := m.rightPaneWidth()
 
 	right := m.timeline.View(TimelineProps{
 		Items:       m.selectedItems(),
@@ -391,15 +401,29 @@ func (m *Model) View() string {
 		Theme:       m.theme,
 	})
 
-	sepLines := make([]string, paneHeight)
-	for i := range sepLines {
-		sepLines[i] = "│"
-	}
-	separator := lipgloss.NewStyle().
-		Foreground(lipgloss.Color(m.theme.ForegroundDim)).
-		Render(strings.Join(sepLines, "\n"))
+	var panes string
+	if leftWidth > 0 {
+		left := m.iterList.View(IterListProps{
+			Iterations: m.controller.Session.Iterations,
+			Width:      leftWidth,
+			Height:     paneHeight,
+			Focused:    m.focusedPane == leftPane,
+			Theme:      m.theme,
+		})
 
-	panes := lipgloss.JoinHorizontal(lipgloss.Top, left, separator, right)
+		sepLines := make([]string, paneHeight)
+		for i := range sepLines {
+			sepLines[i] = "│"
+		}
+		separator := lipgloss.NewStyle().
+			Foreground(lipgloss.Color(m.theme.ForegroundDim)).
+			Render(strings.Join(sepLines, "\n"))
+
+		panes = lipgloss.JoinHorizontal(lipgloss.Top, left, separator, right)
+	} else {
+		panes = right
+	}
+
 	view := header + "\n" + panes
 
 	// Render modal overlay if active.
@@ -452,7 +476,7 @@ func (m *Model) headerProps() HeaderProps {
 func (m *Model) iterListProps() IterListProps {
 	return IterListProps{
 		Iterations: m.controller.Session.Iterations,
-		Width:      32,
+		Width:      m.leftPaneWidth(),
 		Height:     m.rightPaneHeight(),
 		Focused:    m.focusedPane == leftPane,
 		Theme:      m.theme,
@@ -466,13 +490,9 @@ func (m *Model) currentTimelineProps() TimelineProps {
 
 // timelineProps builds TimelineProps for a given set of items.
 func (m *Model) timelineProps(items []model.TimelineItem) TimelineProps {
-	rightWidth := m.width - 32 - 1
-	if rightWidth < 20 {
-		rightWidth = 20
-	}
 	return TimelineProps{
 		Items:       items,
-		Width:       rightWidth,
+		Width:       m.rightPaneWidth(),
 		Height:      m.rightPaneHeight(),
 		Focused:     m.focusedPane == rightPane,
 		CompactView: m.compactView,
@@ -525,6 +545,27 @@ func waitForEvent(ch <-chan tea.Msg) tea.Cmd {
 }
 
 // Helpers
+
+const leftPaneFixedWidth = 32
+
+func (m *Model) leftPaneWidth() int {
+	if m.leftPaneVisible {
+		return leftPaneFixedWidth
+	}
+	return 0
+}
+
+func (m *Model) rightPaneWidth() int {
+	lpw := m.leftPaneWidth()
+	if lpw == 0 {
+		return m.width
+	}
+	rw := m.width - lpw - 1 // 1 for separator
+	if rw < 20 {
+		rw = 20
+	}
+	return rw
+}
 
 func (m *Model) rightPaneHeight() int {
 	if m.height > 1 {
