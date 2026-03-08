@@ -18,6 +18,12 @@ type Controller struct {
 	// Internal tracking for model pricing
 	hasKnownModel bool
 	lastModel     string
+
+	// Pending token attribution: set by ProcessUsage, consumed by the next
+	// ProcessAssistantBatch call. The executor sends UsageEvent before
+	// AssistantBatchEvent for the same assistant turn.
+	pendingInputTokens     int64
+	pendingCacheReadTokens int64
 }
 
 // NewController creates a Controller with the given session and config.
@@ -78,6 +84,23 @@ func (c *Controller) ProcessAssistantBatch(events []Event) {
 	}
 	flushRun()
 
+	// Count total tool calls for token attribution.
+	var totalToolCalls int
+	for _, p := range pending {
+		if run, ok := p.(*toolRun); ok {
+			totalToolCalls += len(run.events)
+		}
+	}
+
+	// Distribute pending tokens equally across tool calls, then clear.
+	var perCallInput, perCallCacheRead int64
+	if totalToolCalls > 0 {
+		perCallInput = (c.pendingInputTokens + int64(totalToolCalls)/2) / int64(totalToolCalls)
+		perCallCacheRead = (c.pendingCacheReadTokens + int64(totalToolCalls)/2) / int64(totalToolCalls)
+	}
+	c.pendingInputTokens = 0
+	c.pendingCacheReadTokens = 0
+
 	// Convert pending items to timeline items
 	now := c.Clock()
 	for _, p := range pending {
@@ -88,13 +111,15 @@ func (c *Controller) ProcessAssistantBatch(events []Event) {
 			if len(v.events) == 1 {
 				e := v.events[0]
 				iter.Items = append(iter.Items, &model.ToolCall{
-					ID:        e.ID,
-					Name:      e.Name,
-					Summary:   e.Summary,
-					LineInfo:  e.LineInfo,
-					StartTime: now,
-					Status:    model.ToolCallRunning,
-					RawInput:  e.RawInput,
+					ID:              e.ID,
+					Name:            e.Name,
+					Summary:         e.Summary,
+					LineInfo:        e.LineInfo,
+					StartTime:       now,
+					Status:          model.ToolCallRunning,
+					RawInput:        e.RawInput,
+					InputTokens:     perCallInput,
+					CacheReadTokens: perCallCacheRead,
 				})
 			} else {
 				group := &model.ToolCallGroup{
@@ -104,13 +129,15 @@ func (c *Controller) ProcessAssistantBatch(events []Event) {
 				}
 				for _, e := range v.events {
 					group.Children = append(group.Children, &model.ToolCall{
-						ID:        e.ID,
-						Name:      e.Name,
-						Summary:   e.Summary,
-						LineInfo:  e.LineInfo,
-						StartTime: now,
-						Status:    model.ToolCallRunning,
-						RawInput:  e.RawInput,
+						ID:              e.ID,
+						Name:            e.Name,
+						Summary:         e.Summary,
+						LineInfo:        e.LineInfo,
+						StartTime:       now,
+						Status:          model.ToolCallRunning,
+						RawInput:        e.RawInput,
+						InputTokens:     perCallInput,
+						CacheReadTokens: perCallCacheRead,
 					})
 				}
 				iter.Items = append(iter.Items, group)
@@ -164,6 +191,8 @@ func (c *Controller) applyToolResult(tc *model.ToolCall, result ToolResultEvent)
 }
 
 // ProcessUsage accumulates token counts and computes cost using pricing config.
+// It also stores pending per-tool-call attribution tokens that will be
+// distributed by the next ProcessAssistantBatch call.
 func (c *Controller) ProcessUsage(usage UsageEvent) {
 	c.Session.InputTokens += usage.InputTokens
 	c.Session.OutputTokens += usage.OutputTokens
@@ -171,6 +200,11 @@ func (c *Controller) ProcessUsage(usage UsageEvent) {
 	c.Session.CacheCreationTokens += usage.CacheCreationInputTokens
 	c.Session.LastInputTokens = usage.InputTokens
 	c.Session.LastCacheReadTokens = usage.CacheReadInputTokens
+
+	// Store pending tokens for per-tool-call attribution. The executor
+	// sends UsageEvent before AssistantBatchEvent for the same turn.
+	c.pendingInputTokens = usage.InputTokens
+	c.pendingCacheReadTokens = usage.CacheReadInputTokens
 
 	if pricing, ok := c.Config.Pricing[usage.Model]; ok {
 		c.hasKnownModel = true

@@ -740,6 +740,186 @@ func TestFullLifecycle(t *testing.T) {
 	}
 }
 
+func TestTokenAttribution_SingleToolCall(t *testing.T) {
+	now := time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)
+	sess := &model.Session{}
+	ctrl := NewController(sess, defaultTestConfig(), fakeClock(&now))
+
+	ctrl.StartIteration()
+
+	// Usage arrives before the batch (as per executor ordering).
+	ctrl.ProcessUsage(UsageEvent{
+		Model:                "claude-sonnet-4-5",
+		InputTokens:          1000,
+		CacheReadInputTokens: 500,
+	})
+
+	ctrl.ProcessAssistantBatch([]Event{
+		ToolUseEvent{ID: "t1", Name: "Read", Summary: "a.go"},
+	})
+
+	tc := sess.Iterations[0].Items[0].(*model.ToolCall)
+	if tc.InputTokens != 1000 {
+		t.Errorf("expected InputTokens 1000, got %d", tc.InputTokens)
+	}
+	if tc.CacheReadTokens != 500 {
+		t.Errorf("expected CacheReadTokens 500, got %d", tc.CacheReadTokens)
+	}
+}
+
+func TestTokenAttribution_DividesEvenly(t *testing.T) {
+	now := time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)
+	sess := &model.Session{}
+	ctrl := NewController(sess, defaultTestConfig(), fakeClock(&now))
+
+	ctrl.StartIteration()
+
+	ctrl.ProcessUsage(UsageEvent{
+		Model:                "claude-sonnet-4-5",
+		InputTokens:          900,
+		CacheReadInputTokens: 600,
+	})
+
+	ctrl.ProcessAssistantBatch([]Event{
+		ToolUseEvent{ID: "t1", Name: "Read", Summary: "a.go"},
+		ToolUseEvent{ID: "t2", Name: "Write", Summary: "b.go"},
+		ToolUseEvent{ID: "t3", Name: "Bash", Summary: "run tests"},
+	})
+
+	// 900 / 3 = 300, 600 / 3 = 200
+	for i, item := range sess.Iterations[0].Items {
+		tc := item.(*model.ToolCall)
+		if tc.InputTokens != 300 {
+			t.Errorf("tool call %d: expected InputTokens 300, got %d", i, tc.InputTokens)
+		}
+		if tc.CacheReadTokens != 200 {
+			t.Errorf("tool call %d: expected CacheReadTokens 200, got %d", i, tc.CacheReadTokens)
+		}
+	}
+}
+
+func TestTokenAttribution_DividesWithRounding(t *testing.T) {
+	now := time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)
+	sess := &model.Session{}
+	ctrl := NewController(sess, defaultTestConfig(), fakeClock(&now))
+
+	ctrl.StartIteration()
+
+	ctrl.ProcessUsage(UsageEvent{
+		Model:                "claude-sonnet-4-5",
+		InputTokens:          1000,
+		CacheReadInputTokens: 100,
+	})
+
+	ctrl.ProcessAssistantBatch([]Event{
+		ToolUseEvent{ID: "t1", Name: "Read", Summary: "a.go"},
+		ToolUseEvent{ID: "t2", Name: "Read", Summary: "b.go"},
+		ToolUseEvent{ID: "t3", Name: "Read", Summary: "c.go"},
+	})
+
+	// 1000 / 3 = 333 (rounded: (1000+1)/3 = 333), 100 / 3 = 33 (rounded: (100+1)/3 = 33)
+	group := sess.Iterations[0].Items[0].(*model.ToolCallGroup)
+	for i, child := range group.Children {
+		if child.InputTokens != 333 {
+			t.Errorf("child %d: expected InputTokens 333, got %d", i, child.InputTokens)
+		}
+		if child.CacheReadTokens != 33 {
+			t.Errorf("child %d: expected CacheReadTokens 33, got %d", i, child.CacheReadTokens)
+		}
+	}
+}
+
+func TestTokenAttribution_GroupChildren(t *testing.T) {
+	now := time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)
+	sess := &model.Session{}
+	ctrl := NewController(sess, defaultTestConfig(), fakeClock(&now))
+
+	ctrl.StartIteration()
+
+	ctrl.ProcessUsage(UsageEvent{
+		Model:                "claude-sonnet-4-5",
+		InputTokens:          400,
+		CacheReadInputTokens: 200,
+	})
+
+	// 2 consecutive Reads → grouped, total 2 tool calls
+	ctrl.ProcessAssistantBatch([]Event{
+		ToolUseEvent{ID: "t1", Name: "Read", Summary: "a.go"},
+		ToolUseEvent{ID: "t2", Name: "Read", Summary: "b.go"},
+	})
+
+	group := sess.Iterations[0].Items[0].(*model.ToolCallGroup)
+	for i, child := range group.Children {
+		if child.InputTokens != 200 {
+			t.Errorf("child %d: expected InputTokens 200, got %d", i, child.InputTokens)
+		}
+		if child.CacheReadTokens != 100 {
+			t.Errorf("child %d: expected CacheReadTokens 100, got %d", i, child.CacheReadTokens)
+		}
+	}
+}
+
+func TestTokenAttribution_PendingClearedAfterBatch(t *testing.T) {
+	now := time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)
+	sess := &model.Session{}
+	ctrl := NewController(sess, defaultTestConfig(), fakeClock(&now))
+
+	ctrl.StartIteration()
+
+	// First turn: usage → batch
+	ctrl.ProcessUsage(UsageEvent{
+		Model:                "claude-sonnet-4-5",
+		InputTokens:          1000,
+		CacheReadInputTokens: 500,
+	})
+	ctrl.ProcessAssistantBatch([]Event{
+		ToolUseEvent{ID: "t1", Name: "Read", Summary: "a.go"},
+	})
+
+	// Second turn: no usage event before batch → tokens should be 0
+	ctrl.ProcessAssistantBatch([]Event{
+		ToolUseEvent{ID: "t2", Name: "Write", Summary: "b.go"},
+	})
+
+	tc2 := sess.Iterations[0].Items[1].(*model.ToolCall)
+	if tc2.InputTokens != 0 {
+		t.Errorf("expected InputTokens 0 for second batch (no usage), got %d", tc2.InputTokens)
+	}
+	if tc2.CacheReadTokens != 0 {
+		t.Errorf("expected CacheReadTokens 0 for second batch (no usage), got %d", tc2.CacheReadTokens)
+	}
+}
+
+func TestTokenAttribution_TextOnlyBatchPreservesTokens(t *testing.T) {
+	now := time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)
+	sess := &model.Session{}
+	ctrl := NewController(sess, defaultTestConfig(), fakeClock(&now))
+
+	ctrl.StartIteration()
+
+	ctrl.ProcessUsage(UsageEvent{
+		Model:                "claude-sonnet-4-5",
+		InputTokens:          500,
+		CacheReadInputTokens: 200,
+	})
+
+	// Text-only batch has no tool calls; pending tokens are cleared
+	ctrl.ProcessAssistantBatch([]Event{
+		TextEvent{Text: "thinking..."},
+	})
+
+	// Verify pending tokens were still cleared (no tool calls to attribute to)
+	// A subsequent batch without usage should have 0 tokens
+	ctrl.ProcessAssistantBatch([]Event{
+		ToolUseEvent{ID: "t1", Name: "Read", Summary: "a.go"},
+	})
+
+	tc := sess.Iterations[0].Items[1].(*model.ToolCall)
+	if tc.InputTokens != 0 {
+		t.Errorf("expected InputTokens 0 after text-only batch cleared pending, got %d", tc.InputTokens)
+	}
+}
+
 // errTest is a sentinel error for testing.
 var errTest = &testError{}
 

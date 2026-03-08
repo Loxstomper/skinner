@@ -1781,3 +1781,105 @@ func TestTimeline_View_EditDiffSideBySideRowCount(t *testing.T) {
 		t.Error("expected 'new3' in side-by-side diff")
 	}
 }
+
+func TestTimeline_View_TokenAttribution(t *testing.T) {
+	tl := NewTimeline()
+	items := []model.TimelineItem{
+		&model.ToolCall{
+			ID: "tc1", Name: "Read", Summary: "main.go",
+			Status:          model.ToolCallDone,
+			Duration:        2 * time.Second,
+			InputTokens:     1200,
+			CacheReadTokens: 812,
+		},
+	}
+	props := timelineProps(items)
+
+	result := tl.View(props)
+
+	if !strings.Contains(result, "↑1.2k") {
+		t.Error("expected '↑1.2k' input token count in view")
+	}
+	if !strings.Contains(result, "⚡812") {
+		t.Error("expected '⚡812' cache read token count in view")
+	}
+}
+
+func TestTimeline_View_TokenAttributionLargeValues(t *testing.T) {
+	tl := NewTimeline()
+	items := []model.TimelineItem{
+		&model.ToolCall{
+			ID: "tc1", Name: "Bash", Summary: "go test ./...",
+			Status:          model.ToolCallError,
+			Duration:        4500 * time.Millisecond,
+			InputTokens:     340,
+			CacheReadTokens: 28100,
+		},
+	}
+	props := timelineProps(items)
+
+	result := tl.View(props)
+
+	if !strings.Contains(result, "↑340") {
+		t.Error("expected '↑340' input token count")
+	}
+	if !strings.Contains(result, "⚡28.1k") {
+		t.Error("expected '⚡28.1k' cache read token count")
+	}
+}
+
+func TestTimeline_View_TokenAttributionZeroTokens(t *testing.T) {
+	tl := NewTimeline()
+	items := []model.TimelineItem{
+		&model.ToolCall{
+			ID: "tc1", Name: "Read", Summary: "main.go",
+			Status:          model.ToolCallDone,
+			Duration:        time.Second,
+			InputTokens:     0,
+			CacheReadTokens: 0,
+		},
+	}
+	props := timelineProps(items)
+
+	result := tl.View(props)
+
+	// No token info displayed when both are zero
+	if strings.Contains(result, "↑") {
+		t.Error("did not expect token attribution when tokens are zero")
+	}
+	if strings.Contains(result, "⚡") {
+		t.Error("did not expect cache token attribution when tokens are zero")
+	}
+}
+
+func TestTimeline_View_TokenAttributionInGroup(t *testing.T) {
+	tl := NewTimeline()
+	items := []model.TimelineItem{
+		&model.ToolCallGroup{
+			ToolName: "Read",
+			Expanded: true,
+			Children: []*model.ToolCall{
+				{
+					ID: "tc1", Name: "Read", Summary: "a.go",
+					Status: model.ToolCallDone, Duration: time.Second,
+					InputTokens: 500, CacheReadTokens: 1000,
+				},
+				{
+					ID: "tc2", Name: "Read", Summary: "b.go",
+					Status: model.ToolCallDone, Duration: time.Second,
+					InputTokens: 500, CacheReadTokens: 1000,
+				},
+			},
+		},
+	}
+	props := timelineProps(items)
+
+	result := tl.View(props)
+
+	if !strings.Contains(result, "↑500") {
+		t.Error("expected '↑500' token count in group children")
+	}
+	if !strings.Contains(result, "⚡1.0k") {
+		t.Error("expected '⚡1.0k' cache token count in group children")
+	}
+}

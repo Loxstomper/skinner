@@ -798,16 +798,31 @@ func renderToolCallLine(tc *model.ToolCall, nameWidth, summaryWidth, durWidth in
 	icon := ToolIcon(tc.Name)
 	isKnown := IsKnownTool(tc.Name)
 
+	// Build token attribution string if tokens are available.
+	tokenStr := ""
+	if tc.InputTokens > 0 || tc.CacheReadTokens > 0 {
+		tokenStr = fmt.Sprintf("[↑%s ⚡%s]", FormatTokens(tc.InputTokens), FormatTokens(tc.CacheReadTokens))
+	}
+	tokenWidth := len(tokenStr)
+	if tokenWidth > 0 {
+		tokenWidth++ // account for leading space
+	}
+
 	summary := tc.Summary
 	lineInfo := ""
 	if tc.LineInfo != "" && tc.Status != model.ToolCallRunning {
 		lineInfo = " " + tc.LineInfo
 	}
 	combined := summary + lineInfo
-	if len(combined) > summaryWidth {
-		combined = combined[:summaryWidth-3] + "..."
+	// Reduce summary width to make room for token info.
+	adjSummaryWidth := summaryWidth - tokenWidth
+	if adjSummaryWidth < 10 {
+		adjSummaryWidth = 10
 	}
-	combined = fmt.Sprintf("%-*s", summaryWidth, combined)
+	if len(combined) > adjSummaryWidth {
+		combined = combined[:adjSummaryWidth-3] + "..."
+	}
+	combined = fmt.Sprintf("%-*s", adjSummaryWidth, combined)
 
 	var nameColor, durColor, resultColor string
 	var result string
@@ -836,6 +851,11 @@ func renderToolCallLine(tc *model.ToolCall, nameWidth, summaryWidth, durWidth in
 	styledResult := lipgloss.NewStyle().Foreground(lipgloss.Color(resultColor)).Render(result)
 	styledDur := lipgloss.NewStyle().Foreground(lipgloss.Color(durColor)).Render(dur)
 
+	var styledTokens string
+	if tokenStr != "" {
+		styledTokens = " " + lipgloss.NewStyle().Foreground(lipgloss.Color(th.ForegroundDim)).Render(tokenStr)
+	}
+
 	showName := !compactView || !isKnown
 	if showName {
 		name := fmt.Sprintf("%-*s", nameWidth, tc.Name)
@@ -843,10 +863,10 @@ func renderToolCallLine(tc *model.ToolCall, nameWidth, summaryWidth, durWidth in
 			name = tc.Name[:nameWidth]
 		}
 		styledName := lipgloss.NewStyle().Foreground(lipgloss.Color(nameColor)).Render(name)
-		return fmt.Sprintf("  %s %s %s %s %s", styledIcon, styledName, styledSummary, styledResult, styledDur)
+		return fmt.Sprintf("  %s %s %s%s %s %s", styledIcon, styledName, styledSummary, styledTokens, styledResult, styledDur)
 	}
 
-	return fmt.Sprintf("  %s %s %s %s", styledIcon, styledSummary, styledResult, styledDur)
+	return fmt.Sprintf("  %s %s%s %s %s", styledIcon, styledSummary, styledTokens, styledResult, styledDur)
 }
 
 // renderGroupHeaderLine renders a tool call group header row.

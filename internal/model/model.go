@@ -27,6 +27,10 @@ type ToolCall struct {
 	RawInput      map[string]interface{}
 	ResultContent string
 	Expanded      bool
+
+	// Per-tool-call token attribution (divided equally from assistant turn usage)
+	InputTokens     int64
+	CacheReadTokens int64
 }
 
 func (*ToolCall) timelineItem() {}

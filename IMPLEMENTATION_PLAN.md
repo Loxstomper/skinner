@@ -80,12 +80,17 @@ Implemented in `expand.go` and `timeline.go`:
 
 ## Phase 4 — Token Data
 
-### 4.1 Per-Tool-Call Token Attribution
-- [ ] In `session.go` `ProcessAssistantBatch()`: when creating `ToolCall` items, divide the turn's `message.usage` token counts equally across tool calls in that turn
-- [ ] Add `InputTokens` and `CacheReadTokens` fields to `model.ToolCall`
-- [ ] In `timeline.go`, render `[↑N ⚡N]` inline on each tool call row in `ForegroundDim`
-- [ ] Use `FormatTokens()` for display formatting
-- [ ] Tests: token attribution divides evenly, rendering shows formatted counts
+### ~~4.1 Per-Tool-Call Token Attribution~~ ✅ DONE
+
+Implemented in `session.go` and `timeline.go`:
+- `ProcessUsage()` stores pending tokens (`pendingInputTokens`, `pendingCacheReadTokens`) for the next `ProcessAssistantBatch()` call
+- `ProcessAssistantBatch()` counts total tool calls across all runs (including groups), divides pending tokens equally with rounding to nearest integer, assigns to each `ToolCall`, then clears pending
+- `InputTokens` and `CacheReadTokens` fields on `model.ToolCall` (already existed)
+- `renderToolCallLine()` renders `[↑N ⚡N]` inline in `ForegroundDim` between summary and result indicator, adjusting summary width to make room
+- Token info hidden when both values are zero (no visual noise for text-only turns)
+- Uses existing `FormatTokens()` for display (k/M/G suffixes)
+- 6 session tests: single call gets full tokens, even division across 3 calls, rounding with remainder, group children get equal share, pending cleared after batch, text-only batch clears pending
+- 4 timeline tests: token display with k-suffix, large values, zero tokens hidden, tokens in group children
 
 ### 4.2 Rate Limit Window Usage (Placeholder)
 - [ ] Add `RateLimitInfo` struct with `FiveHourPercent` and `WeeklyPercent` fields (both `*float64`, nil = unknown)
