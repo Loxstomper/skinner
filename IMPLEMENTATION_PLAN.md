@@ -77,11 +77,13 @@ Implemented in `modal.go` and `root.go`:
 
 ## Phase 3 — Content & Display
 
-### 3.1 Remove Truncation from Expanded Content
-- [ ] Remove `maxExpandedLines` constant and `truncateLines()` calls from `expand.go`
-- [ ] Update `expandedContentLines()` to return all lines
-- [ ] Update `toolCallLineCount()` in `cursor.go` to use actual content length (no cap)
-- [ ] Update tests: remove assertions for "... N more lines ..." truncation, add tests for full content display
+### ~~3.1 Remove Truncation from Expanded Content~~ ✅ DONE
+
+Implemented in `expand.go`:
+- Removed `maxExpandedLines` constant and `truncateLines()` function
+- `expandedContentLines()` now returns all lines without truncation
+- `toolCallLineCount()` already uses actual content length via `expandedContentLines()` (no separate cap)
+- Updated tests: `TestExpandedContentLines_FullContent` verifies all 30 lines returned, `TestToolCallLineCount_ExpandedLargeContent` expects 31 (1 header + 30 content), `TestTimeline_View_ExpandedFullContent` verifies full content renders and no truncation footer appears
 
 ### 3.2 Sub-Scroll for Expanded Content
 - [ ] Add `subScrollMode` bool and `subScrollOffset` int to `Timeline`
@@ -150,5 +152,5 @@ Implemented in `modal.go` and `root.go`:
 - [x] Add integration test: left pane auto-hide on narrow terminal
 - [ ] Add integration test: sub-scroll enter/navigate/exit
 - [ ] Add integration test: count+jump motions
-- [ ] Add integration test: expand shows full content (no truncation)
+- [x] Add integration test: expand shows full content (no truncation)
 - [ ] Add integration test: configurable keybindings apply end-to-end

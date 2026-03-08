@@ -216,8 +216,9 @@ func TestExpandedContentLines_EmptyResultContent(t *testing.T) {
 	}
 }
 
-func TestExpandedContentLines_Truncation(t *testing.T) {
-	// Build content with 30 lines
+func TestExpandedContentLines_FullContent(t *testing.T) {
+	// Build content with 30 lines — all should be returned without truncation.
+	// Sub-scroll (phase 3.2) handles viewport management for large content.
 	var contentLines []string
 	for i := 1; i <= 30; i++ {
 		contentLines = append(contentLines, fmt.Sprintf("line %d", i))
@@ -229,17 +230,14 @@ func TestExpandedContentLines_Truncation(t *testing.T) {
 	}
 
 	lines := expandedContentLines(tc)
-	if len(lines) != maxExpandedLines {
-		t.Errorf("expected %d lines after truncation, got %d", maxExpandedLines, len(lines))
+	if len(lines) != 30 {
+		t.Errorf("expected all 30 lines returned, got %d", len(lines))
 	}
-	// Last line should be the truncation footer
-	lastLine := lines[len(lines)-1]
-	if !strings.HasPrefix(lastLine, "...") || !strings.HasSuffix(lastLine, "more lines ...") {
-		t.Errorf("expected truncation footer, got %q", lastLine)
+	if lines[0] != "line 1" {
+		t.Errorf("expected first line 'line 1', got %q", lines[0])
 	}
-	// Should indicate 11 more lines (30 - 19 shown = 11)
-	if !strings.Contains(lastLine, "11") {
-		t.Errorf("expected '11 more lines' in footer, got %q", lastLine)
+	if lines[29] != "line 30" {
+		t.Errorf("expected last line 'line 30', got %q", lines[29])
 	}
 }
 
@@ -387,8 +385,8 @@ func TestToolCallLineCount_ExpandedNoContent(t *testing.T) {
 	}
 }
 
-func TestToolCallLineCount_ExpandedWithTruncation(t *testing.T) {
-	// Build content with 30 lines
+func TestToolCallLineCount_ExpandedLargeContent(t *testing.T) {
+	// Build content with 30 lines — all lines counted without truncation.
 	var contentLines []string
 	for i := 1; i <= 30; i++ {
 		contentLines = append(contentLines, fmt.Sprintf("line %d", i))
@@ -400,9 +398,9 @@ func TestToolCallLineCount_ExpandedWithTruncation(t *testing.T) {
 	}
 
 	count := toolCallLineCount(tc)
-	// 1 header + 20 content lines (truncated from 30) = 21
-	if count != 1+maxExpandedLines {
-		t.Errorf("expected %d (1 + maxExpandedLines), got %d", 1+maxExpandedLines, count)
+	// 1 header + 30 content lines = 31
+	if count != 31 {
+		t.Errorf("expected 31 (1 header + 30 content), got %d", count)
 	}
 }
 

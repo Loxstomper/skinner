@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -500,16 +501,16 @@ func TestTimeline_View_ExpandedGroupChild(t *testing.T) {
 	}
 }
 
-func TestTimeline_View_ExpandedTruncation(t *testing.T) {
+func TestTimeline_View_ExpandedFullContent(t *testing.T) {
 	tl := NewTimeline()
 
-	// Create content that exceeds maxExpandedLines (20)
+	// Create content with 30 lines — all should render without truncation.
 	var longContent strings.Builder
 	for i := 0; i < 30; i++ {
 		if i > 0 {
 			longContent.WriteString("\n")
 		}
-		longContent.WriteString("line content")
+		longContent.WriteString(fmt.Sprintf("line %d", i+1))
 	}
 
 	items := []model.TimelineItem{
@@ -531,9 +532,13 @@ func TestTimeline_View_ExpandedTruncation(t *testing.T) {
 
 	result := tl.View(props)
 
-	// Should show truncation footer
-	if !strings.Contains(result, "more lines") {
-		t.Error("expected truncation footer with 'more lines' for content exceeding 20 lines")
+	// No truncation footer should appear.
+	if strings.Contains(result, "more lines") {
+		t.Error("expected no truncation footer — full content should be displayed")
+	}
+	// Verify content from near the end is present.
+	if !strings.Contains(result, "line 30") {
+		t.Error("expected 'line 30' in expanded view — all content should be shown")
 	}
 }
 

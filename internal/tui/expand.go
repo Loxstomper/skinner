@@ -1,7 +1,6 @@
 package tui
 
 import (
-	"fmt"
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
@@ -9,15 +8,11 @@ import (
 	"github.com/loxstomper/skinner/internal/theme"
 )
 
-// maxExpandedLines is the maximum number of content lines shown in an expanded
-// tool call detail view. Content exceeding this limit is truncated with a
-// footer indicating how many lines were omitted.
-const maxExpandedLines = 20
-
 // expandedContentLines returns the content lines to display below an expanded
 // tool call. The lines are plain text (not styled) — styling is applied by
 // renderExpandedContentLine. Returns nil if no content is available or the tool
-// call is not expanded.
+// call is not expanded. All content lines are returned without truncation;
+// sub-scroll (3.2) handles viewport management for large content.
 func expandedContentLines(tc *model.ToolCall) []string {
 	if !tc.Expanded {
 		return nil
@@ -42,7 +37,7 @@ func expandedContentLines(tc *model.ToolCall) []string {
 		return nil
 	}
 
-	return truncateLines(lines)
+	return lines
 }
 
 // bashExpandedLines returns "$ command" followed by the command output.
@@ -112,19 +107,6 @@ func renderEditDiff(rawInput map[string]interface{}) []string {
 	}
 
 	return lines
-}
-
-// truncateLines truncates to maxExpandedLines, replacing the last line with a
-// footer showing how many lines were omitted.
-func truncateLines(lines []string) []string {
-	if len(lines) <= maxExpandedLines {
-		return lines
-	}
-	remaining := len(lines) - maxExpandedLines + 1
-	result := make([]string, maxExpandedLines)
-	copy(result, lines[:maxExpandedLines-1])
-	result[maxExpandedLines-1] = fmt.Sprintf("... %d more lines ...", remaining)
-	return result
 }
 
 // toolCallLineCount returns the number of display lines a tool call occupies.
