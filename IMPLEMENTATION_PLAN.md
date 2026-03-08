@@ -14,7 +14,7 @@
 - ~~2.3 Help Modal~~ — `?` opens, any key dismisses, 4 sections reflecting `KeyMap` bindings; 7 tests
 - **Note**: Bubble Tea uses `"esc"` not `"escape"` — `normalizeKeyName()` and `DisplayString()` handle this
 
-## Phase 3 — Content & Display
+## Phase 3 — Content & Display ✅ ALL DONE
 
 ### ~~3.1 Remove Truncation from Expanded Content~~ ✅ DONE
 
@@ -64,14 +64,19 @@ Implemented in `timeline.go` and `root.go`:
 - 11 unit tests: digit accumulation, leading zero, consume empty/with value, clear, move down/up with count, no-count default, count display, no display when empty
 - 7 integration tests: 5j moves 5, 12k moves 12, no-prefix moves 1, buffer clears on other keys, leading zero ignored, digits only on right pane, pending count visible in view
 
-### 3.5 Full Diffs with Adaptive Layout
-- [ ] Update `renderEditDiff()` in `expand.go` to show full diff (no truncation — already done in 3.1)
-- [ ] Add line numbers to diff output gutter
-- [ ] Detect terminal width: if ≥ 120 cols, render side-by-side; otherwise unified
-- [ ] Side-by-side: left column (old, red) | divider | right column (new, green), each half-width
-- [ ] Unified: current format with line numbers, `-` red, `+` green
-- [ ] Color applied in both layouts
-- [ ] Tests: unified below 120 cols, side-by-side at 120+, line numbers present, colors applied
+### ~~3.5 Full Diffs with Adaptive Layout~~ ✅ DONE
+
+Implemented in `expand.go` and `timeline.go`:
+- `renderEditDiffStyled()` produces pre-styled diff lines, choosing layout based on available width
+- `renderUnifiedDiffStyled()` (width < 120): line numbers in gutter (`%4d `), `-` lines in red (`StatusError`), `+` lines in green (`StatusSuccess`)
+- `renderSideBySideDiff()` (width ≥ 120): left column (old, red) | `│` divider (dim) | right column (new, green), each with line numbers and half the available width
+- `appendExpandedLines()` in `timeline.go` detects Edit tool calls and uses `renderEditDiffStyled` for pre-rendered output, bypassing generic `renderExpandedContentLine` per-line styling
+- Sub-scroll integration: uses styled line count for viewport calculations (handles side-by-side producing fewer lines than unified)
+- Helper functions: `truncateToWidth()`, `padToWidth()` for column formatting
+- `sideBySideMinWidth` constant (120) controls layout threshold
+- `renderEditDiff()` retained for backward-compatible plain-text line counting used by scroll management
+- 19 new tests: unified line numbers, side-by-side layout/divider/line numbers, nil/empty/only-old/only-new edge cases, truncation/padding helpers, unified content verification, side-by-side basic/uneven layouts
+- 3 integration tests: unified with line numbers at width 80, side-by-side at width 140, side-by-side row count verification
 
 ## Phase 4 — Token Data
 

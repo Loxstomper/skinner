@@ -1672,3 +1672,112 @@ func TestTimeline_View_NoPendingCountWhenEmpty(t *testing.T) {
 		t.Error("expected 'Read' in view with no pending count")
 	}
 }
+
+// --- Tests for 3.5 Full Diffs with Adaptive Layout ---
+
+func TestTimeline_View_EditDiffUnifiedHasLineNumbers(t *testing.T) {
+	tl := NewTimeline()
+	items := []model.TimelineItem{
+		&model.ToolCall{
+			ID: "tc1", Name: "Edit", Summary: "main.go",
+			Status:   model.ToolCallDone,
+			Duration: time.Second,
+			RawInput: map[string]interface{}{
+				"old_string": "oldLine1\noldLine2",
+				"new_string": "newLine1",
+			},
+			Expanded: true,
+		},
+	}
+	// Width 80 (< 120): unified diff with line numbers
+	props := TimelineProps{
+		Items:   items,
+		Width:   80,
+		Height:  20,
+		Focused: true,
+		Theme:   testTheme(),
+	}
+	result := tl.View(props)
+
+	// Unified diff should show -/+ with line numbers
+	if !strings.Contains(result, "-oldLine1") {
+		t.Error("expected '-oldLine1' in unified diff")
+	}
+	if !strings.Contains(result, "+newLine1") {
+		t.Error("expected '+newLine1' in unified diff")
+	}
+	// Line number "1" should be present (gutter)
+	if !strings.Contains(result, "1") {
+		t.Error("expected line number in unified diff gutter")
+	}
+}
+
+func TestTimeline_View_EditDiffSideBySide(t *testing.T) {
+	tl := NewTimeline()
+	items := []model.TimelineItem{
+		&model.ToolCall{
+			ID: "tc1", Name: "Edit", Summary: "main.go",
+			Status:   model.ToolCallDone,
+			Duration: time.Second,
+			RawInput: map[string]interface{}{
+				"old_string": "oldContent",
+				"new_string": "newContent",
+			},
+			Expanded: true,
+		},
+	}
+	// Width 140 (>= 120): side-by-side diff
+	props := TimelineProps{
+		Items:   items,
+		Width:   140,
+		Height:  20,
+		Focused: true,
+		Theme:   testTheme(),
+	}
+	result := tl.View(props)
+
+	// Side-by-side should show both old and new content on same row
+	if !strings.Contains(result, "oldContent") {
+		t.Error("expected 'oldContent' in side-by-side diff")
+	}
+	if !strings.Contains(result, "newContent") {
+		t.Error("expected 'newContent' in side-by-side diff")
+	}
+	// Should contain vertical divider
+	if !strings.Contains(result, "│") {
+		t.Error("expected '│' divider in side-by-side diff")
+	}
+}
+
+func TestTimeline_View_EditDiffSideBySideRowCount(t *testing.T) {
+	tl := NewTimeline()
+	items := []model.TimelineItem{
+		&model.ToolCall{
+			ID: "tc1", Name: "Edit", Summary: "main.go",
+			Status:   model.ToolCallDone,
+			Duration: time.Second,
+			RawInput: map[string]interface{}{
+				"old_string": "old1",
+				"new_string": "new1\nnew2\nnew3",
+			},
+			Expanded: true,
+		},
+	}
+	// Width 140: side-by-side should produce max(1, 3) = 3 content rows
+	props := TimelineProps{
+		Items:   items,
+		Width:   140,
+		Height:  20,
+		Focused: true,
+		Theme:   testTheme(),
+	}
+	result := tl.View(props)
+
+	// Should contain all new lines
+	if !strings.Contains(result, "new1") {
+		t.Error("expected 'new1' in side-by-side diff")
+	}
+	if !strings.Contains(result, "new3") {
+		t.Error("expected 'new3' in side-by-side diff")
+	}
+}

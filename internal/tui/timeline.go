@@ -397,12 +397,27 @@ func (tl *Timeline) appendExpandedLines(lines []renderedLine, tc *model.ToolCall
 		cw = 10
 	}
 
-	if inSubScroll && subScrollEnabled(len(allContent), props.Height) {
+	// For Edit tool calls, use pre-styled diff rendering with line numbers
+	// and adaptive layout (unified vs side-by-side based on width).
+	isEditDiff := tc.Name == "Edit" && tc.RawInput != nil
+
+	// For Edit diffs, pre-render styled lines and use their count for
+	// sub-scroll calculations (side-by-side may have fewer lines than unified).
+	var editStyledLines []string
+	contentLen := len(allContent)
+	if isEditDiff {
+		editStyledLines = renderEditDiffStyled(tc.RawInput, cw, props.Theme)
+		if editStyledLines != nil {
+			contentLen = len(editStyledLines)
+		}
+	}
+
+	if inSubScroll && subScrollEnabled(contentLen, props.Height) {
 		// Sub-scroll mode: show capped viewport with border and indicator
-		vpHeight := subScrollViewportHeight(len(allContent), props.Height)
+		vpHeight := subScrollViewportHeight(contentLen, props.Height)
 		offset := tl.SubScrollOffset
 		// Clamp offset
-		maxOffset := len(allContent) - vpHeight
+		maxOffset := contentLen - vpHeight
 		if maxOffset < 0 {
 			maxOffset = 0
 		}
@@ -414,13 +429,18 @@ func (tl *Timeline) appendExpandedLines(lines []renderedLine, tc *model.ToolCall
 		dimStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(props.Theme.ForegroundDim))
 		borderChar := dimStyle.Render("│")
 
-		visibleContent := allContent[offset : offset+vpHeight]
-		for i, cl := range visibleContent {
-			rendered := indent + borderChar + " " + renderExpandedContentLine(cl, tc.Name, cw-3, props.Theme)
+		for i := 0; i < vpHeight; i++ {
+			contentIdx := offset + i
+			var rendered string
+			if isEditDiff && contentIdx < len(editStyledLines) {
+				rendered = indent + borderChar + " " + editStyledLines[contentIdx]
+			} else if contentIdx < len(allContent) {
+				rendered = indent + borderChar + " " + renderExpandedContentLine(allContent[contentIdx], tc.Name, cw-3, props.Theme)
+			}
 
 			// Last line: append scroll indicator
 			if i == vpHeight-1 {
-				indicator := fmt.Sprintf("[%d/%d]", offset+vpHeight, len(allContent))
+				indicator := fmt.Sprintf("[%d/%d]", offset+vpHeight, contentLen)
 				styledIndicator := dimStyle.Render(indicator)
 				lineWidth := lipgloss.Width(rendered)
 				indicatorWidth := lipgloss.Width(styledIndicator)
@@ -436,9 +456,17 @@ func (tl *Timeline) appendExpandedLines(lines []renderedLine, tc *model.ToolCall
 		}
 	} else {
 		// Normal inline display
-		for _, cl := range allContent {
-			rendered := indent + renderExpandedContentLine(cl, tc.Name, cw, props.Theme)
-			lines = append(lines, renderedLine{text: rendered, flatIdx: -1})
+		if isEditDiff && editStyledLines != nil {
+			// Pre-styled diff lines with line numbers and adaptive layout
+			for _, sl := range editStyledLines {
+				rendered := indent + sl
+				lines = append(lines, renderedLine{text: rendered, flatIdx: -1})
+			}
+		} else {
+			for _, cl := range allContent {
+				rendered := indent + renderExpandedContentLine(cl, tc.Name, cw, props.Theme)
+				lines = append(lines, renderedLine{text: rendered, flatIdx: -1})
+			}
 		}
 	}
 
