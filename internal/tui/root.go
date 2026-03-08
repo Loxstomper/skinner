@@ -49,6 +49,7 @@ type Model struct {
 	focusedPane     paneID
 	compactView     bool
 	leftPaneVisible bool
+	lineNumbers     bool
 
 	// KeyMap-driven sequence state machine (replaces hardcoded gPending)
 	pendingAction string
@@ -78,6 +79,7 @@ func NewModel(sess model.Session, cfg config.Config, promptContent string, th th
 		theme:           th,
 		compactView:     compactView,
 		leftPaneVisible: true,
+		lineNumbers:     cfg.LineNumbers,
 		exitOnComplete:  exitOnComplete,
 		eventCh:         make(chan tea.Msg, 100),
 		focusedPane:     leftPane,
@@ -288,6 +290,9 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case config.ActionToggleView:
 		m.compactView = !m.compactView
 
+	case config.ActionToggleLineNumbers:
+		m.lineNumbers = !m.lineNumbers
+
 	case config.ActionExpand:
 		if m.focusedPane == leftPane {
 			m.focusedPane = rightPane
@@ -427,6 +432,7 @@ func (m *Model) View() string {
 		Height:      paneHeight,
 		Focused:     m.focusedPane == rightPane,
 		CompactView: m.compactView,
+		LineNumbers: m.lineNumbers,
 		Theme:       m.theme,
 	})
 
@@ -528,6 +534,7 @@ func (m *Model) timelineProps(items []model.TimelineItem) TimelineProps {
 		Height:      m.rightPaneHeight(),
 		Focused:     m.focusedPane == rightPane,
 		CompactView: m.compactView,
+		LineNumbers: m.lineNumbers,
 		Theme:       m.theme,
 	}
 }

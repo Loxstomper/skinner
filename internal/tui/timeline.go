@@ -39,6 +39,7 @@ type TimelineProps struct {
 	Height      int
 	Focused     bool
 	CompactView bool
+	LineNumbers bool
 	Theme       theme.Theme
 }
 
@@ -255,6 +256,9 @@ func (tl *Timeline) handleEnter(props TimelineProps) {
 	}
 }
 
+// gutterWidth is the width of the line number gutter (3-char number + 1 space).
+const gutterWidth = 4
+
 // View renders the timeline.
 func (tl *Timeline) View(props TimelineProps) string {
 	style := lipgloss.NewStyle().Width(props.Width).Height(props.Height)
@@ -263,13 +267,22 @@ func (tl *Timeline) View(props TimelineProps) string {
 		return style.Render("  No activity yet...")
 	}
 
+	// Reserve gutter space when line numbers are enabled.
+	contentWidth := props.Width
+	if props.LineNumbers {
+		contentWidth -= gutterWidth
+		if contentWidth < 20 {
+			contentWidth = 20
+		}
+	}
+
 	iconWidth := 2 // icon + space
 	nameWidth := 6
 	durWidth := 8
 
 	var summaryWidth, childSummaryWidth int
 	if props.CompactView {
-		summaryWidth = props.Width - iconWidth - durWidth - 5
+		summaryWidth = contentWidth - iconWidth - durWidth - 5
 		if summaryWidth < 10 {
 			summaryWidth = 10
 		}
@@ -278,7 +291,7 @@ func (tl *Timeline) View(props TimelineProps) string {
 			childSummaryWidth = 10
 		}
 	} else {
-		summaryWidth = props.Width - iconWidth - nameWidth - durWidth - 7
+		summaryWidth = contentWidth - iconWidth - nameWidth - durWidth - 7
 		if summaryWidth < 10 {
 			summaryWidth = 10
 		}
@@ -293,7 +306,7 @@ func (tl *Timeline) View(props TimelineProps) string {
 	for _, item := range props.Items {
 		switch it := item.(type) {
 		case *model.TextBlock:
-			textLines := renderTextBlockLines(it, props.Width, props.CompactView, props.Theme)
+			textLines := renderTextBlockLines(it, contentWidth, props.CompactView, props.Theme)
 			for _, l := range textLines {
 				lines = append(lines, renderedLine{text: l, flatIdx: flatPos})
 			}
@@ -302,7 +315,7 @@ func (tl *Timeline) View(props TimelineProps) string {
 			l := renderToolCallLine(it, nameWidth, summaryWidth, durWidth, props.CompactView, props.Theme)
 			lines = append(lines, renderedLine{text: l, flatIdx: flatPos})
 			if it.Expanded {
-				lines = tl.appendExpandedLines(lines, it, flatPos, "", props)
+				lines = tl.appendExpandedLines(lines, it, flatPos, "", props, contentWidth)
 			}
 			flatPos++
 		case *model.ToolCallGroup:
@@ -316,7 +329,7 @@ func (tl *Timeline) View(props TimelineProps) string {
 					cl = "  " + cl
 					lines = append(lines, renderedLine{text: cl, flatIdx: flatPos})
 					if child.Expanded {
-						lines = tl.appendExpandedLines(lines, child, flatPos, "  ", props)
+						lines = tl.appendExpandedLines(lines, child, flatPos, "  ", props, contentWidth)
 					}
 					flatPos++
 				}
@@ -329,16 +342,16 @@ func (tl *Timeline) View(props TimelineProps) string {
 
 // appendExpandedLines adds expanded content lines for a tool call, applying
 // sub-scroll viewport capping when in sub-scroll mode.
-func (tl *Timeline) appendExpandedLines(lines []renderedLine, tc *model.ToolCall, flatPos int, indent string, props TimelineProps) []renderedLine {
+func (tl *Timeline) appendExpandedLines(lines []renderedLine, tc *model.ToolCall, flatPos int, indent string, props TimelineProps, availWidth int) []renderedLine {
 	allContent := expandedContentLines(tc)
 	if len(allContent) == 0 {
 		return lines
 	}
 
 	inSubScroll := tl.SubScrollIdx == flatPos
-	contentWidth := props.Width - len(indent)
-	if contentWidth < 10 {
-		contentWidth = 10
+	cw := availWidth - len(indent)
+	if cw < 10 {
+		cw = 10
 	}
 
 	if inSubScroll && subScrollEnabled(len(allContent), props.Height) {
@@ -360,7 +373,7 @@ func (tl *Timeline) appendExpandedLines(lines []renderedLine, tc *model.ToolCall
 
 		visibleContent := allContent[offset : offset+vpHeight]
 		for i, cl := range visibleContent {
-			rendered := indent + borderChar + " " + renderExpandedContentLine(cl, tc.Name, contentWidth-3, props.Theme)
+			rendered := indent + borderChar + " " + renderExpandedContentLine(cl, tc.Name, cw-3, props.Theme)
 
 			// Last line: append scroll indicator
 			if i == vpHeight-1 {
@@ -368,7 +381,7 @@ func (tl *Timeline) appendExpandedLines(lines []renderedLine, tc *model.ToolCall
 				styledIndicator := dimStyle.Render(indicator)
 				lineWidth := lipgloss.Width(rendered)
 				indicatorWidth := lipgloss.Width(styledIndicator)
-				padding := props.Width - lineWidth - indicatorWidth
+				padding := availWidth - lineWidth - indicatorWidth
 				if padding > 0 {
 					rendered += strings.Repeat(" ", padding) + styledIndicator
 				} else {
@@ -381,7 +394,7 @@ func (tl *Timeline) appendExpandedLines(lines []renderedLine, tc *model.ToolCall
 	} else {
 		// Normal inline display
 		for _, cl := range allContent {
-			rendered := indent + renderExpandedContentLine(cl, tc.Name, contentWidth, props.Theme)
+			rendered := indent + renderExpandedContentLine(cl, tc.Name, cw, props.Theme)
 			lines = append(lines, renderedLine{text: rendered, flatIdx: -1})
 		}
 	}
@@ -389,7 +402,7 @@ func (tl *Timeline) appendExpandedLines(lines []renderedLine, tc *model.ToolCall
 	return lines
 }
 
-// renderWithLines applies scroll and cursor highlighting.
+// renderWithLines applies scroll, cursor highlighting, and optional line number gutter.
 func (tl *Timeline) renderWithLines(lines []renderedLine, props TimelineProps) string {
 	style := lipgloss.NewStyle().Width(props.Width).Height(props.Height)
 
@@ -407,10 +420,34 @@ func (tl *Timeline) renderWithLines(lines []renderedLine, props TimelineProps) s
 
 	visible := lines[start:end]
 	highlight := lipgloss.NewStyle().Background(lipgloss.Color(props.Theme.Highlight))
+	highlightStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(props.Theme.Highlight))
+	dimStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(props.Theme.ForegroundDim))
 
 	var rendered []string
 	for _, line := range visible {
 		text := line.text
+
+		// Prepend gutter with relative line numbers when enabled.
+		if props.LineNumbers {
+			var gutter string
+			if line.flatIdx >= 0 {
+				rel := line.flatIdx - tl.Cursor
+				if rel < 0 {
+					rel = -rel
+				}
+				num := fmt.Sprintf("%3d ", rel)
+				if rel == 0 {
+					gutter = highlightStyle.Render(num)
+				} else {
+					gutter = dimStyle.Render(num)
+				}
+			} else {
+				// Expanded content lines: blank gutter
+				gutter = dimStyle.Render("    ")
+			}
+			text = gutter + text
+		}
+
 		if props.Focused && line.flatIdx >= 0 && line.flatIdx == tl.Cursor {
 			displayWidth := lipgloss.Width(text)
 			if displayWidth < props.Width {

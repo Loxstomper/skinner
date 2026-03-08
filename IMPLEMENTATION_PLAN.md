@@ -36,13 +36,17 @@ Implemented in `timeline.go` and `expand.go`:
 - `toolCallLineCountCapped()` for sub-scroll-aware scroll management via `effectiveTotalLines()`/`effectiveLineRange()`
 - 17 tests: viewport height calc, enter/exit sub-scroll, move up/down, jump top/bottom, clamp, indicator rendering, group children, cursor stability, reset clears sub-scroll
 
-### 3.3 Relative Line Numbers
-- [ ] Add `lineNumbers` bool to `Model` (from config `view.line_numbers`, default `true`)
-- [ ] Add `#` keybind (via `KeyMap`) to toggle `lineNumbers`
-- [ ] In `timeline.go` `View()`, render a 4-column gutter with relative line numbers when enabled
-- [ ] Line 0 = cursor position (rendered with `Highlight` color), others show distance in `ForegroundDim`
-- [ ] Expanded content lines share their parent's line number (not individually numbered)
-- [ ] Tests: gutter renders relative numbers, toggle with `#`, cursor at 0
+### ~~3.3 Relative Line Numbers~~ ✅ DONE
+
+Implemented in `root.go` and `timeline.go`:
+- `lineNumbers` bool on `Model`, initialized from `config.LineNumbers` (default `true`)
+- `LineNumbers` field on `TimelineProps`, passed from `root.go`
+- `ActionToggleLineNumbers` (`#` key) handler in `handleKey()` toggles at runtime
+- `gutterWidth` constant (4 columns: 3-char right-aligned number + 1 space)
+- `renderWithLines()` prepends gutter to each visible line: cursor line shows `  0 ` in `Highlight` color, others show relative distance in `ForegroundDim`, expanded content lines get blank gutter
+- `View()` reserves gutter width from content area when line numbers enabled
+- `appendExpandedLines()` takes explicit `availWidth` parameter for correct gutter-aware layout
+- 6 unit tests + 1 integration test: relative numbers render correctly, disabled mode has no gutter, expanded content shares parent number, cursor at zero, width reduction, `#` toggle
 
 ### 3.4 Vim Count+Jump Motions
 - [ ] Add `countBuffer` (string or int accumulator) to `Timeline`

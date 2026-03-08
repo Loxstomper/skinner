@@ -1242,6 +1242,34 @@ func TestIntegration_NoExitFlag_StaysAlive(t *testing.T) {
 	}
 }
 
+// --- # toggles line numbers ---
+
+func TestIntegration_HashTogglesLineNumbers(t *testing.T) {
+	events := []session.Event{
+		session.SubprocessExitEvent{Err: nil},
+	}
+
+	m := newTestModel(events, 1)
+	drainEvents(t, m)
+
+	// Default config has line_numbers = true
+	if !m.lineNumbers {
+		t.Error("expected line numbers on by default")
+	}
+
+	// # toggles off
+	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'#'}})
+	if m.lineNumbers {
+		t.Error("expected line numbers off after #")
+	}
+
+	// # toggles back on
+	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'#'}})
+	if !m.lineNumbers {
+		t.Error("expected line numbers on after second #")
+	}
+}
+
 type testError struct{ msg string }
 
 func (e *testError) Error() string { return e.msg }
