@@ -19,7 +19,10 @@ skinner [--theme=<name>] [--exit] [plan] [max_iterations]
 
 The `--theme` flag selects a color theme (default: `solarized-dark`). See [theme.md](theme.md).
 
-The `--exit` flag causes the TUI to quit automatically after all iterations complete (or the last iteration fails), rather than remaining open for browsing.
+The `--exit` flag causes the TUI to quit automatically after all iterations complete (or the last iteration fails), rather than remaining open for browsing. When `--exit` is active:
+- The TUI exits with code 0 after the final iteration completes.
+- The quit confirmation modal is bypassed entirely (see [quit-confirmation.md](quit-confirmation.md)).
+- No user interaction is required — the process exits cleanly on its own.
 
 ## Iteration Lifecycle
 
@@ -36,7 +39,7 @@ The `--exit` flag causes the TUI to quit automatically after all iterations comp
 ## Subprocess Management
 
 - Each iteration runs one `claude` subprocess at a time (sequential, not parallel).
-- On `ctrl+c`, kill the current subprocess and exit the TUI.
+- On `ctrl+c` or `q`, show the quit confirmation modal (see [quit-confirmation.md](quit-confirmation.md)). Double `ctrl+c` within 500ms force-quits immediately.
 - The current working directory for the subprocess should be the directory where `skinner` was invoked.
 
 ## Session Scope

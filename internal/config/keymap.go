@@ -36,9 +36,28 @@ func (kb KeyBinding) IsSequence() bool {
 	return len(kb.Keys) > 1
 }
 
-// String returns the key binding as a display string.
+// String returns the key binding as a display string using internal key names.
 func (kb KeyBinding) String() string {
 	return strings.Join(kb.Keys, " ")
+}
+
+// displayKeyName maps internal key names back to user-friendly names.
+func displayKeyName(key string) string {
+	switch key {
+	case "esc":
+		return "escape"
+	default:
+		return key
+	}
+}
+
+// DisplayString returns the key binding as a user-friendly display string.
+func (kb KeyBinding) DisplayString() string {
+	parts := make([]string, len(kb.Keys))
+	for i, k := range kb.Keys {
+		parts[i] = displayKeyName(k)
+	}
+	return strings.Join(parts, " ")
 }
 
 // KeyMap maps action names to their key bindings.
@@ -63,13 +82,25 @@ func DefaultKeyMap() KeyMap {
 			ActionJumpTop:           {Keys: []string{"g", "g"}},
 			ActionJumpBottom:        {Keys: []string{"G"}},
 			ActionExpand:            {Keys: []string{"enter"}},
-			ActionEscape:            {Keys: []string{"escape"}},
+			ActionEscape:            {Keys: []string{"esc"}},
 		},
 	}
 }
 
+// normalizeKeyName maps user-facing key names (from config/spec) to the
+// actual key strings that Bubble Tea uses.
+func normalizeKeyName(key string) string {
+	switch key {
+	case "escape":
+		return "esc"
+	default:
+		return key
+	}
+}
+
 // ParseKeyBinding parses a key binding string like "q", "ctrl+c", or "g g"
-// into a KeyBinding.
+// into a KeyBinding. Key names are normalized to match Bubble Tea conventions
+// (e.g. "escape" → "esc").
 func ParseKeyBinding(s string) KeyBinding {
 	s = strings.TrimSpace(s)
 	if s == "" {
@@ -80,7 +111,7 @@ func ParseKeyBinding(s string) KeyBinding {
 	for _, p := range parts {
 		p = strings.TrimSpace(p)
 		if p != "" {
-			keys = append(keys, p)
+			keys = append(keys, normalizeKeyName(p))
 		}
 	}
 	return KeyBinding{Keys: keys}

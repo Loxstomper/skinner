@@ -17,3 +17,8 @@ Skinner is a Go TUI that runs Claude CLI in a loop and displays tool call activi
 | [config.md](config.md) | TOML config file, view mode, theme, CLI overrides |
 | [tech-stack.md](tech-stack.md) | Go, Bubble Tea, Lip Gloss, standard library |
 | [architecture.md](architecture.md) | Package structure, layered design, interfaces, testing strategy |
+| [quit-confirmation.md](quit-confirmation.md) | Quit confirmation modal, double ctrl+c force quit |
+| [token-usage.md](token-usage.md) | Rate limit window display (header), per-tool-call token counts |
+| [sub-scroll.md](sub-scroll.md) | Adaptive sizing and sub-scroll for expanded tool call content |
+| [line-numbers.md](line-numbers.md) | Relative line numbers, vim-style count+j/k jump motions |
+| [help-modal.md](help-modal.md) | Keybinding help overlay, configurable keymapping display |

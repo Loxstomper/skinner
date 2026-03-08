@@ -58,6 +58,10 @@ type Model struct {
 	// Exit when done
 	exitOnComplete bool
 
+	// Modal state
+	activeModal modalType
+	lastCtrlCAt time.Time
+
 	// Quit state
 	quitting bool
 }
@@ -161,15 +165,29 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+const ctrlCForceQuitWindow = 500 * time.Millisecond
+
 func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	key := msg.String()
 	km := &m.config.KeyMap
 
-	// ctrl+c is always quit (not configurable per spec)
+	// ctrl+c: double within 500ms force-quits, single shows quit modal.
 	if key == "ctrl+c" {
-		m.quitting = true
-		_ = m.exec.Kill()
-		return m, tea.Quit
+		now := time.Now()
+		if !m.lastCtrlCAt.IsZero() && now.Sub(m.lastCtrlCAt) < ctrlCForceQuitWindow {
+			// Double ctrl+c: force quit immediately.
+			m.quitting = true
+			_ = m.exec.Kill()
+			return m, tea.Quit
+		}
+		m.lastCtrlCAt = now
+		m.activeModal = modalQuitConfirm
+		return m, nil
+	}
+
+	// When a modal is active, route keys to the modal handler.
+	if m.activeModal != modalNone {
+		return m.handleModalKey(msg)
 	}
 
 	// Resolve the key through the KeyMap, handling sequence state.
@@ -207,9 +225,8 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	switch action {
 	case config.ActionQuit:
-		m.quitting = true
-		_ = m.exec.Kill()
-		return m, tea.Quit
+		m.activeModal = modalQuitConfirm
+		return m, nil
 
 	case config.ActionFocusToggle:
 		if m.focusedPane == leftPane {
@@ -263,6 +280,26 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 	}
 
+	return m, nil
+}
+
+// handleModalKey routes key presses to the active modal.
+func (m *Model) handleModalKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	key := msg.String()
+
+	if m.activeModal == modalQuitConfirm {
+		switch key {
+		case "y":
+			m.quitting = true
+			_ = m.exec.Kill()
+			return m, tea.Quit
+		case "n", "esc":
+			m.activeModal = modalNone
+			return m, nil
+		}
+	}
+
+	// All other keys are ignored while a modal is open.
 	return m, nil
 }
 
@@ -363,7 +400,14 @@ func (m *Model) View() string {
 		Render(strings.Join(sepLines, "\n"))
 
 	panes := lipgloss.JoinHorizontal(lipgloss.Top, left, separator, right)
-	return header + "\n" + panes
+	view := header + "\n" + panes
+
+	// Render modal overlay if active.
+	if m.activeModal == modalQuitConfirm {
+		view = RenderQuitConfirmModal(m.width, m.height, m.theme)
+	}
+
+	return view
 }
 
 // headerProps builds the HeaderProps from current model state.

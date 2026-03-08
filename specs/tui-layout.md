@@ -9,7 +9,7 @@ Two-pane layout: a left sidebar listing iterations and a right main pane showing
 A single-line header pinned to the top of the TUI, spanning the full terminal width. Colored with `ForegroundDim` text on the default background.
 
 ```
-              ⏱ 14m32s   ↑42.1k ↓8.3k tokens   ctx 62%   ~$1.24              Iter 3/10 ⟳
+              ⏱ 14m32s   ↑42.1k ↓8.3k tokens   ctx 62%   ~$1.24   5h: 34%  wk: 12%   Iter 3/10 ⟳
 ```
 
 **Centre** (centred in the space left of the iteration indicator):
@@ -20,10 +20,22 @@ A single-line header pinned to the top of the TUI, spanning the full terminal wi
   - Warning (`StatusRunning`) — 70–89%
   - Critical (`StatusError`) — 90%+
 - **Estimated cost** — `~$` followed by the accumulated cost estimate. See [stream-json-format.md](stream-json-format.md) for calculation. Omitted entirely if the model is not in the pricing table.
+- **Rate limit windows** — `5h: N%` and `wk: N%` showing current utilization of the 5-hour and weekly API token windows. See [token-usage.md](token-usage.md) for data source and styling. Displays `--` until data is fetched.
 
 **Right side** (right-aligned):
 - **Iteration progress** — `Iter N` (unlimited mode) or `Iter N/M` (when max iterations is set).
 - **Status icon** — `⟳` while an iteration is running, `✓` when the session has finished all iterations, `✗` if the last iteration failed. Colored per theme (`StatusRunning`/`StatusSuccess`/`StatusError`).
+
+## Responsive Layout
+
+The two-pane layout adapts to terminal width:
+
+| Terminal width | Left pane | Right pane |
+|----------------|-----------|------------|
+| ≥ 80 columns | Visible | Visible |
+| < 80 columns | Hidden | Full width |
+
+When the left pane is hidden, it can be toggled with `[` (see [keybindings.md](keybindings.md)). Pressing `[` on a wide terminal also toggles the left pane off/on.
 
 ## Focus Model
 
@@ -70,46 +82,63 @@ Each tool call is a single row containing:
 2. **Tool name** — left-aligned, fixed width. Colored per state. *(Full view only — hidden in compact view.)*
 3. **Arg summary** — truncated to fit available terminal width (see [stream-json-format.md](stream-json-format.md) for summary extraction per tool). Always dim (`ToolSummary`).
 4. **Line count metadata** — for Read, Edit, and Write only. Shown in parentheses after the arg summary, dim (`ToolSummary`). See [stream-json-format.md](stream-json-format.md) for extraction rules. Blank while the call is in progress (Read metadata comes from the result, so it is only available after completion; Edit and Write metadata comes from the input, so it is available immediately but should still only be shown after completion for visual consistency).
-5. **Result indicator** — `✓` success or `✗` error, colored per state. Blank while in progress.
-6. **Duration** — right-aligned, colored per state (`DurationRunning`/`DurationSuccess`/`DurationError`). Shows `...` while the call is in progress, then the final duration.
+5. **Token counts** — approximate cached vs real input tokens attributed to this tool call, shown as `[↑N ⚡N]` in `ForegroundDim`. See [token-usage.md](token-usage.md) for attribution logic.
+6. **Result indicator** — `✓` success or `✗` error, colored per state. Blank while in progress.
+7. **Duration** — right-aligned, colored per state (`DurationRunning`/`DurationSuccess`/`DurationError`). Shows `...` while the call is in progress, then the final duration.
 
 For unknown tools (not in the icon table), use the fallback icon `` (`f059`, question-circle) and always show the tool name regardless of view mode.
 
 ### Expandable Tool Call Detail
 
-Pressing `enter` on any tool call row (standalone or group child) toggles an expanded detail view below the summary row. The expanded view shows tool-specific content:
+Pressing `enter` on any tool call row (standalone or group child) toggles an expanded detail view below the summary row. The expanded view shows tool-specific content **without truncation** — full content is always available. See [sub-scroll.md](sub-scroll.md) for how large content is handled via adaptive sizing and sub-scroll.
 
 | Tool  | Expanded content                                                    |
 |-------|---------------------------------------------------------------------|
-| Bash  | `$ command` header line, then command output                        |
-| Edit  | Unified diff of `old_string` → `new_string` (see below)            |
-| Read  | File contents from the tool result                                  |
-| Write | The `content` that was written (from the tool input)                |
-| Grep  | Search results from the tool result                                 |
-| Glob  | Matched file list from the tool result                              |
-| Task  | Task output from the tool result                                    |
-| Other | Tool result content, if available                                   |
-
-**Truncation**: Expanded content is limited to **20 lines**. If the content exceeds this limit, the last line shows `... N more lines ...` in dim text (`ForegroundDim`).
+| Bash  | `$ command` header line, then full command output                   |
+| Edit  | Full diff of `old_string` → `new_string` (see below)               |
+| Read  | Full file contents from the tool result                             |
+| Write | Full `content` that was written (from the tool input)               |
+| Grep  | Full search results from the tool result                            |
+| Glob  | Full matched file list from the tool result                         |
+| Task  | Full task output from the tool result                               |
+| Other | Full tool result content, if available                              |
 
 **Styling**: Expanded content lines are indented by 4 spaces and rendered in dim text (`ForegroundDim`), except for Edit diffs which use colored diff styling (see below).
 
-**Cursor behavior**: Expanded content lines are **not individually selectable** — the tool call remains a single cursor position regardless of expansion state. However, the expanded lines count toward the item's display height for scroll calculations (the cursor "covers" the header + all expanded lines, similar to multi-line text blocks).
+**Cursor behavior**: Expanded content lines are **not individually selectable** — the tool call remains a single cursor position regardless of expansion state. However, the expanded lines count toward the item's display height for scroll calculations (the cursor "covers" the header + all expanded lines, similar to multi-line text blocks). Pressing `enter` on an already-expanded tool call enters sub-scroll mode — see [sub-scroll.md](sub-scroll.md).
 
-**Highlighting**: Only the summary header line receives cursor highlighting. The expanded content lines below it are not highlighted.
+**Highlighting**: When the cursor is on a tool call row, the **entire row** is highlighted with the theme's `Highlight` background, padded to the full width of the right pane regardless of content length. The expanded content lines below are not highlighted.
 
 #### Edit Diff Format
 
-When an Edit tool call is expanded, the detail view shows a unified diff:
+When an Edit tool call is expanded, the detail view shows a diff with line numbers. The layout adapts to terminal width:
+
+**Unified diff** (terminal width < 120 columns):
 
 - Lines from `old_string` are prefixed with `-` and colored red (`StatusError`).
 - Lines from `new_string` are prefixed with `+` and colored green (`StatusSuccess`).
+- Line numbers are shown in the gutter.
+- Full diff is displayed — no truncation.
 
 ```
    Edit   src/main.go (+2/-1)                    ✓   0.3s
-      -    return "hello"
-      +    name := "world"
-      +    return fmt.Sprintf("hello, %s", name)
+      42  -    return "hello"
+      42  +    name := "world"
+      43  +    return fmt.Sprintf("hello, %s", name)
+```
+
+**Side-by-side diff** (terminal width ≥ 120 columns):
+
+- Left column: old content with line numbers, removals colored red (`StatusError`).
+- Right column: new content with line numbers, additions colored green (`StatusSuccess`).
+- A vertical divider separates the two columns.
+- Each column gets half the available width.
+- Full diff is displayed — no truncation.
+
+```
+   Edit   src/main.go (+2/-1)                                          ✓   0.3s
+      42 │ return "hello"                    │ 42 │ name := "world"
+         │                                   │ 43 │ return fmt.Sprintf("hello, %s", name)
 ```
 
 #### Bash Expanded Example
@@ -120,7 +149,6 @@ When an Edit tool call is expanded, the detail view shows a unified diff:
       --- FAIL: TestParser (0.01s)
           parser_test.go:42: expected 42, got "42"
       FAIL
-      ... 12 more lines ...
 ```
 
 ### Tool Call Groups
@@ -161,9 +189,13 @@ The right pane supports two view modes, toggled at runtime with `v` (see [keybin
 
 See [tool-call-groups.md](tool-call-groups.md) for expanded group examples in both view modes.
 
+### Relative Line Numbers
+
+The right pane includes a gutter showing relative line numbers for vim-style navigation. See [line-numbers.md](line-numbers.md) for display format, `{count}j`/`{count}k` jump motions, and configuration.
+
 ### Cursor
 
-The right pane has a visible cursor that highlights the current item (text block or tool call row). Move with `j`/`k`/`↑`/`↓` when the right pane is focused.
+The right pane has a visible cursor that highlights the current item (text block or tool call row) with the theme's `Highlight` background, **padded to the full width of the right pane**. Move with `j`/`k`/`↑`/`↓` when the right pane is focused. Supports `{count}j`/`{count}k` for multi-item jumps — see [line-numbers.md](line-numbers.md).
 
 ### Auto-follow
 

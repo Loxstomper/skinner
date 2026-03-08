@@ -35,19 +35,27 @@ Full-width row highlighting already works in `timeline.go` `renderWithLines()`.
 
 ## Phase 2 — Modals
 
-### 2.1 Modal Infrastructure
-- [ ] Add `activeModal` field to `Model` (enum: none, quitConfirm, help)
-- [ ] In `Update()`, intercept all key messages when a modal is active — route to modal handler instead of normal key handling
-- [ ] In `View()`, render modal overlay on top of normal content when active
+### ~~2.1 Modal Infrastructure~~ ✅ DONE
 
-### 2.2 Quit Confirmation Modal
-- [ ] Add `lastCtrlCTime` field to `Model` for double-ctrl+c tracking
-- [ ] On `q`: set `activeModal = quitConfirm`
-- [ ] On `ctrl+c`: check if within 500ms of last ctrl+c — if yes, force quit; if no, record time and set `activeModal = quitConfirm`
-- [ ] Modal view: centered box with "Are you sure you want to quit?" and y/n hints
-- [ ] Modal keys: `y` → kill subprocess + `tea.Quit`; `n` or `escape` → dismiss modal
-- [ ] `--exit` bypasses modal entirely (existing `exitOnComplete` path unchanged)
-- [ ] Tests: q shows modal, y quits, n dismisses, double ctrl+c force-quits, --exit bypasses
+Implemented in `internal/tui/modal.go` and `root.go`:
+- `modalType` enum (`modalNone`, `modalQuitConfirm`, `modalHelp`)
+- `activeModal` and `lastCtrlCAt` fields added to `Model`
+- `handleKey()` checks `m.activeModal != modalNone` and routes to `handleModalKey()` — all normal keybindings are blocked while a modal is active
+- `View()` renders the modal overlay instead of the normal TUI when a modal is active
+- `centerOverlay()` utility centers any rendered block horizontally and vertically in the terminal
+- `RenderQuitConfirmModal()` renders the quit confirmation with theme-aware styling
+
+### ~~2.2 Quit Confirmation Modal~~ ✅ DONE
+
+Implemented in `root.go` and `modal.go`:
+- `q` (via `ActionQuit`) opens quit confirmation modal instead of quitting directly
+- `ctrl+c` (single) shows the quit confirmation modal, records `lastCtrlCAt` timestamp
+- `ctrl+c` (double within 500ms) force-quits immediately — no modal shown
+- Modal keys: `y` → kill subprocess + `tea.Quit`; `n` or `esc` → dismiss modal; all others ignored
+- `--exit` bypasses modal entirely (existing `exitOnComplete` path unchanged)
+- 10 integration tests in `modal_test.go`: q shows modal, y quits, n dismisses, esc dismisses, other keys ignored, blocks navigation, single ctrl+c shows modal, double ctrl+c force-quits, expired ctrl+c window, --exit bypasses
+
+**Bug fixed**: Bubble Tea uses `"esc"` not `"escape"` for the Escape key string. Updated `DefaultKeyMap()` to use `"esc"` and added `normalizeKeyName()` to `ParseKeyBinding()` so user config `escape = "escape"` still works. Added `DisplayString()` to `KeyBinding` for user-friendly display (maps `"esc"` back to `"escape"`).
 
 ### 2.3 Help Modal
 - [ ] On `?` (via `KeyMap`): set `activeModal = help`
@@ -127,7 +135,6 @@ Full-width row highlighting already works in `timeline.go` `renderWithLines()`.
 - [ ] Ensure examples in specs match actual rendering
 
 ### 5.2 Integration Tests for New Features
-- [ ] Add integration test: quit confirmation flow (q → modal → y/n)
 - [ ] Add integration test: help modal open/close
 - [ ] Add integration test: left pane auto-hide on narrow terminal
 - [ ] Add integration test: sub-scroll enter/navigate/exit

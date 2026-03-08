@@ -37,7 +37,7 @@ func TestDefaultKeyMap_DefaultBindings(t *testing.T) {
 		{ActionJumpTop, "g g"},
 		{ActionJumpBottom, "G"},
 		{ActionExpand, "enter"},
-		{ActionEscape, "escape"},
+		{ActionEscape, "esc"},
 	}
 
 	for _, tc := range cases {
@@ -85,6 +85,28 @@ func TestParseKeyBinding_Empty(t *testing.T) {
 	kb := ParseKeyBinding("")
 	if len(kb.Keys) != 0 {
 		t.Errorf("expected 0 keys for empty string, got %d", len(kb.Keys))
+	}
+}
+
+func TestParseKeyBinding_NormalizesEscape(t *testing.T) {
+	kb := ParseKeyBinding("escape")
+	if kb.String() != "esc" {
+		t.Errorf("expected normalized key %q, got %q", "esc", kb.String())
+	}
+	if kb.DisplayString() != "escape" {
+		t.Errorf("expected display string %q, got %q", "escape", kb.DisplayString())
+	}
+}
+
+func TestKeyBinding_DisplayString(t *testing.T) {
+	kb := KeyBinding{Keys: []string{"esc"}}
+	if kb.DisplayString() != "escape" {
+		t.Errorf("expected display %q, got %q", "escape", kb.DisplayString())
+	}
+
+	kb2 := KeyBinding{Keys: []string{"g", "g"}}
+	if kb2.DisplayString() != "g g" {
+		t.Errorf("expected display %q, got %q", "g g", kb2.DisplayString())
 	}
 }
 

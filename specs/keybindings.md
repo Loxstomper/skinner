@@ -1,5 +1,7 @@
 # Keybindings
 
+All keybindings listed here are defaults. Users can remap any action via the `[keybindings]` section in the config file — see [config.md](config.md). The help modal (`?`) always reflects the active keybinding configuration — see [help-modal.md](help-modal.md).
+
 ## Focus
 
 | Key              | Action                                      |
@@ -12,8 +14,8 @@
 
 | Key              | Action                                      |
 |------------------|---------------------------------------------|
-| `j` / `↓`       | Move cursor down                            |
-| `k` / `↑`       | Move cursor up                              |
+| `j` / `↓`       | Move cursor down (accepts `{count}` prefix) |
+| `k` / `↑`       | Move cursor up (accepts `{count}` prefix)   |
 | `g g` / `Home`  | Jump to top                                 |
 | `G` / `End`     | Jump to bottom                              |
 | `pgdn`           | Page scroll down; cursor moves into visible viewport if needed |
@@ -21,23 +23,29 @@
 
 In the **left pane**, cursor movement selects which iteration is displayed in the right pane.
 
-In the **right pane**, cursor movement highlights individual items (text blocks or tool call rows).
+In the **right pane**, cursor movement highlights individual items (text blocks or tool call rows). Digit keys (`1`–`9`) accumulate a count prefix for `j`/`k` jump motions — see [line-numbers.md](line-numbers.md).
 
 ## Actions
 
 | Key              | Action                                      |
 |------------------|---------------------------------------------|
-| `enter`          | Focus right pane (left pane); expand/collapse selected text block, tool call, or tool call group (right pane) |
+| `enter`          | Focus right pane (left pane); expand/collapse selected text block, tool call, or tool call group (right pane); enter sub-scroll mode (on already-expanded tool call) |
+| `escape`         | Exit sub-scroll mode (returns to timeline)  |
 
 ## View
 
 | Key              | Action                                      |
 |------------------|---------------------------------------------|
 | `v`              | Toggle between full and compact view mode   |
+| `#`              | Toggle relative line numbers on/off         |
+| `[`              | Toggle left pane visibility                 |
 
 ## Global
 
 | Key              | Action                                      |
 |------------------|---------------------------------------------|
-| `ctrl+c`         | Kill current subprocess and exit            |
-| `q`              | Exit (same as ctrl+c)                       |
+| `q`              | Show quit confirmation modal                |
+| `ctrl+c`         | Show quit confirmation modal (double within 500ms to force quit) |
+| `?`              | Show help modal (all keybindings)           |
+
+See [quit-confirmation.md](quit-confirmation.md) for quit behavior and [help-modal.md](help-modal.md) for the help overlay.
