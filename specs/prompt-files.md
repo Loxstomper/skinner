@@ -67,18 +67,18 @@ When files exceed the 4-row content area, the list scrolls to keep the cursor vi
 
 ## Focus Model
 
-Three focus targets cycle via `Tab`:
+Four focus targets cycle via `Tab`:
 
 ```
-Iterations → Prompts → Timeline → Iterations
+Plans → Iterations → Prompts → Timeline → Plans
 ```
 
-- **`Tab`**: cycles through all three panes in order.
+- **`Tab`**: cycles through all four panes in order.
 - **`h` / `←`**: from Timeline, focuses Iterations pane.
-- **`l` / `→`**: from any left pane, focuses Timeline.
+- **`l` / `→`**: from any left pane, focuses the right pane (timeline or plan content view).
 - **`Enter`** on the prompt list: opens the prompt read modal for the selected file.
 
-Both Iterations and Prompts are visually in the left column. When the left pane is hidden (terminal < 80 columns), neither can receive focus.
+Plans, Iterations, and Prompts are visually in the left column. When the left pane is hidden (terminal < 80 columns), none can receive focus. See [plan-files.md](plan-files.md) for the plan file picker.
 
 ## Mouse Support
 

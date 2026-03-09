@@ -49,11 +49,15 @@ When the left pane is hidden, it can be toggled with `[` (see [keybindings.md](k
 
 ## Focus Model
 
-Three panes can receive focus, cycled via `Tab`: **Iterations → Prompts → Timeline**. The focused pane has a visual indicator (brighter border or highlight). All movement keys operate on the focused pane. See [keybindings.md](keybindings.md) for controls and [prompt-files.md](prompt-files.md) for the prompt file picker.
+Four panes can receive focus, cycled via `Tab`: **Plans → Iterations → Prompts → Timeline**. The focused pane has a visual indicator (brighter border or highlight). All movement keys operate on the focused pane. The right pane content is driven by which left-pane section has (or last had) focus: Plans shows the plan content view, Iterations/Prompts shows the message timeline. See [keybindings.md](keybindings.md) for controls, [plan-files.md](plan-files.md) for the plan file picker, and [prompt-files.md](prompt-files.md) for the prompt file picker.
 
 ## Left Pane
 
-The left pane is split vertically into two sections: the iteration list (flexible height) and the prompt file picker (fixed 5 rows). A horizontal divider (`─` in `ForegroundDim`) separates them.
+The left pane is split vertically into three sections: the plan file picker (fixed 5 rows) at the top, the iteration list (flexible height) in the middle, and the prompt file picker (fixed 5 rows) at the bottom. Horizontal dividers (`─` in `ForegroundDim`) separate each section.
+
+### Plan File Picker
+
+A fixed-height section at the top of the left pane listing `*_PLAN.md` files. When focused, the right pane shows a glamour-rendered markdown view of the selected plan. See [plan-files.md](plan-files.md) for full details.
 
 ### Iteration List
 

@@ -6,9 +6,9 @@ All keybindings listed here are defaults. Users can remap any action via the `[k
 
 | Key              | Action                                      |
 |------------------|---------------------------------------------|
-| `tab`            | Cycle focus: Iterations → Prompts → Timeline |
-| `h` / `←`       | Focus iterations pane (from timeline)       |
-| `l` / `→`       | Focus timeline pane                         |
+| `tab`            | Cycle focus: Plans → Iterations → Prompts → Timeline |
+| `h` / `←`       | Focus left pane (Plans from plan content view; Iterations from timeline) |
+| `l` / `→`       | Focus right pane (plan content view or timeline)  |
 
 ## Navigation (operates on focused pane)
 
@@ -23,6 +23,8 @@ All keybindings listed here are defaults. Users can remap any action via the `[k
 
 In the **iterations pane**, cursor movement selects which iteration is displayed in the timeline.
 
+In the **plans pane**, cursor movement selects a plan file and live-updates the right pane with the rendered plan content. See [plan-files.md](plan-files.md).
+
 In the **prompts pane**, cursor movement selects a prompt file. See [prompt-files.md](prompt-files.md).
 
 In the **timeline pane**, cursor movement highlights individual items (text blocks or tool call rows). Digit keys (`1`–`9`) accumulate a count prefix for `j`/`k` jump motions — see [line-numbers.md](line-numbers.md).
@@ -32,6 +34,7 @@ In the **timeline pane**, cursor movement highlights individual items (text bloc
 | Key              | Action                                      |
 |------------------|---------------------------------------------|
 | `enter`          | Focus timeline (iterations/prompts pane); expand/collapse selected text block, tool call, or tool call group (timeline); enter sub-scroll mode (on already-expanded tool call) |
+| `e`              | Open `$EDITOR` for the selected plan file (plan list or plan content view) or prompt file (prompt read modal) |
 | `r`              | Start a run from selected prompt file (prompt picker or read modal); opens iterations input modal. Disabled while a run is in progress. |
 | `escape`         | Exit sub-scroll mode (returns to timeline); dismiss modal |
 
