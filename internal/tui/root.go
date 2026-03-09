@@ -25,20 +25,30 @@ type iterationEndMsg struct{}
 type subprocessExitMsg struct{ err error }
 type tickMsg time.Time
 type promptEditorDoneMsg struct{ err error }
+type planEditorDoneMsg struct{ err error }
 
 // Pane focus
 
 type paneID int
 
 const (
-	iterationsPane paneID = iota
+	plansPane paneID = iota
+	iterationsPane
 	promptsPane
 	rightPane
 )
 
+// rightPaneModeType tracks whether the right pane shows plan content or timeline.
+type rightPaneModeType int
+
+const (
+	timelineMode rightPaneModeType = iota
+	planMode
+)
+
 // isLeftPane returns true if the pane is in the left column.
 func isLeftPane(p paneID) bool {
-	return p == iterationsPane || p == promptsPane
+	return p == iterationsPane || p == promptsPane || p == plansPane
 }
 
 // Model is the Bubble Tea model for the TUI.
@@ -52,7 +62,14 @@ type Model struct {
 	// Sub-components
 	iterList   IterList
 	promptList PromptList
+	planList   PlanList
 	timeline   Timeline
+
+	// Plan view state
+	rightPaneMode       rightPaneModeType
+	planViewScroll      int
+	planViewTotalLines  int
+	planScrollPositions map[string]int // per-file scroll persistence
 
 	// Working directory for prompt file scanning
 	workDir string
@@ -100,21 +117,23 @@ func NewModel(sess model.Session, cfg config.Config, promptContent string, th th
 	workDir, _ := os.Getwd()
 
 	return Model{
-		controller:      ctrl,
-		exec:            exec,
-		config:          cfg,
-		promptContent:   promptContent,
-		theme:           th,
-		compactView:     compactView,
-		leftPaneVisible: true,
-		lineNumbers:     cfg.LineNumbers,
-		exitOnComplete:  exitOnComplete,
-		eventCh:         make(chan tea.Msg, 100),
-		focusedPane:     iterationsPane,
-		iterList:        NewIterList(),
-		promptList:      NewPromptList(workDir),
-		timeline:        NewTimeline(),
-		workDir:         workDir,
+		controller:          ctrl,
+		exec:                exec,
+		config:              cfg,
+		promptContent:       promptContent,
+		theme:               th,
+		compactView:         compactView,
+		leftPaneVisible:     true,
+		lineNumbers:         cfg.LineNumbers,
+		exitOnComplete:      exitOnComplete,
+		eventCh:             make(chan tea.Msg, 100),
+		focusedPane:         iterationsPane,
+		iterList:            NewIterList(),
+		promptList:          NewPromptList(workDir),
+		planList:            NewPlanList(workDir),
+		timeline:            NewTimeline(),
+		workDir:             workDir,
+		planScrollPositions: make(map[string]int),
 	}
 }
 
@@ -160,8 +179,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case tickMsg:
-		// Rescan prompt files on each tick (1s interval)
+		// Rescan prompt and plan files on each tick (1s interval)
 		m.promptList.ScanFiles(m.workDir)
+		m.planList.ScanFiles(m.workDir)
 		return m, tickCmd()
 
 	case assistantBatchMsg:
@@ -215,6 +235,13 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case promptEditorDoneMsg:
 		// Editor exited; rescan prompt files in case the file was modified
 		m.promptList.ScanFiles(m.workDir)
+		return m, nil
+
+	case planEditorDoneMsg:
+		// Editor exited; rescan plan files and re-render plan content
+		m.planList.ScanFiles(m.workDir)
+		m.focusedPane = rightPane
+		m.rightPaneMode = planMode
 		return m, nil
 
 	case tea.KeyMsg:
@@ -339,21 +366,29 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			// Can't toggle to hidden pane.
 			break
 		}
-		// Cycle: iterations → prompts → timeline → iterations
+		// Cycle: plans → iterations → prompts → timeline → plans
 		switch m.focusedPane {
+		case plansPane:
+			m.focusedPane = iterationsPane
+			m.rightPaneMode = timelineMode
 		case iterationsPane:
 			m.focusedPane = promptsPane
 		case promptsPane:
 			m.focusedPane = rightPane
 		case rightPane:
-			m.focusedPane = iterationsPane
+			m.focusedPane = plansPane
+			m.rightPaneMode = planMode
 		}
 
 	case config.ActionFocusLeft:
 		if m.leftPaneVisible {
-			// h from right pane goes to last focused left sub-pane
 			if m.focusedPane == rightPane {
-				m.focusedPane = iterationsPane
+				// h from right pane: go to plans if in plan mode, iterations if in timeline mode
+				if m.rightPaneMode == planMode {
+					m.focusedPane = plansPane
+				} else {
+					m.focusedPane = iterationsPane
+				}
 			}
 		}
 
@@ -376,8 +411,13 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	case config.ActionExpand:
 		switch m.focusedPane {
+		case plansPane:
+			// Enter on plans pane: switch to plan content view
+			m.focusedPane = rightPane
+			m.rightPaneMode = planMode
 		case iterationsPane:
 			m.focusedPane = rightPane
+			m.rightPaneMode = timelineMode
 		case promptsPane:
 			if f := m.promptList.SelectedFile(); f != "" {
 				content, err := ReadFileContent(m.workDir, f)
@@ -394,28 +434,47 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	case config.ActionJumpTop:
 		switch m.focusedPane {
+		case plansPane:
+			m.planList.HandleAction("jump_top", m.planListProps())
 		case iterationsPane:
 			m.iterList.JumpToTop()
 			m.timeline.ResetPosition()
 		case promptsPane:
 			m.promptList.HandleAction("jump_top", m.promptListProps())
 		default:
-			m.timeline.JumpToTop()
+			if m.rightPaneMode == planMode {
+				m.planViewScroll = 0
+			} else {
+				m.timeline.JumpToTop()
+			}
 		}
 
 	case config.ActionJumpBottom:
 		switch m.focusedPane {
+		case plansPane:
+			m.planList.HandleAction("jump_bottom", m.planListProps())
 		case iterationsPane:
 			m.iterList.JumpToBottom(len(m.controller.Session.Iterations), m.iterListHeight(), m.controller.Session.Runs)
 			m.timeline.ResetPosition()
 		case promptsPane:
 			m.promptList.HandleAction("jump_bottom", m.promptListProps())
 		default:
-			m.timeline.JumpToBottom(m.currentTimelineProps())
+			if m.rightPaneMode == planMode {
+				m.planViewScroll = ClampPlanScroll(m.planViewTotalLines, m.planViewTotalLines, m.rightPaneHeight())
+			} else {
+				m.timeline.JumpToBottom(m.currentTimelineProps())
+			}
 		}
 
 	case config.ActionMoveDown, config.ActionMoveUp:
 		switch m.focusedPane {
+		case plansPane:
+			oldCursor := m.planList.Cursor
+			m.planList.HandleAction(action, m.planListProps())
+			if m.planList.Cursor != oldCursor {
+				// Reset scroll when switching between plans
+				m.planViewScroll = 0
+			}
 		case iterationsPane:
 			oldCursor := m.iterList.Cursor
 			m.iterList.HandleAction(action, m.iterListProps())
@@ -425,13 +484,24 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		case promptsPane:
 			m.promptList.HandleAction(action, m.promptListProps())
 		default:
-			count := m.timeline.ConsumeCount()
-			clearCount = false // ConsumeCount already cleared
-			m.timeline.HandleActionWithCount(action, count, m.currentTimelineProps())
+			if m.rightPaneMode == planMode {
+				if action == config.ActionMoveDown {
+					m.planViewScroll++
+				} else {
+					m.planViewScroll--
+				}
+				m.planViewScroll = ClampPlanScroll(m.planViewScroll, m.planViewTotalLines, m.rightPaneHeight())
+			} else {
+				count := m.timeline.ConsumeCount()
+				clearCount = false // ConsumeCount already cleared
+				m.timeline.HandleActionWithCount(action, count, m.currentTimelineProps())
+			}
 		}
 
 	case "page_up", "page_down":
 		switch m.focusedPane {
+		case plansPane:
+			m.planList.HandleAction(action, m.planListProps())
 		case iterationsPane:
 			oldCursor := m.iterList.Cursor
 			m.iterList.HandleAction(action, m.iterListProps())
@@ -441,7 +511,24 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		case promptsPane:
 			m.promptList.HandleAction(action, m.promptListProps())
 		default:
-			m.timeline.HandleAction(action, m.currentTimelineProps())
+			if m.rightPaneMode == planMode {
+				pageSize := m.rightPaneHeight() - 1
+				if action == "page_down" {
+					m.planViewScroll += pageSize
+				} else {
+					m.planViewScroll -= pageSize
+				}
+				m.planViewScroll = ClampPlanScroll(m.planViewScroll, m.planViewTotalLines, m.rightPaneHeight())
+			} else {
+				m.timeline.HandleAction(action, m.currentTimelineProps())
+			}
+		}
+	}
+
+	// 'e' key: launch editor for plan files (from plan list or plan content view)
+	if key == "e" && (m.focusedPane == plansPane || (m.focusedPane == rightPane && m.rightPaneMode == planMode)) {
+		if f := m.planList.SelectedFile(); f != "" {
+			return m, m.launchPlanEditor(f)
 		}
 	}
 
@@ -450,6 +537,18 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	}
 
 	return m, nil
+}
+
+// launchPlanEditor launches $EDITOR for the given plan file.
+func (m *Model) launchPlanEditor(filename string) tea.Cmd {
+	editor := os.Getenv("EDITOR")
+	if editor == "" {
+		editor = "vi"
+	}
+	filePath := m.workDir + "/" + filename
+	return tea.ExecProcess(exec.Command(editor, filePath), func(err error) tea.Msg {
+		return planEditorDoneMsg{err: err}
+	})
 }
 
 // handleModalKey routes key presses to the active modal.
@@ -630,13 +729,16 @@ func (m *Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 	leftWidth := m.leftPaneWidth()
 	isLeft := leftWidth > 0 && msg.X < leftWidth
 
-	// For left pane, determine if the click is in the iterations or prompts section
+	// For left pane, determine if the click is in plans, iterations, or prompts section
 	targetPane := rightPane
 	if isLeft {
 		paneHeight := m.rightPaneHeight()
-		if IsInPromptSection(paneRow, paneHeight) {
+		switch {
+		case IsInPlanSection(paneRow):
+			targetPane = plansPane
+		case IsInPromptSection(paneRow, paneHeight):
 			targetPane = promptsPane
-		} else {
+		default:
 			targetPane = iterationsPane
 		}
 	}
@@ -644,7 +746,10 @@ func (m *Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 	switch {
 	case msg.Button == tea.MouseButtonWheelUp:
 		m.focusedPane = targetPane
+		m.updateRightPaneModeForFocus(targetPane)
 		switch targetPane {
+		case plansPane:
+			m.planList.ScrollBy(-mouseScrollLines)
 		case iterationsPane:
 			count := len(m.controller.Session.Iterations)
 			m.iterList.ScrollBy(-mouseScrollLines, count, m.iterListHeight(), m.controller.Session.Runs)
@@ -656,7 +761,10 @@ func (m *Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 
 	case msg.Button == tea.MouseButtonWheelDown:
 		m.focusedPane = targetPane
+		m.updateRightPaneModeForFocus(targetPane)
 		switch targetPane {
+		case plansPane:
+			m.planList.ScrollBy(mouseScrollLines)
 		case iterationsPane:
 			count := len(m.controller.Session.Iterations)
 			m.iterList.ScrollBy(mouseScrollLines, count, m.iterListHeight(), m.controller.Session.Runs)
@@ -668,13 +776,25 @@ func (m *Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 
 	case msg.Button == tea.MouseButtonLeft && msg.Action == tea.MouseActionPress:
 		m.focusedPane = targetPane
+		m.updateRightPaneModeForFocus(targetPane)
 		switch targetPane {
+		case plansPane:
+			planRow := PlanSectionRow(paneRow)
+			oldCursor := m.planList.Cursor
+			m.planList.ClickRow(planRow)
+			if m.planList.Cursor != oldCursor {
+				m.planViewScroll = 0
+			}
 		case iterationsPane:
+			// Adjust row for plan section + divider above iterations
+			iterRow := paneRow - PlanListTotalHeight() - 1
 			count := len(m.controller.Session.Iterations)
 			oldCursor := m.iterList.Cursor
-			if m.iterList.ClickRow(paneRow, count, m.iterListHeight(), m.controller.Session.Runs) {
-				if m.iterList.Cursor != oldCursor {
-					m.timeline.ResetPosition()
+			if iterRow >= 0 {
+				if m.iterList.ClickRow(iterRow, count, m.iterListHeight(), m.controller.Session.Runs) {
+					if m.iterList.Cursor != oldCursor {
+						m.timeline.ResetPosition()
+					}
 				}
 			}
 		case promptsPane:
@@ -708,20 +828,50 @@ func (m *Model) View() string {
 	leftWidth := m.leftPaneWidth()
 	rightWidth := m.rightPaneWidth()
 
-	right := m.timeline.View(TimelineProps{
-		Items:       m.selectedItems(),
-		Width:       rightWidth,
-		Height:      paneHeight,
-		Focused:     m.focusedPane == rightPane,
-		CompactView: m.compactView,
-		LineNumbers: m.lineNumbers,
-		Theme:       m.theme,
-	})
+	// Right pane: plan content view or timeline depending on mode
+	var right string
+	if m.rightPaneMode == planMode {
+		var totalLines int
+		right, totalLines = RenderPlanView(PlanViewProps{
+			Filename: m.planList.SelectedFile(),
+			Dir:      m.workDir,
+			Width:    rightWidth,
+			Height:   paneHeight,
+			Scroll:   m.planViewScroll,
+			Focused:  m.focusedPane == rightPane,
+			Theme:    m.theme,
+		})
+		m.planViewTotalLines = totalLines
+	} else {
+		right = m.timeline.View(TimelineProps{
+			Items:       m.selectedItems(),
+			Width:       rightWidth,
+			Height:      paneHeight,
+			Focused:     m.focusedPane == rightPane,
+			CompactView: m.compactView,
+			LineNumbers: m.lineNumbers,
+			Theme:       m.theme,
+		})
+	}
 
 	var panes string
 	if leftWidth > 0 {
 		iterHeight := m.iterListHeight()
+		planHeight := PlanListTotalHeight()
 		promptHeight := PromptListTotalHeight()
+
+		planView := m.planList.View(PlanListProps{
+			Width:   leftWidth,
+			Height:  planHeight,
+			Focused: m.focusedPane == plansPane,
+			Theme:   m.theme,
+		})
+
+		// Horizontal divider between plans and iterations
+		divider := lipgloss.NewStyle().
+			Foreground(lipgloss.Color(m.theme.ForegroundDim)).
+			Width(leftWidth).
+			Render(strings.Repeat("─", leftWidth))
 
 		iterView := m.iterList.View(IterListProps{
 			Iterations: m.controller.Session.Iterations,
@@ -732,12 +882,6 @@ func (m *Model) View() string {
 			Theme:      m.theme,
 		})
 
-		// Horizontal divider between iterations and prompts
-		divider := lipgloss.NewStyle().
-			Foreground(lipgloss.Color(m.theme.ForegroundDim)).
-			Width(leftWidth).
-			Render(strings.Repeat("─", leftWidth))
-
 		promptView := m.promptList.View(PromptListProps{
 			Width:   leftWidth,
 			Height:  promptHeight,
@@ -745,7 +889,7 @@ func (m *Model) View() string {
 			Theme:   m.theme,
 		})
 
-		left := lipgloss.JoinVertical(lipgloss.Left, iterView, divider, promptView)
+		left := lipgloss.JoinVertical(lipgloss.Left, planView, divider, iterView, divider, promptView)
 
 		sepLines := make([]string, paneHeight)
 		for i := range sepLines {
@@ -836,11 +980,11 @@ func (m *Model) sessionDuration(sess *model.Session) time.Duration {
 }
 
 // iterListHeight returns the height available for the iteration list,
-// accounting for the prompt list section and divider at the bottom.
+// accounting for the plan section, prompt section, and dividers.
 func (m *Model) iterListHeight() int {
 	paneHeight := m.rightPaneHeight()
-	// Subtract prompt section (5 rows) + divider (1 row)
-	h := paneHeight - PromptListTotalHeight() - 1
+	// Subtract plan section (5 rows) + divider (1 row) + prompt section (5 rows) + divider (1 row)
+	h := paneHeight - PlanListTotalHeight() - 1 - PromptListTotalHeight() - 1
 	if h < 1 {
 		h = 1
 	}
@@ -856,6 +1000,26 @@ func (m *Model) iterListProps() IterListProps {
 		Height:     m.iterListHeight(),
 		Focused:    m.focusedPane == iterationsPane,
 		Theme:      m.theme,
+	}
+}
+
+// planListProps builds PlanListProps from current state.
+func (m *Model) planListProps() PlanListProps {
+	return PlanListProps{
+		Width:   m.leftPaneWidth(),
+		Height:  PlanListTotalHeight(),
+		Focused: m.focusedPane == plansPane,
+		Theme:   m.theme,
+	}
+}
+
+// updateRightPaneModeForFocus sets the right pane mode based on the target pane.
+func (m *Model) updateRightPaneModeForFocus(target paneID) {
+	switch target {
+	case plansPane:
+		m.rightPaneMode = planMode
+	case iterationsPane, promptsPane:
+		m.rightPaneMode = timelineMode
 	}
 }
 

@@ -312,9 +312,9 @@ func TestIntegration_TabTogglesFocus(t *testing.T) {
 	m := newTestModel(events, 1)
 	drainEvents(t, m)
 
-	// Starts focused on left pane.
+	// Starts focused on iterations pane.
 	if m.focusedPane != iterationsPane {
-		t.Error("expected initial focus on left pane")
+		t.Error("expected initial focus on iterations pane")
 	}
 
 	// First Tab switches to prompts pane.
@@ -329,10 +329,16 @@ func TestIntegration_TabTogglesFocus(t *testing.T) {
 		t.Error("expected right pane focus after second tab")
 	}
 
-	// Third Tab cycles back to iterations pane.
+	// Third Tab cycles to plans pane.
+	m.Update(tea.KeyMsg{Type: tea.KeyTab})
+	if m.focusedPane != plansPane {
+		t.Error("expected plans pane focus after third tab")
+	}
+
+	// Fourth Tab cycles back to iterations pane.
 	m.Update(tea.KeyMsg{Type: tea.KeyTab})
 	if m.focusedPane != iterationsPane {
-		t.Error("expected iterations pane focus after third tab")
+		t.Error("expected iterations pane focus after fourth tab")
 	}
 }
 
@@ -783,15 +789,15 @@ func TestIntegration_MouseClickSwitchesFocus(t *testing.T) {
 		t.Error("expected right pane focus after clicking right pane")
 	}
 
-	// Click on left pane (X < 32) switches back.
+	// Click on left pane iteration section (X < 32, Y=7 to skip header + plan section + divider).
 	m.Update(tea.MouseMsg{
 		X:      10,
-		Y:      1, // header row Y=0, pane row 0
+		Y:      7, // header=0, plan section=1-5, divider=6, iterations start at 7
 		Button: tea.MouseButtonLeft,
 		Action: tea.MouseActionPress,
 	})
 	if m.focusedPane != iterationsPane {
-		t.Error("expected left pane focus after clicking left pane")
+		t.Error("expected iterations pane focus after clicking iteration section")
 	}
 }
 
@@ -873,16 +879,16 @@ func TestIntegration_MouseClickSelectsIteration(t *testing.T) {
 		m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
 	}
 
-	// Click on first iteration (row 0 in pane, Y=1 accounting for header).
+	// Click on first iteration (Y=7: header=0, plan section=1-5, divider=6, first iter=7).
 	m.Update(tea.MouseMsg{
 		X:      10,
-		Y:      1, // header is Y=0, first pane row is Y=1
+		Y:      7, // header + plan section + divider, then first iteration row
 		Button: tea.MouseButtonLeft,
 		Action: tea.MouseActionPress,
 	})
 
 	if m.focusedPane != iterationsPane {
-		t.Error("expected left pane focus after clicking left pane")
+		t.Error("expected iterations pane focus after clicking iteration section")
 	}
 	if m.iterList.Cursor != 0 {
 		t.Errorf("expected cursor=0 after clicking first iteration, got %d", m.iterList.Cursor)

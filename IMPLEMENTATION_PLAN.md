@@ -12,47 +12,26 @@
 
 5. ~~Create `internal/tui/planview_test.go`~~ ✅ Done — 11 tests covering title, glamour output, file-not-found, empty filename, scroll clamping, word wrap, zero size, height-one edge case
 
-6. Update `internal/tui/root.go` — integrate plan pane
-   - Add `plansPane` to `paneID` enum (before `iterationsPane`)
-   - Add `planList PlanList` field to `Model`
-   - Add `rightPaneMode` state tracking which left pane last had focus (`planMode` vs `timelineMode`)
-   - Add `planViewScroll int` and `planViewContent string` fields
-   - Add `planScrollPositions map[string]int` for per-file scroll persistence
+6-11. ~~Integrate plan pane into root.go~~ ✅ Done — All of the following implemented:
+   - `plansPane` in paneID enum, `rightPaneModeType` (planMode/timelineMode)
+   - `planList PlanList`, `planViewScroll`, `planViewTotalLines`, `planScrollPositions` fields
+   - Focus cycle: Plans → Iterations → Prompts → Timeline → Plans
+   - `ActionFocusLeft`: from plan content → plans, from timeline → iterations
+   - Right pane switches between plan content view and timeline based on mode
+   - All nav keys (j/k, gg/G, pgup/pgdn) route to plan list or plan view scroll
+   - `e` key launches `$EDITOR` for plan files from plan list or plan content view
+   - `planEditorDoneMsg` rescans files and restores plan content focus
+   - Mouse: plan section detection, click/scroll handling, iteration row offset adjustment
+   - `iterListHeight()` accounts for plan section (5 rows) + extra divider (1 row)
+   - Left pane layout: planView + divider + iterView + divider + promptView
+   - Tick rescans both plan and prompt files
+   - Integration tests updated: 4-pane tab cycle, mouse click Y offsets for plan section
+   - Note: `planScrollPositions` map initialized but per-file save/restore not yet wired (scroll resets on cursor change)
 
-7. Update `internal/tui/root.go` — focus cycle
-   - `ActionFocusToggle` (tab): Plans → Iterations → Prompts → Timeline → Plans
-   - `ActionFocusLeft` (h/←): from timeline → iterations; from plan content → plans
-   - `ActionFocusRight` (l/→): from any left pane → right pane
-   - When focus enters plans pane, set `rightPaneMode = planMode`
-   - When focus enters iterations or prompts pane, set `rightPaneMode = timelineMode`
-
-8. Update `internal/tui/root.go` — left pane layout
-   - `View()`: render planList + divider + iterList + divider + promptList
-   - Subtract plan section height (5 rows) and extra divider (1 row) from iteration list height
-   - Tick handler: call `planList.ScanFiles()` alongside `promptList.ScanFiles()`
-
-9. Update `internal/tui/root.go` — right pane rendering
-   - When `rightPaneMode == planMode`: render `RenderPlanView()` instead of timeline
-   - When `rightPaneMode == timelineMode`: render timeline as before
-   - On plan cursor change: reset scroll to top, cache rendered content
-   - On focus change to plans: save current plan scroll, load new plan scroll
-
-10. Update `internal/tui/root.go` — plan pane key handling
-    - Route navigation keys to `planList.HandleAction()` when plans pane focused
-    - Route navigation keys to plan view scroll when right pane focused in plan mode
-    - `e` key: launch `$EDITOR` with selected plan file (from plan list or plan content view)
-    - On editor return: re-read and re-render plan file, restore plan content focus
-
-11. Update `internal/tui/root.go` — mouse support
-    - Detect clicks/scrolls above the first divider → target plan list
-    - Adjust existing prompt section detection to account for new plan section + divider
-
-12. Update `internal/tui/integration_test.go` — integration tests
-    - Tab cycles through all four panes
+12. Remaining integration tests
     - Plan selection swaps right pane content
     - Focus on iterations restores timeline
     - Scroll persistence when tabbing away and back
-    - Scroll reset when switching between plans
     - `e` key triggers editor command
 
 13. Update `internal/tui/modal.go` — help modal
