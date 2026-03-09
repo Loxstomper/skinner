@@ -920,6 +920,259 @@ func TestTokenAttribution_TextOnlyBatchPreservesTokens(t *testing.T) {
 	}
 }
 
+func TestPhase(t *testing.T) {
+	now := time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)
+	sess := &model.Session{}
+	ctrl := NewController(sess, defaultTestConfig(), fakeClock(&now))
+
+	// Default phase is Idle
+	if ctrl.Phase() != model.PhaseIdle {
+		t.Errorf("expected PhaseIdle, got %d", ctrl.Phase())
+	}
+
+	// Start a run → Running
+	ctrl.StartRun("BUILD", "PROMPT_BUILD.md", 3)
+	if ctrl.Phase() != model.PhaseRunning {
+		t.Errorf("expected PhaseRunning after StartRun, got %d", ctrl.Phase())
+	}
+}
+
+func TestStartRun(t *testing.T) {
+	now := time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)
+	sess := &model.Session{}
+	ctrl := NewController(sess, defaultTestConfig(), fakeClock(&now))
+
+	ctrl.StartRun("BUILD", "PROMPT_BUILD.md", 5)
+
+	if len(sess.Runs) != 1 {
+		t.Fatalf("expected 1 run, got %d", len(sess.Runs))
+	}
+	run := sess.Runs[0]
+	if run.PromptName != "BUILD" {
+		t.Errorf("expected PromptName BUILD, got %s", run.PromptName)
+	}
+	if run.PromptFile != "PROMPT_BUILD.md" {
+		t.Errorf("expected PromptFile PROMPT_BUILD.md, got %s", run.PromptFile)
+	}
+	if run.StartIndex != 0 {
+		t.Errorf("expected StartIndex 0, got %d", run.StartIndex)
+	}
+	if run.MaxIterations != 5 {
+		t.Errorf("expected MaxIterations 5, got %d", run.MaxIterations)
+	}
+	if sess.Phase != model.PhaseRunning {
+		t.Errorf("expected PhaseRunning, got %d", sess.Phase)
+	}
+	if sess.PromptFile != "PROMPT_BUILD.md" {
+		t.Errorf("expected session PromptFile updated, got %s", sess.PromptFile)
+	}
+	if !sess.StartTime.Equal(now) {
+		t.Errorf("expected StartTime %v, got %v", now, sess.StartTime)
+	}
+}
+
+func TestStartRun_MultipleRuns(t *testing.T) {
+	now := time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)
+	sess := &model.Session{}
+	ctrl := NewController(sess, defaultTestConfig(), fakeClock(&now))
+
+	// First run with 2 iterations
+	ctrl.StartRun("BUILD", "PROMPT_BUILD.md", 2)
+	ctrl.StartIteration()
+	now = now.Add(time.Minute)
+	ctrl.CompleteIteration(nil)
+	ctrl.StartIteration()
+	now = now.Add(time.Minute)
+	ctrl.CompleteIteration(nil)
+
+	// Phase should be Finished after run completes
+	if sess.Phase != model.PhaseFinished {
+		t.Errorf("expected PhaseFinished after first run, got %d", sess.Phase)
+	}
+
+	// Second run starts at iteration index 2
+	now = now.Add(time.Minute)
+	ctrl.StartRun("PLAN", "PROMPT_PLAN.md", 3)
+
+	if len(sess.Runs) != 2 {
+		t.Fatalf("expected 2 runs, got %d", len(sess.Runs))
+	}
+	if sess.Runs[1].StartIndex != 2 {
+		t.Errorf("expected second run StartIndex 2, got %d", sess.Runs[1].StartIndex)
+	}
+	if sess.Runs[1].PromptName != "PLAN" {
+		t.Errorf("expected second run PromptName PLAN, got %s", sess.Runs[1].PromptName)
+	}
+	if sess.Phase != model.PhaseRunning {
+		t.Errorf("expected PhaseRunning after second StartRun, got %d", sess.Phase)
+	}
+}
+
+func TestShouldStartNext_PerRunLimits(t *testing.T) {
+	tests := []struct {
+		name          string
+		maxIterations int
+		runIterations int
+		expected      bool
+	}{
+		{"unlimited run with 0", 0, 0, true},
+		{"unlimited run with 5", 0, 5, true},
+		{"max 3 run with 1", 3, 1, true},
+		{"max 3 run at limit", 3, 3, false},
+		{"max 1 run at limit", 1, 1, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			now := time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)
+			sess := &model.Session{}
+			ctrl := NewController(sess, defaultTestConfig(), fakeClock(&now))
+
+			// Start a run
+			ctrl.StartRun("BUILD", "PROMPT_BUILD.md", tt.maxIterations)
+
+			// Add iterations to the run
+			for range tt.runIterations {
+				sess.Iterations = append(sess.Iterations, model.Iteration{
+					Index:  len(sess.Iterations),
+					Status: model.IterationCompleted,
+				})
+			}
+
+			got := ctrl.ShouldStartNext()
+			if got != tt.expected {
+				t.Errorf("ShouldStartNext() = %v, want %v", got, tt.expected)
+			}
+		})
+	}
+}
+
+func TestShouldStartNext_MultiRunOffset(t *testing.T) {
+	// Second run should count from its own start index
+	now := time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)
+	sess := &model.Session{}
+	ctrl := NewController(sess, defaultTestConfig(), fakeClock(&now))
+
+	// First run: 3 iterations
+	ctrl.StartRun("BUILD", "PROMPT_BUILD.md", 3)
+	for range 3 {
+		ctrl.StartIteration()
+		now = now.Add(time.Minute)
+		ctrl.CompleteIteration(nil)
+	}
+
+	// Second run: max 2 iterations, starting at index 3
+	now = now.Add(time.Minute)
+	ctrl.StartRun("PLAN", "PROMPT_PLAN.md", 2)
+
+	// No iterations yet in second run
+	if !ctrl.ShouldStartNext() {
+		t.Error("expected ShouldStartNext true with 0 iterations in second run")
+	}
+
+	// Add 1 iteration to second run
+	ctrl.StartIteration()
+	now = now.Add(time.Minute)
+	ctrl.CompleteIteration(nil)
+
+	// Should still allow one more
+	// Phase was set to Finished by CompleteIteration, need to re-enter Running
+	sess.Phase = model.PhaseRunning
+	if !ctrl.ShouldStartNext() {
+		t.Error("expected ShouldStartNext true with 1 iteration in second run (max 2)")
+	}
+
+	// Add second iteration
+	ctrl.StartIteration()
+	now = now.Add(time.Minute)
+	ctrl.CompleteIteration(nil)
+
+	// Now should be done (phase already Finished from CompleteIteration)
+	if ctrl.ShouldStartNext() {
+		t.Error("expected ShouldStartNext false with 2 iterations in second run (max 2)")
+	}
+}
+
+func TestCompleteIteration_TransitionsToFinished(t *testing.T) {
+	now := time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)
+	sess := &model.Session{}
+	ctrl := NewController(sess, defaultTestConfig(), fakeClock(&now))
+
+	ctrl.StartRun("BUILD", "PROMPT_BUILD.md", 1)
+	ctrl.StartIteration()
+	now = now.Add(30 * time.Second)
+	ctrl.CompleteIteration(nil)
+
+	if sess.Phase != model.PhaseFinished {
+		t.Errorf("expected PhaseFinished when run complete, got %d", sess.Phase)
+	}
+	if sess.AccumulatedDuration != 30*time.Second {
+		t.Errorf("expected AccumulatedDuration 30s, got %v", sess.AccumulatedDuration)
+	}
+}
+
+func TestCompleteIteration_FailureTransitionsToFinished(t *testing.T) {
+	now := time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)
+	sess := &model.Session{}
+	ctrl := NewController(sess, defaultTestConfig(), fakeClock(&now))
+
+	ctrl.StartRun("BUILD", "PROMPT_BUILD.md", 5)
+	ctrl.StartIteration()
+	now = now.Add(10 * time.Second)
+	ctrl.CompleteIteration(errTest)
+
+	// Even with iterations remaining, failure transitions to Finished
+	if sess.Phase != model.PhaseFinished {
+		t.Errorf("expected PhaseFinished on failure, got %d", sess.Phase)
+	}
+}
+
+func TestCompleteIteration_StaysRunningWhenMoreIterations(t *testing.T) {
+	now := time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)
+	sess := &model.Session{}
+	ctrl := NewController(sess, defaultTestConfig(), fakeClock(&now))
+
+	ctrl.StartRun("BUILD", "PROMPT_BUILD.md", 3)
+	ctrl.StartIteration()
+	now = now.Add(10 * time.Second)
+	ctrl.CompleteIteration(nil)
+
+	// Still has 2 more iterations to go, should stay Running
+	if sess.Phase != model.PhaseRunning {
+		t.Errorf("expected PhaseRunning when more iterations remain, got %d", sess.Phase)
+	}
+}
+
+func TestAccumulatedDuration_PauseResume(t *testing.T) {
+	now := time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)
+	sess := &model.Session{}
+	ctrl := NewController(sess, defaultTestConfig(), fakeClock(&now))
+
+	// First run: 1 iteration, 30s
+	ctrl.StartRun("BUILD", "PROMPT_BUILD.md", 1)
+	ctrl.StartIteration()
+	now = now.Add(30 * time.Second)
+	ctrl.CompleteIteration(nil)
+
+	if sess.AccumulatedDuration != 30*time.Second {
+		t.Errorf("expected 30s accumulated, got %v", sess.AccumulatedDuration)
+	}
+
+	// Pause for a while (user browsing results)
+	now = now.Add(5 * time.Minute)
+
+	// Second run: 1 iteration, 20s
+	ctrl.StartRun("PLAN", "PROMPT_PLAN.md", 1)
+	ctrl.StartIteration()
+	now = now.Add(20 * time.Second)
+	ctrl.CompleteIteration(nil)
+
+	// Should be 30s + 20s = 50s (not including the 5 min pause)
+	if sess.AccumulatedDuration != 50*time.Second {
+		t.Errorf("expected 50s accumulated, got %v", sess.AccumulatedDuration)
+	}
+}
+
 // errTest is a sentinel error for testing.
 var errTest = &testError{}
 

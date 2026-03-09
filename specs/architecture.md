@@ -68,6 +68,8 @@ The session controller owns all non-UI business logic. It operates on `model.Ses
 - **Token accumulation** — Sum token counts across assistant events; track latest input/cache values for context window %.
 - **Cost calculation** — Compute per-event cost using pricing config; accumulate session total.
 - **Iteration lifecycle** — Create new iterations, mark completed/failed, decide whether to start next.
+- **Run tracking** — Track run boundaries (prompt file, start index) for multi-run sessions.
+- **Session phase** — Manage Idle → Running → Finished transitions.
 
 ### Interface
 
@@ -100,8 +102,15 @@ func (c *Controller) CompleteIteration(err error)
 // ShouldStartNext returns true if another iteration should begin.
 func (c *Controller) ShouldStartNext() bool
 
+// StartRun creates a new Run with the given prompt file and max iterations.
+// Transitions the session phase to Running.
+func (c *Controller) StartRun(promptName, promptFile string, maxIterations int)
+
 // RunningIterationIdx returns the index of the running iteration, or -1.
 func (c *Controller) RunningIterationIdx() int
+
+// Phase returns the current session phase (Idle, Running, Finished).
+func (c *Controller) Phase() SessionPhase
 
 // HasKnownModel returns true if pricing info is available for the current model.
 func (c *Controller) HasKnownModel() bool

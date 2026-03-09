@@ -227,7 +227,8 @@ func (c *Controller) StartIteration() {
 }
 
 // CompleteIteration marks the running iteration as completed or failed and
-// records its duration.
+// records its duration. If the run's iterations are exhausted (or on failure),
+// transitions the session phase to Finished.
 func (c *Controller) CompleteIteration(err error) {
 	idx := c.RunningIterationIdx()
 	if idx < 0 {
@@ -240,16 +241,38 @@ func (c *Controller) CompleteIteration(err error) {
 	} else {
 		iter.Status = model.IterationCompleted
 	}
+
+	// Transition to Finished if no more iterations should start (run-based path only)
+	if len(c.Session.Runs) > 0 && c.Session.Phase == model.PhaseRunning {
+		if !c.ShouldStartNext() || err != nil {
+			c.Session.AccumulatedDuration += c.Clock().Sub(c.Session.StartTime)
+			c.Session.Phase = model.PhaseFinished
+		}
+	}
 }
 
 // ShouldStartNext returns true if another iteration should begin.
 // The caller must check quitting state separately.
 func (c *Controller) ShouldStartNext() bool {
-	count := len(c.Session.Iterations)
-	if c.Session.MaxIterations > 0 && count >= c.Session.MaxIterations {
+	if len(c.Session.Runs) == 0 {
+		// Legacy path: no runs/phases, use global MaxIterations
+		count := len(c.Session.Iterations)
+		if c.Session.MaxIterations > 0 && count >= c.Session.MaxIterations {
+			return false
+		}
+		return true
+	}
+	// Run-based path: must be in Running phase
+	if c.Session.Phase != model.PhaseRunning {
 		return false
 	}
-	return true
+	// Per-run max iterations: count iterations from the current run's start index
+	currentRun := c.Session.Runs[len(c.Session.Runs)-1]
+	if currentRun.MaxIterations == 0 {
+		return true // unlimited
+	}
+	runIterations := len(c.Session.Iterations) - currentRun.StartIndex
+	return runIterations < currentRun.MaxIterations
 }
 
 // RunningIterationIdx returns the index of the running iteration, or -1.
@@ -271,4 +294,26 @@ func (c *Controller) HasKnownModel() bool {
 // known pricing.
 func (c *Controller) LastModel() string {
 	return c.lastModel
+}
+
+// Phase returns the current session phase.
+func (c *Controller) Phase() model.SessionPhase {
+	return c.Session.Phase
+}
+
+// StartRun creates a new Run with the given prompt info and max iterations,
+// and transitions the session phase to Running. The session timer resumes
+// from AccumulatedDuration.
+func (c *Controller) StartRun(promptName, promptFile string, maxIterations int) {
+	run := model.Run{
+		PromptName:    promptName,
+		PromptFile:    promptFile,
+		StartIndex:    len(c.Session.Iterations),
+		MaxIterations: maxIterations,
+	}
+	c.Session.Runs = append(c.Session.Runs, run)
+	c.Session.PromptFile = promptFile
+	c.Session.MaxIterations = maxIterations
+	c.Session.Phase = model.PhaseRunning
+	c.Session.StartTime = c.Clock()
 }

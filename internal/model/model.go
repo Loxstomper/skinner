@@ -99,6 +99,23 @@ func (g *ToolCallGroup) ToolCallCount() int {
 	return len(g.Children)
 }
 
+// SessionPhase represents the current phase of the session lifecycle.
+type SessionPhase int
+
+const (
+	PhaseIdle     SessionPhase = iota // TUI loaded, no run in progress
+	PhaseRunning                      // Iterations executing
+	PhaseFinished                     // Current run completed
+)
+
+// Run represents a sequence of iterations using a single prompt file.
+type Run struct {
+	PromptName    string // display name, e.g. "BUILD"
+	PromptFile    string // full path, e.g. "PROMPT_BUILD.md"
+	StartIndex    int    // first iteration index in session
+	MaxIterations int    // 0 = unlimited, per-run limit
+}
+
 type IterationStatus int
 
 const (
@@ -137,9 +154,16 @@ type RateLimitInfo struct {
 
 type Session struct {
 	Iterations    []Iteration
-	Mode          string // "build" or "plan"
+	Mode          string // "build", "plan", or "idle"
 	PromptFile    string
 	MaxIterations int // 0 = unlimited
+
+	// Run tracking
+	Runs  []Run
+	Phase SessionPhase
+
+	// Accumulated duration across runs (for pause/resume timer)
+	AccumulatedDuration time.Duration
 
 	// Token tracking (accumulated across all iterations)
 	InputTokens         int64

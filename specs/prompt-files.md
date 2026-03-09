@@ -57,6 +57,10 @@ When no `PROMPT_*.md` files exist, the content area shows:
 - Same highlight style as the iteration list: theme's `Highlight` background, padded to full width.
 - Highlight only shown when the prompt list is focused.
 
+### Run Key
+
+Pressing `r` while the prompt picker is focused and a file is selected opens the iterations input modal (see [run-modal.md](run-modal.md)). The selected prompt file is passed to the modal. `r` is disabled while a run is in progress.
+
 ### Scrolling
 
 When files exceed the 4-row content area, the list scrolls to keep the cursor visible. Standard navigation keys work: `j`/`k`, `gg`/`G`, `pgup`/`pgdn`.
@@ -92,7 +96,7 @@ Full-screen centered overlay (same pattern as help/quit modals) for viewing prom
 - **Size**: ~80% of terminal width and height.
 - **Title bar**: full filename (e.g. `PROMPT_BUILD.md`) injected into the top border, centered.
 - **Content**: plain text with absolute line numbers in a dimmed gutter (right-aligned, `ForegroundDim`).
-- **Footer**: `e to edit · esc to close` centered at the bottom, rendered in `ForegroundDim`.
+- **Footer**: `e to edit · r to run · esc to close` centered at the bottom, rendered in `ForegroundDim`. The `r to run` hint is hidden while a run is in progress.
 
 ### Navigation
 
@@ -102,6 +106,10 @@ Full-screen centered overlay (same pattern as help/quit modals) for viewing prom
 - **`pgup`**: scroll up 10 lines.
 - **`esc`**: dismiss modal.
 - All other keys are blocked while the modal is open.
+
+### Run Key
+
+- **`r`**: opens the iterations input modal (see [run-modal.md](run-modal.md)) with the currently viewed prompt file. Disabled while a run is in progress (the hint is hidden from the footer).
 
 ### Editor Integration
 

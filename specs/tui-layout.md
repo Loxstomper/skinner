@@ -8,6 +8,16 @@ Two-pane layout: a left sidebar listing iterations and a right main pane showing
 
 A single-line header pinned to the top of the TUI, spanning the full terminal width. Colored with `ForegroundDim` text on the default background.
 
+**Idle state** (no run started yet):
+
+```
+                                    ⏱ --                                        Idle
+```
+
+No tokens, cost, context %, rate limits, or iteration counter. Just the stopped timer placeholder and `Idle` status in `ForegroundDim`.
+
+**Running / Finished state**:
+
 ```
               ⏱ 14m32s   ↑42.1k ↓8.3k tokens   ctx 62%   ~$1.24   5h: 34%  wk: 12%   Iter 3/10 ⟳
 ```
@@ -47,7 +57,23 @@ The left pane is split vertically into two sections: the iteration list (flexibl
 
 ### Iteration List
 
-A vertical list of all iterations in the current session. Each entry shows:
+A vertical list of all iterations in the current session. When multiple runs have occurred, a separator line is shown at each run boundary displaying the prompt file's display name:
+
+```
+ ████████████████████████████████
+   Iter 1  ✓  (2m14s)               ← highlighted row
+ ████████████████████████████████
+   Iter 2  ✓  (1m48s)
+   Iter 3  ✓  (1m03s)
+ ── PLAN ───────────────────────
+   Iter 4  ⟳  (0m32s)
+```
+
+The separator line uses `─` in `ForegroundDim`, with the prompt name in bold `Foreground` color. Run separators are not selectable — cursor movement skips over them.
+
+For the first run, no separator is shown above iteration 1 (it would be redundant). Separators only appear at boundaries between runs.
+
+Each entry shows:
 
 ```
  ████████████████████████████████

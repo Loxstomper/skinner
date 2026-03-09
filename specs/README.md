@@ -23,3 +23,4 @@ Skinner is a Go TUI that runs Claude CLI in a loop and displays tool call activi
 | [line-numbers.md](line-numbers.md) | Relative line numbers, vim-style count+j/k jump motions |
 | [help-modal.md](help-modal.md) | Keybinding help overlay, configurable keymapping display |
 | [prompt-files.md](prompt-files.md) | Prompt file picker in left pane, file discovery, focus model |
+| [run-modal.md](run-modal.md) | Iterations input modal for starting a run interactively |

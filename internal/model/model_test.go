@@ -227,6 +227,69 @@ func TestToolCallGroupToolCallCount(t *testing.T) {
 	}
 }
 
+func TestSessionPhaseConstants(t *testing.T) {
+	// Verify phase constants have distinct values
+	phases := []SessionPhase{PhaseIdle, PhaseRunning, PhaseFinished}
+	seen := make(map[SessionPhase]bool)
+	for _, p := range phases {
+		if seen[p] {
+			t.Errorf("duplicate phase value: %d", p)
+		}
+		seen[p] = true
+	}
+}
+
+func TestRunStruct(t *testing.T) {
+	run := Run{
+		PromptName:    "BUILD",
+		PromptFile:    "PROMPT_BUILD.md",
+		StartIndex:    5,
+		MaxIterations: 10,
+	}
+	if run.PromptName != "BUILD" {
+		t.Errorf("expected PromptName BUILD, got %s", run.PromptName)
+	}
+	if run.PromptFile != "PROMPT_BUILD.md" {
+		t.Errorf("expected PromptFile PROMPT_BUILD.md, got %s", run.PromptFile)
+	}
+	if run.StartIndex != 5 {
+		t.Errorf("expected StartIndex 5, got %d", run.StartIndex)
+	}
+	if run.MaxIterations != 10 {
+		t.Errorf("expected MaxIterations 10, got %d", run.MaxIterations)
+	}
+}
+
+func TestSessionRunsAndPhase(t *testing.T) {
+	sess := Session{}
+
+	// Default phase is Idle (zero value)
+	if sess.Phase != PhaseIdle {
+		t.Errorf("expected default phase PhaseIdle, got %d", sess.Phase)
+	}
+
+	// Add runs
+	sess.Runs = append(sess.Runs, Run{
+		PromptName: "BUILD",
+		PromptFile: "PROMPT_BUILD.md",
+		StartIndex: 0,
+	})
+	if len(sess.Runs) != 1 {
+		t.Errorf("expected 1 run, got %d", len(sess.Runs))
+	}
+
+	// Phase transitions
+	sess.Phase = PhaseRunning
+	if sess.Phase != PhaseRunning {
+		t.Errorf("expected PhaseRunning, got %d", sess.Phase)
+	}
+
+	sess.Phase = PhaseFinished
+	if sess.Phase != PhaseFinished {
+		t.Errorf("expected PhaseFinished, got %d", sess.Phase)
+	}
+}
+
 func TestIterationToolCallCount(t *testing.T) {
 	tests := []struct {
 		name  string

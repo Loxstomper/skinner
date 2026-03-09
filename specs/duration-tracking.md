@@ -28,7 +28,7 @@ Each iteration's total duration is measured from subprocess start to subprocess 
 
 ## Session Duration
 
-Total wallclock time since the `skinner` process started. Displayed in the header bar (see [tui-layout.md](tui-layout.md)). Updates every second via a Bubble Tea tick.
+Total accumulated time across all runs. The timer starts when the first run begins, ticks while the session is in the Running phase, and pauses when the session enters the Finished phase. If a new run is started, the timer resumes from where it left off. Displayed in the header bar (see [tui-layout.md](tui-layout.md)). Updates every second via a Bubble Tea tick. Shows `--` in the Idle phase (before any run has started).
 
 ## Display Format
 
