@@ -39,9 +39,13 @@ When the left pane is hidden, it can be toggled with `[` (see [keybindings.md](k
 
 ## Focus Model
 
-One pane is focused at a time. The focused pane has a visual indicator (brighter border or highlight). All movement keys operate on the focused pane. See [keybindings.md](keybindings.md) for controls.
+Three panes can receive focus, cycled via `Tab`: **Iterations → Prompts → Timeline**. The focused pane has a visual indicator (brighter border or highlight). All movement keys operate on the focused pane. See [keybindings.md](keybindings.md) for controls and [prompt-files.md](prompt-files.md) for the prompt file picker.
 
-## Left Pane — Iteration List
+## Left Pane
+
+The left pane is split vertically into two sections: the iteration list (flexible height) and the prompt file picker (fixed 5 rows). A horizontal divider (`─` in `ForegroundDim`) separates them.
+
+### Iteration List
 
 A vertical list of all iterations in the current session. Each entry shows:
 
@@ -61,6 +65,10 @@ A vertical list of all iterations in the current session. Each entry shows:
 **Scrolling**: When iterations exceed the viewport height, the list scrolls to keep the cursor visible. Moving the cursor beyond the viewport edge adjusts the scroll offset. The view renders only the visible slice of iterations.
 
 **Auto-follow**: During a run, the cursor auto-follows to the latest iteration. If the user manually selects a previous iteration, auto-follow pauses. Selecting the latest iteration re-enables auto-follow.
+
+### Prompt File Picker
+
+A fixed-height section at the bottom of the left pane listing `PROMPT_*.md` files. See [prompt-files.md](prompt-files.md) for full details.
 
 ## Right Pane — Message Timeline
 

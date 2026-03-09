@@ -4,45 +4,7 @@
 
 ## ~~2. Remove `✓`/`✗` result indicators from right pane tool calls~~ ✓ DONE
 
-## 3. Add prompt file picker to left pane
-
-### 3a. Spec: `specs/prompt-files.md`
-
-- [ ] Create new spec covering:
-  - Bottom section of left pane, fixed 4-row height, scrollable
-  - Title line: `📄 Prompts`
-  - Lists `PROMPT_*.md` files from cwd, display names stripped of `PROMPT_` prefix and `.md` suffix
-  - Same selection highlight style as iteration list
-  - Empty state: shows "No prompt files"
-  - Watches cwd for file additions/removals
-
-### 3b. Update existing specs
-
-- [ ] Update `specs/tui-layout.md`: document the prompt files section at bottom of left pane, update layout diagrams
-- [ ] Update `specs/keybindings.md`: document Tab cycling through three panes (Iterations → Prompts → Timeline), Enter on prompt file opens read modal
-- [ ] Update `specs/mouse.md`: single click selects prompt file, double-click opens read modal (consistent with iteration list)
-- [ ] Update `specs/help-modal.md`: add prompt-related entries if needed
-- [ ] Update `specs/README.md`: add link to `prompt-files.md`
-
-### 3c. Focus model changes
-
-- [ ] Update `internal/tui/root.go`: add third focus target (e.g. `focusPrompts`) to focus model
-- [ ] Update Tab handling to cycle: Iterations → Prompts → Timeline → Iterations
-- [ ] Update `h`/`l` (left/right) focus: `h` from Timeline focuses Prompts or Iterations (whichever was last active in left pane?), or always Iterations. Decide: since both are in the left pane, `h`/`l` switches between left pane (last focused sub-pane) and right pane; Tab cycles all three.
-
-### 3d. Prompt list component
-
-- [ ] Create `internal/tui/promptlist.go`: new component similar to `IterList`
-  - Scans cwd for `PROMPT_*.md` files on init and via filesystem polling (periodic tick or fsnotify)
-  - Maintains cursor position, scroll offset for 4-row viewport
-  - Renders title, file list with stripped names, selection highlight
-  - Empty state rendering
-- [ ] Create `internal/tui/promptlist_test.go`: unit tests for rendering, scrolling, empty state, filename stripping
-
-### 3e. Left pane layout
-
-- [ ] Update `internal/tui/root.go` `View`: split left pane vertically — iteration list on top (takes remaining space), horizontal divider, prompt list on bottom (4 rows + 1 title row = 5 rows)
-- [ ] Ensure iteration list viewport height adjusts to account for prompt section
+## ~~3. Add prompt file picker to left pane~~ ✓ DONE
 
 ## 4. Prompt read modal
 
@@ -89,7 +51,7 @@
 - [ ] Add integration test: prompt list renders files, shows empty state
 - [ ] Add integration test: prompt read modal opens on Enter, shows content with line numbers
 - [ ] Add integration test: `esc` dismisses prompt read modal
-- [ ] Add integration test: Tab cycles through all three focus targets
+- [x] Add integration test: Tab cycles through all three focus targets (updated existing test)
 
 ## Completed
 
@@ -103,6 +65,14 @@
 - Remove `...` suffix from left sidebar running durations (updated iterlist.go, specs, tests)
 - Fix staticcheck lint warnings in timeline_test.go (WriteString→Fprintf)
 - Remove `✓`/`✗` result indicators from tool call rows (timeline.go, spec, tests)
+- Prompt file picker in left pane: component (`promptlist.go`), 3-pane focus model (`iterationsPane`/`promptsPane`/`rightPane`), left pane layout split (iter list + divider + prompt list), spec (`specs/prompt-files.md`), updated specs (keybindings, tui-layout, mouse, README), 22 unit tests, updated integration tests for 3-pane Tab cycle
+
+## Design Decisions
+
+### Focus model: 3-pane cycle
+- `h`/`←` from timeline always goes to `iterationsPane` (not "last focused left sub-pane") for simplicity
+- Tab cycles: iterationsPane → promptsPane → rightPane → iterationsPane
+- `paneID` constants renamed: `leftPane` → `iterationsPane`, added `promptsPane`
 
 ## Known Issues
 

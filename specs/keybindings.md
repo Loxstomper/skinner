@@ -6,9 +6,9 @@ All keybindings listed here are defaults. Users can remap any action via the `[k
 
 | Key              | Action                                      |
 |------------------|---------------------------------------------|
-| `tab`            | Toggle focus between left and right pane    |
-| `h` / `←`       | Focus left pane                             |
-| `l` / `→`       | Focus right pane                            |
+| `tab`            | Cycle focus: Iterations → Prompts → Timeline |
+| `h` / `←`       | Focus iterations pane (from timeline)       |
+| `l` / `→`       | Focus timeline pane                         |
 
 ## Navigation (operates on focused pane)
 
@@ -21,15 +21,17 @@ All keybindings listed here are defaults. Users can remap any action via the `[k
 | `pgdn`           | Page scroll down; cursor moves into visible viewport if needed |
 | `pgup`           | Page scroll up; cursor moves into visible viewport if needed  |
 
-In the **left pane**, cursor movement selects which iteration is displayed in the right pane.
+In the **iterations pane**, cursor movement selects which iteration is displayed in the timeline.
 
-In the **right pane**, cursor movement highlights individual items (text blocks or tool call rows). Digit keys (`1`–`9`) accumulate a count prefix for `j`/`k` jump motions — see [line-numbers.md](line-numbers.md).
+In the **prompts pane**, cursor movement selects a prompt file. See [prompt-files.md](prompt-files.md).
+
+In the **timeline pane**, cursor movement highlights individual items (text blocks or tool call rows). Digit keys (`1`–`9`) accumulate a count prefix for `j`/`k` jump motions — see [line-numbers.md](line-numbers.md).
 
 ## Actions
 
 | Key              | Action                                      |
 |------------------|---------------------------------------------|
-| `enter`          | Focus right pane (left pane); expand/collapse selected text block, tool call, or tool call group (right pane); enter sub-scroll mode (on already-expanded tool call) |
+| `enter`          | Focus timeline (iterations/prompts pane); expand/collapse selected text block, tool call, or tool call group (timeline); enter sub-scroll mode (on already-expanded tool call) |
 | `escape`         | Exit sub-scroll mode (returns to timeline)  |
 
 ## View

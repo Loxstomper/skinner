@@ -313,20 +313,26 @@ func TestIntegration_TabTogglesFocus(t *testing.T) {
 	drainEvents(t, m)
 
 	// Starts focused on left pane.
-	if m.focusedPane != leftPane {
+	if m.focusedPane != iterationsPane {
 		t.Error("expected initial focus on left pane")
 	}
 
-	// Tab switches to right.
+	// First Tab switches to prompts pane.
 	m.Update(tea.KeyMsg{Type: tea.KeyTab})
-	if m.focusedPane != rightPane {
-		t.Error("expected right pane focus after tab")
+	if m.focusedPane != promptsPane {
+		t.Error("expected prompts pane focus after first tab")
 	}
 
-	// Tab switches back to left.
+	// Second Tab switches to right pane.
 	m.Update(tea.KeyMsg{Type: tea.KeyTab})
-	if m.focusedPane != leftPane {
-		t.Error("expected left pane focus after second tab")
+	if m.focusedPane != rightPane {
+		t.Error("expected right pane focus after second tab")
+	}
+
+	// Third Tab cycles back to iterations pane.
+	m.Update(tea.KeyMsg{Type: tea.KeyTab})
+	if m.focusedPane != iterationsPane {
+		t.Error("expected iterations pane focus after third tab")
 	}
 }
 
@@ -345,7 +351,7 @@ func TestIntegration_JKNavigatesIterList(t *testing.T) {
 	drainEvents(t, m)
 
 	// Focus on left pane (default).
-	if m.focusedPane != leftPane {
+	if m.focusedPane != iterationsPane {
 		t.Fatal("expected left pane focus")
 	}
 
@@ -382,7 +388,7 @@ func TestIntegration_EnterSwitchesPaneFromLeft(t *testing.T) {
 	drainEvents(t, m)
 
 	// Start on left pane.
-	if m.focusedPane != leftPane {
+	if m.focusedPane != iterationsPane {
 		t.Fatal("expected left pane focus")
 	}
 
@@ -406,7 +412,8 @@ func TestIntegration_EnterTogglesExpandOnRight(t *testing.T) {
 	m := newTestModel(events, 1)
 	drainEvents(t, m)
 
-	// Focus right pane.
+	// Focus right pane (Tab twice: iterations → prompts → right).
+	m.Update(tea.KeyMsg{Type: tea.KeyTab})
 	m.Update(tea.KeyMsg{Type: tea.KeyTab})
 	if m.focusedPane != rightPane {
 		t.Fatal("expected right pane focus")
@@ -688,7 +695,7 @@ func TestIntegration_HLSwitchesPanes(t *testing.T) {
 
 	// h switches to left pane.
 	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'h'}})
-	if m.focusedPane != leftPane {
+	if m.focusedPane != iterationsPane {
 		t.Error("expected left pane after h")
 	}
 }
@@ -761,7 +768,7 @@ func TestIntegration_MouseClickSwitchesFocus(t *testing.T) {
 	drainEvents(t, m)
 
 	// Starts on left pane.
-	if m.focusedPane != leftPane {
+	if m.focusedPane != iterationsPane {
 		t.Fatal("expected initial focus on left pane")
 	}
 
@@ -783,7 +790,7 @@ func TestIntegration_MouseClickSwitchesFocus(t *testing.T) {
 		Button: tea.MouseButtonLeft,
 		Action: tea.MouseActionPress,
 	})
-	if m.focusedPane != leftPane {
+	if m.focusedPane != iterationsPane {
 		t.Error("expected left pane focus after clicking left pane")
 	}
 }
@@ -809,7 +816,7 @@ func TestIntegration_MouseClickOnHeaderIgnored(t *testing.T) {
 		Button: tea.MouseButtonLeft,
 		Action: tea.MouseActionPress,
 	})
-	if m.focusedPane != leftPane {
+	if m.focusedPane != iterationsPane {
 		t.Error("expected focus unchanged after clicking header")
 	}
 }
@@ -874,7 +881,7 @@ func TestIntegration_MouseClickSelectsIteration(t *testing.T) {
 		Action: tea.MouseActionPress,
 	})
 
-	if m.focusedPane != leftPane {
+	if m.focusedPane != iterationsPane {
 		t.Error("expected left pane focus after clicking left pane")
 	}
 	if m.iterList.Cursor != 0 {
@@ -905,7 +912,8 @@ func TestIntegration_ExpandToolCallShowsContent(t *testing.T) {
 	m := newTestModel(events, 1)
 	drainEvents(t, m)
 
-	// Focus right pane where the tool call is.
+	// Focus right pane where the tool call is (Tab twice: iterations → prompts → right).
+	m.Update(tea.KeyMsg{Type: tea.KeyTab})
 	m.Update(tea.KeyMsg{Type: tea.KeyTab})
 	if m.focusedPane != rightPane {
 		t.Fatal("expected right pane focus")
@@ -1028,7 +1036,7 @@ func TestIntegration_FocusSwitchesWhenLeftPaneHides(t *testing.T) {
 	drainEvents(t, m)
 
 	// Start on left pane.
-	if m.focusedPane != leftPane {
+	if m.focusedPane != iterationsPane {
 		t.Fatal("expected left pane focus")
 	}
 
@@ -1050,7 +1058,7 @@ func TestIntegration_FocusSwitchesWhenTogglingLeftPaneOff(t *testing.T) {
 	drainEvents(t, m)
 
 	// Start on left pane.
-	if m.focusedPane != leftPane {
+	if m.focusedPane != iterationsPane {
 		t.Fatal("expected left pane focus")
 	}
 
@@ -1298,7 +1306,8 @@ func TestIntegration_CountJump_5jMovesDown5(t *testing.T) {
 	m := newTestModel(events, 1)
 	drainEvents(t, m)
 
-	// Focus right pane.
+	// Focus right pane (Tab twice: iterations → prompts → right).
+	m.Update(tea.KeyMsg{Type: tea.KeyTab})
 	m.Update(tea.KeyMsg{Type: tea.KeyTab})
 	if m.focusedPane != rightPane {
 		t.Fatal("expected right pane focus")
@@ -1346,7 +1355,8 @@ func TestIntegration_CountJump_12kMovesUp12(t *testing.T) {
 	m := newTestModel(evts, 1)
 	drainEvents(t, m)
 
-	// Focus right pane.
+	// Focus right pane (Tab twice: iterations → prompts → right).
+	m.Update(tea.KeyMsg{Type: tea.KeyTab})
 	m.Update(tea.KeyMsg{Type: tea.KeyTab})
 
 	// Jump to bottom.
@@ -1386,7 +1396,8 @@ func TestIntegration_CountJump_NoPrefix_MovesOne(t *testing.T) {
 	m := newTestModel(events, 1)
 	drainEvents(t, m)
 
-	// Focus right pane, jump to top.
+	// Focus right pane (Tab twice: iterations → prompts → right), jump to top.
+	m.Update(tea.KeyMsg{Type: tea.KeyTab})
 	m.Update(tea.KeyMsg{Type: tea.KeyTab})
 	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'g'}})
 	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'g'}})
@@ -1409,7 +1420,8 @@ func TestIntegration_CountJump_BufferClearsOnOtherKeys(t *testing.T) {
 	m := newTestModel(events, 1)
 	drainEvents(t, m)
 
-	// Focus right pane.
+	// Focus right pane (Tab twice: iterations → prompts → right).
+	m.Update(tea.KeyMsg{Type: tea.KeyTab})
 	m.Update(tea.KeyMsg{Type: tea.KeyTab})
 
 	// Type "5" to start count buffer.
@@ -1470,7 +1482,7 @@ func TestIntegration_CountJump_DigitsOnlyOnRightPane(t *testing.T) {
 	drainEvents(t, m)
 
 	// Focus left pane (default).
-	if m.focusedPane != leftPane {
+	if m.focusedPane != iterationsPane {
 		t.Fatal("expected left pane focus")
 	}
 
@@ -1494,7 +1506,8 @@ func TestIntegration_CountJump_PendingCountInView(t *testing.T) {
 	m := newTestModel(events, 1)
 	drainEvents(t, m)
 
-	// Focus right pane and type a count.
+	// Focus right pane (Tab twice: iterations → prompts → right) and type a count.
+	m.Update(tea.KeyMsg{Type: tea.KeyTab})
 	m.Update(tea.KeyMsg{Type: tea.KeyTab})
 	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'7'}})
 
@@ -1622,7 +1635,8 @@ func TestIntegration_SubScroll_EnterNavigateExit(t *testing.T) {
 	m := newTestModel(events, 1)
 	drainEvents(t, m)
 
-	// Focus right pane.
+	// Focus right pane (Tab twice: iterations → prompts → right).
+	m.Update(tea.KeyMsg{Type: tea.KeyTab})
 	m.Update(tea.KeyMsg{Type: tea.KeyTab})
 	if m.focusedPane != rightPane {
 		t.Fatal("expected right pane focus")
@@ -1719,7 +1733,8 @@ func TestIntegration_SubScroll_EnterCollapses(t *testing.T) {
 	m := newTestModel(events, 1)
 	drainEvents(t, m)
 
-	// Focus right pane and expand.
+	// Focus right pane (Tab twice: iterations → prompts → right) and expand.
+	m.Update(tea.KeyMsg{Type: tea.KeyTab})
 	m.Update(tea.KeyMsg{Type: tea.KeyTab})
 
 	iter := &m.Session().Iterations[0]
@@ -1775,7 +1790,8 @@ func TestIntegration_CustomKeybindings_EndToEnd(t *testing.T) {
 	m.height = 30
 	drainEvents(t, &m)
 
-	// Focus right pane.
+	// Focus right pane (Tab twice: iterations → prompts → right).
+	m.Update(tea.KeyMsg{Type: tea.KeyTab})
 	m.Update(tea.KeyMsg{Type: tea.KeyTab})
 	if m.focusedPane != rightPane {
 		t.Fatal("expected right pane focus")

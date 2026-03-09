@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"os"
 	"strings"
 	"time"
 
@@ -28,9 +29,15 @@ type tickMsg time.Time
 type paneID int
 
 const (
-	leftPane paneID = iota
+	iterationsPane paneID = iota
+	promptsPane
 	rightPane
 )
+
+// isLeftPane returns true if the pane is in the left column.
+func isLeftPane(p paneID) bool {
+	return p == iterationsPane || p == promptsPane
+}
 
 // Model is the Bubble Tea model for the TUI.
 type Model struct {
@@ -41,8 +48,12 @@ type Model struct {
 	theme         theme.Theme
 
 	// Sub-components
-	iterList IterList
-	timeline Timeline
+	iterList   IterList
+	promptList PromptList
+	timeline   Timeline
+
+	// Working directory for prompt file scanning
+	workDir string
 
 	// UI state
 	width, height   int
@@ -71,6 +82,10 @@ type Model struct {
 func NewModel(sess model.Session, cfg config.Config, promptContent string, th theme.Theme, compactView bool, exitOnComplete bool, exec executor.Executor) Model {
 	sessionPtr := &sess
 	ctrl := session.NewController(sessionPtr, cfg, nil)
+
+	// Use current working directory for prompt file scanning
+	workDir, _ := os.Getwd()
+
 	return Model{
 		controller:      ctrl,
 		exec:            exec,
@@ -82,9 +97,11 @@ func NewModel(sess model.Session, cfg config.Config, promptContent string, th th
 		lineNumbers:     cfg.LineNumbers,
 		exitOnComplete:  exitOnComplete,
 		eventCh:         make(chan tea.Msg, 100),
-		focusedPane:     leftPane,
+		focusedPane:     iterationsPane,
 		iterList:        NewIterList(),
+		promptList:      NewPromptList(workDir),
 		timeline:        NewTimeline(),
+		workDir:         workDir,
 	}
 }
 
@@ -108,7 +125,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.height = msg.Height
 		if msg.Width < 80 {
 			m.leftPaneVisible = false
-			if m.focusedPane == leftPane {
+			if isLeftPane(m.focusedPane) {
 				m.focusedPane = rightPane
 			}
 		} else {
@@ -117,6 +134,8 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case tickMsg:
+		// Rescan prompt files on each tick (1s interval)
+		m.promptList.ScanFiles(m.workDir)
 		return m, tickCmd()
 
 	case assistantBatchMsg:
@@ -280,7 +299,7 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	case config.ActionToggleLeftPane:
 		m.leftPaneVisible = !m.leftPaneVisible
-		if !m.leftPaneVisible && m.focusedPane == leftPane {
+		if !m.leftPaneVisible && isLeftPane(m.focusedPane) {
 			m.focusedPane = rightPane
 		}
 
@@ -289,15 +308,22 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			// Can't toggle to hidden pane.
 			break
 		}
-		if m.focusedPane == leftPane {
+		// Cycle: iterations → prompts → timeline → iterations
+		switch m.focusedPane {
+		case iterationsPane:
+			m.focusedPane = promptsPane
+		case promptsPane:
 			m.focusedPane = rightPane
-		} else {
-			m.focusedPane = leftPane
+		case rightPane:
+			m.focusedPane = iterationsPane
 		}
 
 	case config.ActionFocusLeft:
 		if m.leftPaneVisible {
-			m.focusedPane = leftPane
+			// h from right pane goes to last focused left sub-pane
+			if m.focusedPane == rightPane {
+				m.focusedPane = iterationsPane
+			}
 		}
 
 	case config.ActionFocusRight:
@@ -310,49 +336,65 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.lineNumbers = !m.lineNumbers
 
 	case config.ActionExpand:
-		if m.focusedPane == leftPane {
+		switch m.focusedPane {
+		case iterationsPane:
 			m.focusedPane = rightPane
-		} else {
+		case promptsPane:
+			// Enter on prompt file opens read modal (future: section 4)
+			m.focusedPane = rightPane
+		default:
 			m.timeline.HandleAction("expand", m.currentTimelineProps())
 		}
 
 	case config.ActionJumpTop:
-		if m.focusedPane == leftPane {
+		switch m.focusedPane {
+		case iterationsPane:
 			m.iterList.JumpToTop()
 			m.timeline.ResetPosition()
-		} else {
+		case promptsPane:
+			m.promptList.HandleAction("jump_top", m.promptListProps())
+		default:
 			m.timeline.JumpToTop()
 		}
 
 	case config.ActionJumpBottom:
-		if m.focusedPane == leftPane {
-			m.iterList.JumpToBottom(len(m.controller.Session.Iterations), m.rightPaneHeight())
+		switch m.focusedPane {
+		case iterationsPane:
+			m.iterList.JumpToBottom(len(m.controller.Session.Iterations), m.iterListHeight())
 			m.timeline.ResetPosition()
-		} else {
+		case promptsPane:
+			m.promptList.HandleAction("jump_bottom", m.promptListProps())
+		default:
 			m.timeline.JumpToBottom(m.currentTimelineProps())
 		}
 
 	case config.ActionMoveDown, config.ActionMoveUp:
-		if m.focusedPane == leftPane {
+		switch m.focusedPane {
+		case iterationsPane:
 			oldCursor := m.iterList.Cursor
 			m.iterList.HandleAction(action, m.iterListProps())
 			if m.iterList.Cursor != oldCursor {
 				m.timeline.ResetPosition()
 			}
-		} else {
+		case promptsPane:
+			m.promptList.HandleAction(action, m.promptListProps())
+		default:
 			count := m.timeline.ConsumeCount()
 			clearCount = false // ConsumeCount already cleared
 			m.timeline.HandleActionWithCount(action, count, m.currentTimelineProps())
 		}
 
 	case "page_up", "page_down":
-		if m.focusedPane == leftPane {
+		switch m.focusedPane {
+		case iterationsPane:
 			oldCursor := m.iterList.Cursor
 			m.iterList.HandleAction(action, m.iterListProps())
 			if m.iterList.Cursor != oldCursor {
 				m.timeline.ResetPosition()
 			}
-		} else {
+		case promptsPane:
+			m.promptList.HandleAction(action, m.promptListProps())
+		default:
 			m.timeline.HandleAction(action, m.currentTimelineProps())
 		}
 	}
@@ -402,41 +444,60 @@ func (m *Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 
 	// Determine target pane by X coordinate
 	leftWidth := m.leftPaneWidth()
+	isLeft := leftWidth > 0 && msg.X < leftWidth
+
+	// For left pane, determine if the click is in the iterations or prompts section
 	targetPane := rightPane
-	if leftWidth > 0 && msg.X < leftWidth {
-		targetPane = leftPane
+	if isLeft {
+		paneHeight := m.rightPaneHeight()
+		if IsInPromptSection(paneRow, paneHeight) {
+			targetPane = promptsPane
+		} else {
+			targetPane = iterationsPane
+		}
 	}
 
 	switch {
 	case msg.Button == tea.MouseButtonWheelUp:
 		m.focusedPane = targetPane
-		if targetPane == leftPane {
+		switch targetPane {
+		case iterationsPane:
 			count := len(m.controller.Session.Iterations)
-			m.iterList.ScrollBy(-mouseScrollLines, count, m.rightPaneHeight())
-		} else {
+			m.iterList.ScrollBy(-mouseScrollLines, count, m.iterListHeight())
+		case promptsPane:
+			m.promptList.ScrollBy(-mouseScrollLines)
+		default:
 			m.timeline.ScrollBy(-mouseScrollLines, m.currentTimelineProps())
 		}
 
 	case msg.Button == tea.MouseButtonWheelDown:
 		m.focusedPane = targetPane
-		if targetPane == leftPane {
+		switch targetPane {
+		case iterationsPane:
 			count := len(m.controller.Session.Iterations)
-			m.iterList.ScrollBy(mouseScrollLines, count, m.rightPaneHeight())
-		} else {
+			m.iterList.ScrollBy(mouseScrollLines, count, m.iterListHeight())
+		case promptsPane:
+			m.promptList.ScrollBy(mouseScrollLines)
+		default:
 			m.timeline.ScrollBy(mouseScrollLines, m.currentTimelineProps())
 		}
 
 	case msg.Button == tea.MouseButtonLeft && msg.Action == tea.MouseActionPress:
 		m.focusedPane = targetPane
-		if targetPane == leftPane {
+		switch targetPane {
+		case iterationsPane:
 			count := len(m.controller.Session.Iterations)
 			oldCursor := m.iterList.Cursor
-			if m.iterList.ClickRow(paneRow, count, m.rightPaneHeight()) {
+			if m.iterList.ClickRow(paneRow, count, m.iterListHeight()) {
 				if m.iterList.Cursor != oldCursor {
 					m.timeline.ResetPosition()
 				}
 			}
-		} else {
+		case promptsPane:
+			paneHeight := m.rightPaneHeight()
+			promptRow := PromptSectionRow(paneRow, paneHeight)
+			m.promptList.ClickRow(promptRow)
+		default:
 			props := m.currentTimelineProps()
 			if m.timeline.InSubScroll() {
 				m.timeline.ClickRowSubScroll(paneRow, props)
@@ -475,13 +536,31 @@ func (m *Model) View() string {
 
 	var panes string
 	if leftWidth > 0 {
-		left := m.iterList.View(IterListProps{
+		iterHeight := m.iterListHeight()
+		promptHeight := PromptListTotalHeight()
+
+		iterView := m.iterList.View(IterListProps{
 			Iterations: m.controller.Session.Iterations,
 			Width:      leftWidth,
-			Height:     paneHeight,
-			Focused:    m.focusedPane == leftPane,
+			Height:     iterHeight,
+			Focused:    m.focusedPane == iterationsPane,
 			Theme:      m.theme,
 		})
+
+		// Horizontal divider between iterations and prompts
+		divider := lipgloss.NewStyle().
+			Foreground(lipgloss.Color(m.theme.ForegroundDim)).
+			Width(leftWidth).
+			Render(strings.Repeat("─", leftWidth))
+
+		promptView := m.promptList.View(PromptListProps{
+			Width:   leftWidth,
+			Height:  promptHeight,
+			Focused: m.focusedPane == promptsPane,
+			Theme:   m.theme,
+		})
+
+		left := lipgloss.JoinVertical(lipgloss.Left, iterView, divider, promptView)
 
 		sepLines := make([]string, paneHeight)
 		for i := range sepLines {
@@ -548,14 +627,36 @@ func (m *Model) headerProps() HeaderProps {
 	}
 }
 
+// iterListHeight returns the height available for the iteration list,
+// accounting for the prompt list section and divider at the bottom.
+func (m *Model) iterListHeight() int {
+	paneHeight := m.rightPaneHeight()
+	// Subtract prompt section (5 rows) + divider (1 row)
+	h := paneHeight - PromptListTotalHeight() - 1
+	if h < 1 {
+		h = 1
+	}
+	return h
+}
+
 // iterListProps builds IterListProps from current state.
 func (m *Model) iterListProps() IterListProps {
 	return IterListProps{
 		Iterations: m.controller.Session.Iterations,
 		Width:      m.leftPaneWidth(),
-		Height:     m.rightPaneHeight(),
-		Focused:    m.focusedPane == leftPane,
+		Height:     m.iterListHeight(),
+		Focused:    m.focusedPane == iterationsPane,
 		Theme:      m.theme,
+	}
+}
+
+// promptListProps builds PromptListProps from current state.
+func (m *Model) promptListProps() PromptListProps {
+	return PromptListProps{
+		Width:   m.leftPaneWidth(),
+		Height:  PromptListTotalHeight(),
+		Focused: m.focusedPane == promptsPane,
+		Theme:   m.theme,
 	}
 }
 
@@ -581,7 +682,7 @@ func (m *Model) timelineProps(items []model.TimelineItem) TimelineProps {
 
 func (m *Model) spawnIteration() tea.Cmd {
 	m.controller.StartIteration()
-	m.iterList.OnNewIteration(len(m.controller.Session.Iterations), m.rightPaneHeight())
+	m.iterList.OnNewIteration(len(m.controller.Session.Iterations), m.iterListHeight())
 	if m.iterList.AutoFollow.Following() {
 		m.timeline.ResetPosition()
 	}

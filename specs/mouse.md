@@ -8,7 +8,7 @@ The TUI enables cell-motion mouse tracking (`tea.WithMouseCellMotion()`). This r
 
 ## Scroll Wheel
 
-- **Target pane**: determined by the X coordinate of the event — left of the separator (column 32) targets the left pane, right targets the right pane.
+- **Target pane**: determined by the X coordinate of the event — left of the separator (column 32) targets the left column (iteration list or prompt list depending on Y position), right targets the timeline. Within the left column, the Y coordinate determines whether the target is the iteration list (above the divider) or the prompt list (at the bottom).
 - **Scroll amount**: 3 lines per wheel tick.
 - **Focus switch**: scrolling a pane switches focus to that pane.
 - **Auto-follow**: any mouse scroll calls `AutoFollow.OnManualMove()` to pause auto-follow.
@@ -20,6 +20,7 @@ The TUI enables cell-motion mouse tracking (`tea.WithMouseCellMotion()`). This r
 - **Focus switch**: clicking a pane switches focus to that pane.
 - **Row mapping**: subtract the header height (1 line) from `msg.Y` to get the pane-relative row. Add the pane's scroll offset to get the absolute row index.
 - **Left pane (iteration list)**: sets cursor to `scroll + row` if within the valid iteration range. Resets the timeline position. Ignores clicks beyond the last iteration.
+- **Left pane (prompt list)**: sets cursor to the clicked file if within valid range. Title row clicks are ignored. See [prompt-files.md](prompt-files.md).
 - **Right pane (timeline)**: maps `scroll + row` to a flat cursor position using `LineToFlatCursor`. Sets cursor if valid. Ignores clicks beyond the last item. If the cursor was already on the clicked row, the click toggles expand/collapse — identical to pressing `enter` (see below).
 - **Auto-follow**: any click calls `AutoFollow.OnManualMove()` to pause auto-follow.
 - **Empty space**: clicks beyond the last row in either pane are ignored (no cursor change).
