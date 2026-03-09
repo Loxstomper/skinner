@@ -72,7 +72,7 @@ Iterations → Prompts → Timeline → Iterations
 - **`Tab`**: cycles through all three panes in order.
 - **`h` / `←`**: from Timeline, focuses Iterations pane.
 - **`l` / `→`**: from any left pane, focuses Timeline.
-- **`Enter`** on the prompt list: currently focuses the Timeline (will open read modal in future).
+- **`Enter`** on the prompt list: opens the prompt read modal for the selected file.
 
 Both Iterations and Prompts are visually in the left column. When the left pane is hidden (terminal < 80 columns), neither can receive focus.
 
@@ -82,3 +82,28 @@ Both Iterations and Prompts are visually in the left column. When the left pane 
 - **Scroll**: 3 lines per wheel tick, same as iteration list.
 - **Click**: single click selects a prompt file. Clicking the title row is ignored.
 - **Focus**: any mouse interaction switches focus to the targeted pane.
+
+## Prompt Read Modal
+
+Full-screen centered overlay (same pattern as help/quit modals) for viewing prompt file content.
+
+### Appearance
+
+- **Size**: ~80% of terminal width and height.
+- **Title bar**: full filename (e.g. `PROMPT_BUILD.md`) injected into the top border, centered.
+- **Content**: plain text with absolute line numbers in a dimmed gutter (right-aligned, `ForegroundDim`).
+- **Footer**: `e to edit · esc to close` centered at the bottom, rendered in `ForegroundDim`.
+
+### Navigation
+
+- **`j` / `↓`**: scroll down one line.
+- **`k` / `↑`**: scroll up one line.
+- **`pgdn`**: scroll down 10 lines.
+- **`pgup`**: scroll up 10 lines.
+- **`esc`**: dismiss modal.
+- All other keys are blocked while the modal is open.
+
+### Editor Integration
+
+- **`e`**: suspends the TUI and opens `$EDITOR` (fallback: `vi`) with the prompt file path.
+- On editor exit: modal dismisses, TUI resumes, prompt file list is rescanned.

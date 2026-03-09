@@ -3,6 +3,7 @@ package tui
 import (
 	"context"
 	"os"
+	"os/exec"
 	"strings"
 	"time"
 
@@ -23,6 +24,7 @@ type usageMsg struct{ session.UsageEvent }
 type iterationEndMsg struct{}
 type subprocessExitMsg struct{ err error }
 type tickMsg time.Time
+type promptEditorDoneMsg struct{ err error }
 
 // Pane focus
 
@@ -74,6 +76,11 @@ type Model struct {
 	// Modal state
 	activeModal modalType
 	lastCtrlCAt time.Time
+
+	// Prompt read modal state
+	promptModalFile    string // filename (e.g. "PROMPT_BUILD.md")
+	promptModalContent string // cached file content
+	promptModalScroll  int    // scroll offset within modal
 
 	// Quit state
 	quitting bool
@@ -184,6 +191,11 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.quitting = true
 			return m, tea.Quit
 		}
+		return m, nil
+
+	case promptEditorDoneMsg:
+		// Editor exited; rescan prompt files in case the file was modified
+		m.promptList.ScanFiles(m.workDir)
 		return m, nil
 
 	case tea.KeyMsg:
@@ -340,8 +352,15 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		case iterationsPane:
 			m.focusedPane = rightPane
 		case promptsPane:
-			// Enter on prompt file opens read modal (future: section 4)
-			m.focusedPane = rightPane
+			if f := m.promptList.SelectedFile(); f != "" {
+				content, err := ReadFileContent(m.workDir, f)
+				if err == nil {
+					m.promptModalFile = f
+					m.promptModalContent = content
+					m.promptModalScroll = 0
+					m.activeModal = modalPromptRead
+				}
+			}
 		default:
 			m.timeline.HandleAction("expand", m.currentTimelineProps())
 		}
@@ -430,6 +449,52 @@ func (m *Model) handleModalKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
+	if m.activeModal == modalPromptRead {
+		return m.handlePromptModalKey(key)
+	}
+
+	return m, nil
+}
+
+// handlePromptModalKey handles key presses in the prompt read modal.
+func (m *Model) handlePromptModalKey(key string) (tea.Model, tea.Cmd) {
+	switch key {
+	case "esc":
+		m.activeModal = modalNone
+		return m, nil
+	case "e":
+		// Launch $EDITOR for the prompt file
+		editor := os.Getenv("EDITOR")
+		if editor == "" {
+			editor = "vi"
+		}
+		filePath := m.workDir + "/" + m.promptModalFile
+		m.activeModal = modalNone
+		c := tea.ExecProcess(exec.Command(editor, filePath), func(err error) tea.Msg {
+			return promptEditorDoneMsg{err: err}
+		})
+		return m, c
+	case "j", "down":
+		maxScroll := PromptModalMaxScroll(m.promptModalContent, m.height)
+		if m.promptModalScroll < maxScroll {
+			m.promptModalScroll++
+		}
+	case "k", "up":
+		if m.promptModalScroll > 0 {
+			m.promptModalScroll--
+		}
+	case "pgdown":
+		maxScroll := PromptModalMaxScroll(m.promptModalContent, m.height)
+		m.promptModalScroll += 10
+		if m.promptModalScroll > maxScroll {
+			m.promptModalScroll = maxScroll
+		}
+	case "pgup":
+		m.promptModalScroll -= 10
+		if m.promptModalScroll < 0 {
+			m.promptModalScroll = 0
+		}
+	}
 	return m, nil
 }
 
@@ -583,6 +648,15 @@ func (m *Model) View() string {
 		view = RenderQuitConfirmModal(m.width, m.height, m.theme)
 	case modalHelp:
 		view = RenderHelpModal(m.width, m.height, m.theme, &m.config.KeyMap)
+	case modalPromptRead:
+		view = RenderPromptReadModal(PromptModalProps{
+			Filename: m.promptModalFile,
+			Content:  m.promptModalContent,
+			Scroll:   m.promptModalScroll,
+			Width:    m.width,
+			Height:   m.height,
+			Theme:    m.theme,
+		})
 	}
 
 	return view

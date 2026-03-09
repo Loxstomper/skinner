@@ -6,51 +6,12 @@
 
 ## ~~3. Add prompt file picker to left pane~~ ✓ DONE
 
-## 4. Prompt read modal
-
-### 4a. Spec: add to `specs/prompt-files.md`
-
-- [ ] Document read modal behavior:
-  - Full-screen centered overlay composed on top of entire TUI (same pattern as help/quit modals)
-  - Title bar shows full filename (e.g. `PROMPT_foo.md`)
-  - Plain text content with absolute line numbers in a dimmed gutter
-  - Scrollable with j/k/arrows/pgup/pgdn
-  - Footer hint: `e to edit · esc to close`
-  - `esc` dismisses modal
-  - `e` suspends TUI, opens `$EDITOR` (fallback `vi`), on exit modal dismisses, TUI resumes
-
-### 4b. Modal implementation
-
-- [ ] Add `modalPromptRead` to `modalType` enum in `internal/tui/modal.go`
-- [ ] Create `internal/tui/promptmodal.go`: `RenderPromptReadModal` function
-  - Accepts file path, scroll offset, terminal width/height, theme
-  - Reads file content, renders with line number gutter (dimmed)
-  - Bordered modal ~80% terminal width/height, centered via `centerOverlay`
-  - Title injected into top border (same pattern as help modal)
-  - Footer with `e to edit · esc to close`
-- [ ] Create `internal/tui/promptmodal_test.go`: tests for rendering, line numbers, scroll bounds, long content
-
-### 4c. Modal state and key handling
-
-- [ ] Add prompt modal state to root model: active file path, scroll offset, content lines
-- [ ] Handle Enter on prompt list item: load file, set `modalPromptRead`, reset scroll
-- [ ] Handle keys while `modalPromptRead` is active:
-  - `j`/`k`/arrows/pgup/pgdn: scroll content
-  - `esc`: dismiss modal
-  - `e`: launch `$EDITOR` via `tea.ExecProcess`, on return dismiss modal
-- [ ] All other keys blocked while modal is open
-
-### 4d. Editor integration
-
-- [ ] Implement `$EDITOR` launch: read `$EDITOR` env var, fallback to `vi`
-- [ ] Use `tea.ExecProcess` to suspend TUI and run editor with the prompt file path
-- [ ] On editor exit: dismiss modal, TUI resumes normally (tool calls that arrived during editing are already in the model)
+## ~~4. Prompt read modal~~ ✓ DONE
 
 ## 5. Integration tests
 
-- [ ] Add integration test: prompt list renders files, shows empty state
-- [ ] Add integration test: prompt read modal opens on Enter, shows content with line numbers
-- [ ] Add integration test: `esc` dismisses prompt read modal
+- [x] Add integration test: prompt read modal opens on Enter, shows content with line numbers
+- [x] Add integration test: `esc` dismisses prompt read modal
 - [x] Add integration test: Tab cycles through all three focus targets (updated existing test)
 
 ## Completed
@@ -66,6 +27,7 @@
 - Fix staticcheck lint warnings in timeline_test.go (WriteString→Fprintf)
 - Remove `✓`/`✗` result indicators from tool call rows (timeline.go, spec, tests)
 - Prompt file picker in left pane: component (`promptlist.go`), 3-pane focus model (`iterationsPane`/`promptsPane`/`rightPane`), left pane layout split (iter list + divider + prompt list), spec (`specs/prompt-files.md`), updated specs (keybindings, tui-layout, mouse, README), 22 unit tests, updated integration tests for 3-pane Tab cycle
+- Prompt read modal: `promptmodal.go` renderer with line-number gutter, `modalPromptRead` type, state management in root model (file/content/scroll), key handling (j/k/pgup/pgdn/esc), `$EDITOR` launch via `tea.ExecProcess`, 15 unit+integration tests, updated spec
 
 ## Design Decisions
 

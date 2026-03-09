@@ -15,6 +15,7 @@ const (
 	modalNone modalType = iota
 	modalQuitConfirm
 	modalHelp
+	modalPromptRead
 )
 
 // RenderQuitConfirmModal renders a centered quit confirmation overlay.
