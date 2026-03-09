@@ -28,5 +28,5 @@
 - ✓ **modal:** `RenderRunModal` (label, value, hints, selected state, empty value), `promptNameFromFile`
 - ✓ **root:** `r` key from picker/prompt modal, disabled while running, modal dismiss, digit input, backspace, enter starts run, pre-fill memory, non-digit ignored, view shows modal
 - ✓ **iterlist:** Run separator rendering, cursor skipping separators, separator helper functions, scroll with separators
-- **promptmodal:** Footer with/without running state
+- ✓ **promptmodal:** Footer with/without running state
 - **CLI:** Idle mode (no args), `--exit` validation

@@ -93,6 +93,54 @@ func TestRenderPromptReadModal_ContainsFooter(t *testing.T) {
 	}
 }
 
+func TestRenderPromptReadModal_FooterShowsRunWhenNotRunning(t *testing.T) {
+	props := PromptModalProps{
+		Filename: "PROMPT_FOO.md",
+		Content:  "content\n",
+		Scroll:   0,
+		Width:    120,
+		Height:   40,
+		Theme:    testTheme(),
+		Running:  false,
+	}
+
+	result := RenderPromptReadModal(props)
+
+	if !strings.Contains(result, "r to run") {
+		t.Error("expected 'r to run' in footer when not running")
+	}
+	if !strings.Contains(result, "e to edit") {
+		t.Error("expected 'e to edit' in footer")
+	}
+	if !strings.Contains(result, "esc to close") {
+		t.Error("expected 'esc to close' in footer")
+	}
+}
+
+func TestRenderPromptReadModal_FooterHidesRunWhenRunning(t *testing.T) {
+	props := PromptModalProps{
+		Filename: "PROMPT_FOO.md",
+		Content:  "content\n",
+		Scroll:   0,
+		Width:    120,
+		Height:   40,
+		Theme:    testTheme(),
+		Running:  true,
+	}
+
+	result := RenderPromptReadModal(props)
+
+	if strings.Contains(result, "r to run") {
+		t.Error("expected 'r to run' to be hidden in footer when running")
+	}
+	if !strings.Contains(result, "e to edit") {
+		t.Error("expected 'e to edit' still present when running")
+	}
+	if !strings.Contains(result, "esc to close") {
+		t.Error("expected 'esc to close' still present when running")
+	}
+}
+
 func TestRenderPromptReadModal_ScrollClamped(t *testing.T) {
 	// Short content that fits in one screen shouldn't scroll
 	content := "line 1\nline 2\n"
