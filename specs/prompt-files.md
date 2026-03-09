@@ -74,7 +74,7 @@ Plans → Iterations → Prompts → Timeline → Plans
 ```
 
 - **`Tab`**: cycles through all four panes in order.
-- **`h` / `←`**: from Timeline, focuses Iterations pane.
+- **`h` / `←`**: from Timeline focuses Iterations pane; from plan content view focuses Plans pane.
 - **`l` / `→`**: from any left pane, focuses the right pane (timeline or plan content view).
 - **`Enter`** on the prompt list: opens the prompt read modal for the selected file.
 
