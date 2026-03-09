@@ -23,23 +23,24 @@
 
 **Design note:** `ShouldStartNext()` has two paths — legacy (no runs, uses global `MaxIterations`) and run-based (checks `Phase == PhaseRunning` and per-run `MaxIterations` relative to `Run.StartIndex`). `CompleteIteration()` only manages phase transitions when runs are present. This keeps backward compatibility with existing TUI code that doesn't use `StartRun()` yet.
 
-## Remaining
-
-## 3. Update CLI arg parsing for idle mode
+### 3. Update CLI arg parsing for idle mode ✓
 
 **File:** `cmd/skinner/main.go`
 
-- When no positional args: set mode to `"idle"`, no prompt file, no max iterations
-- Validate `--exit` requires both a mode (`plan`/`build`) and a numeric iteration count — print error and exit otherwise
-- Pass idle mode through to `NewModel` so the TUI knows not to auto-start
+- Default mode changed from "build" to "idle" when no positional args
+- Added explicit `build` keyword handling (previously only `plan` was explicit)
+- `--exit` validates that both mode and iteration count are provided
+- Prompt file only read from disk when mode is not "idle"
 
-## 4. Update `NewModel` to support idle startup
+### 4. Update `NewModel` to support idle startup ✓
 
 **File:** `internal/tui/root.go`
 
-- When mode is `"idle"`: don't call `startIteration()` in `Init()`, set session phase to `Idle`
-- When mode is `"build"`/`"plan"`: start immediately as before (create first `Run` via controller)
-- Session timer: only start ticking when phase transitions to `Running`
+- `Init()` now checks `session.Mode == "idle"` — if so, only starts tick (for prompt file scanning), no iteration spawn
+- For non-idle modes, `Init()` creates the first `Run` via `controller.StartRun()` before spawning iterations
+- All existing integration tests pass (they use `Mode: "build"`)
+
+## Remaining
 
 ## 5. Update header for idle state
 

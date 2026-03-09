@@ -8,6 +8,8 @@ This is hyper-personalised software — I built it for myself. You're welcome to
 
 > **Heads up:** This is under heavy development and may look completely different tomorrow.
 
+![screenshot](./screenshot.png)
+
 
 ## Install
 

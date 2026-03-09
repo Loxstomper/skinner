@@ -118,6 +118,19 @@ func (m *Model) Session() *model.Session {
 }
 
 func (m *Model) Init() tea.Cmd {
+	if m.controller.Session.Mode == "idle" {
+		// Idle mode: no auto-start, just tick for prompt file scanning
+		return tickCmd()
+	}
+
+	// Non-idle mode: create the first Run and start iterating
+	promptName := strings.ToUpper(m.controller.Session.Mode)
+	m.controller.StartRun(
+		promptName,
+		m.controller.Session.PromptFile,
+		m.controller.Session.MaxIterations,
+	)
+
 	return tea.Batch(
 		m.spawnIteration(),
 		tickCmd(),
