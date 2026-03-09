@@ -11,6 +11,17 @@
 - Added `Runs []Run`, `Phase SessionPhase`, `AccumulatedDuration time.Duration` fields to `Session`
 - Tests added for `SessionPhase` constants, `Run` struct, and `Session` runs/phase
 
+### 5. Update header for idle state ✓
+
+**File:** `internal/tui/header.go`
+
+- Added `Phase SessionPhase` field to `HeaderProps`
+- When phase is `Idle`: renders `⏱ --` and `Idle` only, omits tokens/cost/context/rate limits/iteration counter
+- When phase is `Running`/`Finished`: renders as before
+- Wired `controller.Phase()` into `HeaderProps` in `root.go`
+- All existing tests updated to set `Phase: model.PhaseRunning` (zero value is `PhaseIdle`)
+- Tests added: idle phase, running phase full stats, finished phase full stats
+
 ### 2. Add session phase and run methods to controller ✓
 
 **File:** `internal/session/session.go`
@@ -41,14 +52,6 @@
 - All existing integration tests pass (they use `Mode: "build"`)
 
 ## Remaining
-
-## 5. Update header for idle state
-
-**File:** `internal/tui/header.go`
-
-- Add `Phase SessionPhase` field to `HeaderProps`
-- When phase is `Idle`: render `⏱ --` and `Idle` only, omit tokens/cost/context/rate limits/iteration counter
-- When phase is `Running`/`Finished`: render as before
 
 ## 6. Update session timer for pause/resume
 
@@ -139,7 +142,7 @@
 
 - ✓ **model:** Test `Run` struct, `SessionPhase` constants
 - ✓ **session:** Test `StartRun()`, `Phase()` transitions, `ShouldStartNext()` with per-run limits, multi-run iteration numbering
-- **header:** Test idle state rendering (shows `⏱ --` and `Idle`)
+- ✓ **header:** Test idle state rendering (shows `⏱ --` and `Idle`), running/finished phase full stats
 - **iterlist:** Test run separator rendering, cursor skipping separators
 - **root:** Test `r` key disabled during Running phase, modal open/close flow, pre-fill memory
 - **promptmodal:** Test footer with/without running state

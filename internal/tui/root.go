@@ -699,6 +699,7 @@ func (m *Model) headerProps() HeaderProps {
 	}
 
 	return HeaderProps{
+		Phase:           m.controller.Phase(),
 		SessionDuration: time.Since(sess.StartTime),
 		InputTokens:     inputTokens,
 		OutputTokens:    sess.OutputTokens,

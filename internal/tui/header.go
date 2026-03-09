@@ -12,6 +12,7 @@ import (
 
 // HeaderProps contains the data needed to render the header bar.
 type HeaderProps struct {
+	Phase           model.SessionPhase
 	SessionDuration time.Duration
 	InputTokens     int64
 	OutputTokens    int64
@@ -30,6 +31,26 @@ type HeaderProps struct {
 // It is a pure function with no side effects.
 func RenderHeader(p HeaderProps) string {
 	dim := lipgloss.NewStyle().Foreground(lipgloss.Color(p.Theme.ForegroundDim))
+
+	// Idle state: only show stopped timer placeholder and "Idle" status
+	if p.Phase == model.PhaseIdle {
+		centreRendered := dim.Render("⏱ --")
+		rightRendered := dim.Render("Idle ")
+
+		centreWidth := lipgloss.Width(centreRendered)
+		rightWidth := lipgloss.Width(rightRendered)
+		availableWidth := p.Width - rightWidth
+		leftPad := (availableWidth - centreWidth) / 2
+		if leftPad < 1 {
+			leftPad = 1
+		}
+		gap := p.Width - leftPad - centreWidth - rightWidth
+		if gap < 0 {
+			gap = 0
+		}
+
+		return strings.Repeat(" ", leftPad) + centreRendered + strings.Repeat(" ", gap) + rightRendered
+	}
 
 	// Build centre content: duration, tokens, context %, cost
 	dur := FormatDurationValue(p.SessionDuration)
