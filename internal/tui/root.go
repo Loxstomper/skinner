@@ -406,7 +406,7 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case config.ActionJumpBottom:
 		switch m.focusedPane {
 		case iterationsPane:
-			m.iterList.JumpToBottom(len(m.controller.Session.Iterations), m.iterListHeight())
+			m.iterList.JumpToBottom(len(m.controller.Session.Iterations), m.iterListHeight(), m.controller.Session.Runs)
 			m.timeline.ResetPosition()
 		case promptsPane:
 			m.promptList.HandleAction("jump_bottom", m.promptListProps())
@@ -647,7 +647,7 @@ func (m *Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 		switch targetPane {
 		case iterationsPane:
 			count := len(m.controller.Session.Iterations)
-			m.iterList.ScrollBy(-mouseScrollLines, count, m.iterListHeight())
+			m.iterList.ScrollBy(-mouseScrollLines, count, m.iterListHeight(), m.controller.Session.Runs)
 		case promptsPane:
 			m.promptList.ScrollBy(-mouseScrollLines)
 		default:
@@ -659,7 +659,7 @@ func (m *Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 		switch targetPane {
 		case iterationsPane:
 			count := len(m.controller.Session.Iterations)
-			m.iterList.ScrollBy(mouseScrollLines, count, m.iterListHeight())
+			m.iterList.ScrollBy(mouseScrollLines, count, m.iterListHeight(), m.controller.Session.Runs)
 		case promptsPane:
 			m.promptList.ScrollBy(mouseScrollLines)
 		default:
@@ -672,7 +672,7 @@ func (m *Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 		case iterationsPane:
 			count := len(m.controller.Session.Iterations)
 			oldCursor := m.iterList.Cursor
-			if m.iterList.ClickRow(paneRow, count, m.iterListHeight()) {
+			if m.iterList.ClickRow(paneRow, count, m.iterListHeight(), m.controller.Session.Runs) {
 				if m.iterList.Cursor != oldCursor {
 					m.timeline.ResetPosition()
 				}
@@ -725,6 +725,7 @@ func (m *Model) View() string {
 
 		iterView := m.iterList.View(IterListProps{
 			Iterations: m.controller.Session.Iterations,
+			Runs:       m.controller.Session.Runs,
 			Width:      leftWidth,
 			Height:     iterHeight,
 			Focused:    m.focusedPane == iterationsPane,
@@ -850,6 +851,7 @@ func (m *Model) iterListHeight() int {
 func (m *Model) iterListProps() IterListProps {
 	return IterListProps{
 		Iterations: m.controller.Session.Iterations,
+		Runs:       m.controller.Session.Runs,
 		Width:      m.leftPaneWidth(),
 		Height:     m.iterListHeight(),
 		Focused:    m.focusedPane == iterationsPane,
@@ -889,7 +891,7 @@ func (m *Model) timelineProps(items []model.TimelineItem) TimelineProps {
 
 func (m *Model) spawnIteration() tea.Cmd {
 	m.controller.StartIteration()
-	m.iterList.OnNewIteration(len(m.controller.Session.Iterations), m.iterListHeight())
+	m.iterList.OnNewIteration(len(m.controller.Session.Iterations), m.iterListHeight(), m.controller.Session.Runs)
 	if m.iterList.AutoFollow.Following() {
 		m.timeline.ResetPosition()
 	}

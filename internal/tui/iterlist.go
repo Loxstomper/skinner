@@ -28,6 +28,7 @@ func NewIterList() IterList {
 // IterListProps contains the data needed to render the iteration list.
 type IterListProps struct {
 	Iterations []model.Iteration
+	Runs       []model.Run
 	Width      int
 	Height     int
 	Focused    bool
@@ -88,13 +89,25 @@ func (il *IterList) HandleAction(action string, props IterListProps) {
 }
 
 // View renders the iteration list, showing only the visible slice based on scroll offset.
+// Run separators are inserted at boundaries between runs (after the first run).
 func (il *IterList) View(props IterListProps) string {
 	style := lipgloss.NewStyle().Width(props.Width).Height(props.Height)
 	highlight := lipgloss.NewStyle().Background(lipgloss.Color(props.Theme.Highlight))
 
-	// Build all lines
+	// Build separator lookup: iteration index → prompt name
+	separatorAt := make(map[int]string)
+	for i := 1; i < len(props.Runs); i++ {
+		separatorAt[props.Runs[i].StartIndex] = props.Runs[i].PromptName
+	}
+
+	// Build all display lines (iterations + separators)
 	var allLines []string
 	for i, iter := range props.Iterations {
+		// Insert separator before this iteration if it starts a new run
+		if name, ok := separatorAt[i]; ok {
+			allLines = append(allLines, renderRunSeparator(name, props.Width, props.Theme))
+		}
+
 		var statusIcon string
 		var statusColor, iterColor string
 		switch iter.Status {
@@ -157,12 +170,12 @@ func (il *IterList) View(props IterListProps) string {
 
 // OnNewIteration updates auto-follow state when a new iteration is added.
 // If auto-follow is active, the cursor moves to the latest iteration.
-func (il *IterList) OnNewIteration(count int, height int) {
+func (il *IterList) OnNewIteration(count int, height int, runs []model.Run) {
 	il.AutoFollow.OnNewItem()
 	if il.AutoFollow.Following() && count > 0 {
 		il.Cursor = count - 1
-		il.clampScroll(count, height)
-		il.ensureCursorVisibleSimple(count, height)
+		il.clampScroll(totalDisplayLines(count, runs), height)
+		il.ensureCursorVisibleSimple(count, height, runs)
 	}
 }
 
@@ -179,53 +192,57 @@ func (il *IterList) JumpToTop() {
 }
 
 // JumpToBottom moves the cursor to the last iteration and resumes auto-follow.
-func (il *IterList) JumpToBottom(count int, height int) {
+func (il *IterList) JumpToBottom(count int, height int, runs []model.Run) {
 	if count > 0 {
 		il.Cursor = count - 1
-		il.ensureCursorVisibleSimple(count, height)
+		il.ensureCursorVisibleSimple(count, height, runs)
 	}
 	il.AutoFollow.JumpToEnd()
 }
 
 // ensureCursorVisible adjusts scroll so the cursor row is within the viewport.
 func (il *IterList) ensureCursorVisible(props IterListProps) {
-	il.ensureCursorVisibleSimple(len(props.Iterations), props.Height)
+	il.ensureCursorVisibleSimple(len(props.Iterations), props.Height, props.Runs)
 }
 
-// ensureCursorVisibleSimple adjusts scroll using count and height directly.
-func (il *IterList) ensureCursorVisibleSimple(count int, height int) {
-	if il.Cursor < il.Scroll {
-		il.Scroll = il.Cursor
+// ensureCursorVisibleSimple adjusts scroll using count, height, and runs directly.
+func (il *IterList) ensureCursorVisibleSimple(count int, height int, runs []model.Run) {
+	row := displayRowForIter(il.Cursor, runs)
+	if row < il.Scroll {
+		il.Scroll = row
 	}
-	if il.Cursor >= il.Scroll+height {
-		il.Scroll = il.Cursor - height + 1
+	if row >= il.Scroll+height {
+		il.Scroll = row - height + 1
 	}
-	il.clampScroll(count, height)
+	il.clampScroll(totalDisplayLines(count, runs), height)
 }
 
 // ScrollBy adjusts the scroll offset by delta lines (positive = down, negative = up).
-// It clamps the result, pauses auto-follow, and returns whether the scroll changed.
-func (il *IterList) ScrollBy(delta int, count int, height int) {
+// It clamps the result and pauses auto-follow.
+func (il *IterList) ScrollBy(delta int, count int, height int, runs []model.Run) {
 	il.Scroll += delta
-	il.clampScroll(count, height)
+	il.clampScroll(totalDisplayLines(count, runs), height)
 	il.AutoFollow.OnManualMove(false)
 }
 
 // ClickRow handles a mouse click on the given pane-relative row.
-// It sets the cursor to scroll+row if valid, and returns true if the cursor changed.
-func (il *IterList) ClickRow(row int, count int, height int) bool {
-	target := il.Scroll + row
-	if target < 0 || target >= count {
+// It converts the display row to an iteration index (skipping separators),
+// and returns true if the cursor changed.
+func (il *IterList) ClickRow(row int, count int, height int, runs []model.Run) bool {
+	displayRow := il.Scroll + row
+	isSep, iterIdx := displayRowToIterIndex(displayRow, count, runs)
+	if isSep || iterIdx < 0 || iterIdx >= count {
 		return false
 	}
-	il.Cursor = target
+	il.Cursor = iterIdx
 	il.AutoFollow.OnManualMove(il.Cursor == count-1)
 	return true
 }
 
 // clampScroll ensures scroll doesn't exceed the maximum valid offset.
-func (il *IterList) clampScroll(count int, height int) {
-	maxScroll := count - height
+// displayCount is the total number of display lines (iterations + separators).
+func (il *IterList) clampScroll(displayCount int, height int) {
+	maxScroll := displayCount - height
 	if maxScroll < 0 {
 		maxScroll = 0
 	}
@@ -235,4 +252,74 @@ func (il *IterList) clampScroll(count int, height int) {
 	if il.Scroll < 0 {
 		il.Scroll = 0
 	}
+}
+
+// separatorsBefore returns the number of run separators that appear before
+// the given iteration index. The first run never has a separator.
+func separatorsBefore(iterIndex int, runs []model.Run) int {
+	n := 0
+	for i := 1; i < len(runs); i++ {
+		if runs[i].StartIndex <= iterIndex {
+			n++
+		}
+	}
+	return n
+}
+
+// totalSeparators returns the total number of run separator lines.
+func totalSeparators(runs []model.Run) int {
+	if len(runs) <= 1 {
+		return 0
+	}
+	return len(runs) - 1
+}
+
+// displayRowForIter converts an iteration index to a display row index,
+// accounting for separator lines above it.
+func displayRowForIter(iterIndex int, runs []model.Run) int {
+	return iterIndex + separatorsBefore(iterIndex, runs)
+}
+
+// totalDisplayLines returns the total number of display lines (iterations + separators).
+func totalDisplayLines(iterCount int, runs []model.Run) int {
+	return iterCount + totalSeparators(runs)
+}
+
+// displayRowToIterIndex converts a display row back to an iteration index.
+// Returns (true, -1) if the display row is a separator line.
+func displayRowToIterIndex(displayRow int, iterCount int, runs []model.Run) (isSeparator bool, iterIndex int) {
+	seps := 0
+	for i := 1; i < len(runs); i++ {
+		sepRow := runs[i].StartIndex + seps
+		if displayRow == sepRow {
+			return true, -1
+		}
+		if displayRow < sepRow {
+			break
+		}
+		seps++
+	}
+	idx := displayRow - seps
+	if idx < 0 || idx >= iterCount {
+		return false, -1
+	}
+	return false, idx
+}
+
+// renderRunSeparator renders a "── NAME ────────" separator line.
+func renderRunSeparator(name string, width int, th theme.Theme) string {
+	dimStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(th.ForegroundDim))
+	nameStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(th.Foreground)).Bold(true)
+
+	styledName := nameStyle.Render(name)
+	prefix := "── "
+	suffix := " "
+
+	usedWidth := lipgloss.Width(prefix) + lipgloss.Width(styledName) + lipgloss.Width(suffix)
+	trailing := width - usedWidth
+	if trailing < 0 {
+		trailing = 0
+	}
+
+	return dimStyle.Render(prefix) + styledName + dimStyle.Render(suffix+strings.Repeat("─", trailing))
 }

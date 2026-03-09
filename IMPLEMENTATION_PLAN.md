@@ -13,28 +13,12 @@
 9. **Wire `r` in prompt picker** — `ActionRun` in `handleKey()` opens run modal when not running ✓
 10. **Wire `r` in prompt read modal** — `handlePromptModalKey` opens run modal for viewed prompt ✓
 11. **Prompt modal footer** — `Running bool` on `PromptModalProps`, hides "r to run" when running ✓
+12. **Run separators in iteration list** — `Runs` field on `IterListProps`, separator rendering at run boundaries, cursor skips separators, scroll accounting for display rows vs iteration indices ✓
+13. **Root model passes run data** — `controller.Session.Runs` passed into `IterListProps` in both `View()` and `iterListProps()`, all method call sites updated ✓
 14. **Keybinding config** — `ActionRun = "run"` with default `r`, added to `AllActions()` ✓
 15. **Help modal** — "Run prompt" entry in Actions section of `RenderHelpModal` ✓
 
 ## Remaining
-
-### 12. Add run separators to iteration list
-
-**File:** `internal/tui/iterlist.go`
-
-- Add `Runs []model.Run` field to `IterListProps`
-- Render `── PROMPTNAME ──` separator at run boundaries (after the first run)
-- Separator uses `ForegroundDim` for line, bold `Foreground` for name
-- Separators not selectable — cursor skips them
-- Account for separator lines in scroll offset and height calculations
-
-### 13. Update root model to pass run data through
-
-**File:** `internal/tui/root.go`
-
-- Pass `controller.Session.Runs` into `IterListProps`
-- Pass `controller.Phase()` into `HeaderProps`
-- Pass running state into `PromptModalProps`
 
 ### 16. Tests
 
@@ -43,6 +27,6 @@
 - ✓ **header:** Idle/running/finished phase rendering
 - ✓ **modal:** `RenderRunModal` (label, value, hints, selected state, empty value), `promptNameFromFile`
 - ✓ **root:** `r` key from picker/prompt modal, disabled while running, modal dismiss, digit input, backspace, enter starts run, pre-fill memory, non-digit ignored, view shows modal
-- **iterlist:** Run separator rendering, cursor skipping separators
+- ✓ **iterlist:** Run separator rendering, cursor skipping separators, separator helper functions, scroll with separators
 - **promptmodal:** Footer with/without running state
 - **CLI:** Idle mode (no args), `--exit` validation
