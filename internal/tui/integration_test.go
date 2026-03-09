@@ -1911,6 +1911,285 @@ func TestIntegration_CustomKeybindings_CustomSequence(t *testing.T) {
 	}
 }
 
+// --- Plan pane integration tests ---
+
+func TestIntegration_PlanSelectionSwapsRightPane(t *testing.T) {
+	events := []session.Event{
+		session.AssistantBatchEvent{Events: []session.Event{
+			session.ToolUseEvent{ID: "tc1", Name: "Read", Summary: "main.go"},
+		}},
+		session.ToolResultEvent{ToolUseID: "tc1", IsError: false},
+		session.SubprocessExitEvent{Err: nil},
+	}
+
+	m := newTestModel(events, 1)
+	drainEvents(t, m)
+
+	// Initially in timeline mode on iterations pane
+	if m.rightPaneMode != timelineMode {
+		t.Error("expected initial rightPaneMode=timelineMode")
+	}
+
+	// Tab to prompts, then right pane, then plans
+	m.Update(tea.KeyMsg{Type: tea.KeyTab}) // → prompts
+	m.Update(tea.KeyMsg{Type: tea.KeyTab}) // → right pane
+	m.Update(tea.KeyMsg{Type: tea.KeyTab}) // → plans
+
+	if m.focusedPane != plansPane {
+		t.Fatal("expected plans pane focus")
+	}
+	if m.rightPaneMode != planMode {
+		t.Error("expected rightPaneMode=planMode after focusing plans")
+	}
+
+	// Tab back to iterations
+	m.Update(tea.KeyMsg{Type: tea.KeyTab}) // → iterations
+
+	if m.focusedPane != iterationsPane {
+		t.Fatal("expected iterations pane focus")
+	}
+	if m.rightPaneMode != timelineMode {
+		t.Error("expected rightPaneMode=timelineMode after focusing iterations")
+	}
+}
+
+func TestIntegration_PlanFocusRestoresTimeline(t *testing.T) {
+	events := []session.Event{
+		session.AssistantBatchEvent{Events: []session.Event{
+			session.ToolUseEvent{ID: "tc1", Name: "Read", Summary: "main.go"},
+		}},
+		session.ToolResultEvent{ToolUseID: "tc1", IsError: false},
+		session.SubprocessExitEvent{Err: nil},
+	}
+
+	m := newTestModel(events, 1)
+	drainEvents(t, m)
+
+	// Switch to plan mode
+	m.focusedPane = plansPane
+	m.rightPaneMode = planMode
+
+	// Use 'l' to go to right pane (still in plan mode)
+	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'l'}})
+	if m.focusedPane != rightPane {
+		t.Fatal("expected right pane focus after 'l'")
+	}
+	if m.rightPaneMode != planMode {
+		t.Error("expected rightPaneMode=planMode after 'l' from plans")
+	}
+
+	// Use 'h' to go back to plans
+	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'h'}})
+	if m.focusedPane != plansPane {
+		t.Error("expected plans pane focus after 'h' from plan content")
+	}
+
+	// Now tab to iterations — right pane should switch to timeline
+	m.Update(tea.KeyMsg{Type: tea.KeyTab})
+	if m.rightPaneMode != timelineMode {
+		t.Error("expected rightPaneMode=timelineMode after tabbing to iterations")
+	}
+}
+
+func TestIntegration_PlanScrollResetOnCursorChange(t *testing.T) {
+	events := []session.Event{
+		session.AssistantBatchEvent{Events: []session.Event{
+			session.ToolUseEvent{ID: "tc1", Name: "Read", Summary: "main.go"},
+		}},
+		session.ToolResultEvent{ToolUseID: "tc1", IsError: false},
+		session.SubprocessExitEvent{Err: nil},
+	}
+
+	m := newTestModel(events, 1)
+	drainEvents(t, m)
+
+	// Set up plan list with multiple files
+	m.planList.Files = []string{"A_PLAN.md", "B_PLAN.md"}
+	m.planList.Cursor = 0
+	m.focusedPane = plansPane
+	m.rightPaneMode = planMode
+	m.planViewScroll = 10
+
+	// Move cursor down — scroll should reset
+	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+	if m.planList.Cursor != 1 {
+		t.Errorf("expected cursor=1, got %d", m.planList.Cursor)
+	}
+	if m.planViewScroll != 0 {
+		t.Errorf("expected planViewScroll=0 after cursor change, got %d", m.planViewScroll)
+	}
+}
+
+func TestIntegration_PlanEditorKey(t *testing.T) {
+	events := []session.Event{
+		session.AssistantBatchEvent{Events: []session.Event{
+			session.ToolUseEvent{ID: "tc1", Name: "Read", Summary: "main.go"},
+		}},
+		session.ToolResultEvent{ToolUseID: "tc1", IsError: false},
+		session.SubprocessExitEvent{Err: nil},
+	}
+
+	m := newTestModel(events, 1)
+	drainEvents(t, m)
+
+	// Set up plan list
+	m.planList.Files = []string{"TEST_PLAN.md"}
+	m.planList.Cursor = 0
+	m.focusedPane = plansPane
+	m.rightPaneMode = planMode
+
+	// Press 'e' — should return a command (editor launch)
+	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'e'}})
+	if cmd == nil {
+		t.Error("expected non-nil command from 'e' key (editor launch)")
+	}
+}
+
+func TestIntegration_PlanEditorKeyFromRightPane(t *testing.T) {
+	events := []session.Event{
+		session.AssistantBatchEvent{Events: []session.Event{
+			session.ToolUseEvent{ID: "tc1", Name: "Read", Summary: "main.go"},
+		}},
+		session.ToolResultEvent{ToolUseID: "tc1", IsError: false},
+		session.SubprocessExitEvent{Err: nil},
+	}
+
+	m := newTestModel(events, 1)
+	drainEvents(t, m)
+
+	// Set up plan list and focus right pane in plan mode
+	m.planList.Files = []string{"TEST_PLAN.md"}
+	m.planList.Cursor = 0
+	m.focusedPane = rightPane
+	m.rightPaneMode = planMode
+
+	// Press 'e' — should return a command (editor launch)
+	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'e'}})
+	if cmd == nil {
+		t.Error("expected non-nil command from 'e' key in plan content view")
+	}
+}
+
+func TestIntegration_PlanEditorKeyNotFromTimeline(t *testing.T) {
+	events := []session.Event{
+		session.AssistantBatchEvent{Events: []session.Event{
+			session.ToolUseEvent{ID: "tc1", Name: "Read", Summary: "main.go"},
+		}},
+		session.ToolResultEvent{ToolUseID: "tc1", IsError: false},
+		session.SubprocessExitEvent{Err: nil},
+	}
+
+	m := newTestModel(events, 1)
+	drainEvents(t, m)
+
+	// Focus right pane in timeline mode — 'e' should not launch editor
+	m.focusedPane = rightPane
+	m.rightPaneMode = timelineMode
+
+	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'e'}})
+	if cmd != nil {
+		t.Error("expected nil command from 'e' key in timeline mode")
+	}
+}
+
+func TestIntegration_PlanViewRendersInRightPane(t *testing.T) {
+	events := []session.Event{
+		session.AssistantBatchEvent{Events: []session.Event{
+			session.ToolUseEvent{ID: "tc1", Name: "Read", Summary: "main.go"},
+		}},
+		session.ToolResultEvent{ToolUseID: "tc1", IsError: false},
+		session.SubprocessExitEvent{Err: nil},
+	}
+
+	m := newTestModel(events, 1)
+	drainEvents(t, m)
+
+	// Switch to plan mode — right pane should show plan content
+	m.focusedPane = plansPane
+	m.rightPaneMode = planMode
+
+	view := m.View()
+	// Plan list title should appear in the left pane
+	if !strings.Contains(view, "Plans") {
+		t.Error("expected 'Plans' title in view")
+	}
+}
+
+func TestIntegration_PlanNavInRightPane(t *testing.T) {
+	events := []session.Event{
+		session.AssistantBatchEvent{Events: []session.Event{
+			session.ToolUseEvent{ID: "tc1", Name: "Read", Summary: "main.go"},
+		}},
+		session.ToolResultEvent{ToolUseID: "tc1", IsError: false},
+		session.SubprocessExitEvent{Err: nil},
+	}
+
+	m := newTestModel(events, 1)
+	drainEvents(t, m)
+
+	// Set up state for plan content scrolling
+	m.focusedPane = rightPane
+	m.rightPaneMode = planMode
+	m.planViewTotalLines = 100
+	m.planViewScroll = 0
+
+	// j should scroll down
+	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+	if m.planViewScroll != 1 {
+		t.Errorf("expected planViewScroll=1 after 'j', got %d", m.planViewScroll)
+	}
+
+	// k should scroll up
+	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'k'}})
+	if m.planViewScroll != 0 {
+		t.Errorf("expected planViewScroll=0 after 'k', got %d", m.planViewScroll)
+	}
+
+	// gg should jump to top
+	m.planViewScroll = 50
+	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'g'}})
+	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'g'}})
+	if m.planViewScroll != 0 {
+		t.Errorf("expected planViewScroll=0 after 'gg', got %d", m.planViewScroll)
+	}
+}
+
+func TestIntegration_PlanMouseClickSelectsPlan(t *testing.T) {
+	events := []session.Event{
+		session.AssistantBatchEvent{Events: []session.Event{
+			session.ToolUseEvent{ID: "tc1", Name: "Read", Summary: "main.go"},
+		}},
+		session.ToolResultEvent{ToolUseID: "tc1", IsError: false},
+		session.SubprocessExitEvent{Err: nil},
+	}
+
+	m := newTestModel(events, 1)
+	drainEvents(t, m)
+
+	// Set up plan list
+	m.planList.Files = []string{"A_PLAN.md", "B_PLAN.md", "C_PLAN.md"}
+	m.planList.Cursor = 0
+
+	// Click on second plan file (row 2 in plan section: title=0, first file=1, second file=2)
+	// Y=3 (header=0, pane starts at 1, plan title=1, first file=2, second file=3)
+	m.Update(tea.MouseMsg{
+		X:      10,
+		Y:      3, // header + plan title row + first file row = second file row
+		Button: tea.MouseButtonLeft,
+		Action: tea.MouseActionPress,
+	})
+
+	if m.focusedPane != plansPane {
+		t.Error("expected plans pane focus after clicking plan section")
+	}
+	if m.planList.Cursor != 1 {
+		t.Errorf("expected cursor=1 after clicking second plan, got %d", m.planList.Cursor)
+	}
+	if m.rightPaneMode != planMode {
+		t.Error("expected rightPaneMode=planMode after clicking plan section")
+	}
+}
+
 type testError struct{ msg string }
 
 func (e *testError) Error() string { return e.msg }

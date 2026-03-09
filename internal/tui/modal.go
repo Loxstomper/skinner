@@ -147,6 +147,7 @@ func buildHelpSections(km *config.KeyMap) []helpSection {
 			Entries: []helpEntry{
 				entryFor(config.ActionExpand),
 				entryFor(config.ActionRun),
+				{Label: "Edit plan file", Key: "e"},
 				entryFor(config.ActionToggleView),
 				entryFor(config.ActionToggleLineNumbers),
 				entryFor(config.ActionToggleLeftPane),
