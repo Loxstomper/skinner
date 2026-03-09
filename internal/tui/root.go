@@ -700,7 +700,7 @@ func (m *Model) headerProps() HeaderProps {
 
 	return HeaderProps{
 		Phase:           m.controller.Phase(),
-		SessionDuration: time.Since(sess.StartTime),
+		SessionDuration: m.sessionDuration(sess),
 		InputTokens:     inputTokens,
 		OutputTokens:    sess.OutputTokens,
 		ContextPercent:  contextPercent,
@@ -713,6 +713,16 @@ func (m *Model) headerProps() HeaderProps {
 		Width:           m.width,
 		Theme:           m.theme,
 	}
+}
+
+// sessionDuration returns the total session duration accounting for pause/resume.
+// Running: accumulated time from prior runs + elapsed time in current run.
+// Finished/Idle: just the accumulated time (current run already folded in on finish).
+func (m *Model) sessionDuration(sess *model.Session) time.Duration {
+	if m.controller.Phase() == model.PhaseRunning {
+		return sess.AccumulatedDuration + time.Since(sess.StartTime)
+	}
+	return sess.AccumulatedDuration
 }
 
 // iterListHeight returns the height available for the iteration list,

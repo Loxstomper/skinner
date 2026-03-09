@@ -51,16 +51,17 @@
 - For non-idle modes, `Init()` creates the first `Run` via `controller.StartRun()` before spawning iterations
 - All existing integration tests pass (they use `Mode: "build"`)
 
-## Remaining
-
-## 6. Update session timer for pause/resume
+### 6. Update session timer for pause/resume ✓
 
 **File:** `internal/tui/root.go`
 
-- Track accumulated duration on the session model
-- When phase transitions from `Running` to `Finished`: record elapsed time into `AccumulatedDuration`, stop tick
-- When phase transitions from `Finished` to `Running`: resume from `AccumulatedDuration`, restart tick
-- `SessionDuration` in header props = `AccumulatedDuration` + (time since current run started, if running)
+- Added `sessionDuration()` method that computes correct duration based on phase:
+  - Running: `AccumulatedDuration + time.Since(StartTime)` (includes prior runs + current elapsed)
+  - Finished/Idle: `AccumulatedDuration` (timer paused, current run already folded in by `CompleteIteration`)
+- AccumulatedDuration accumulation on phase transitions was already implemented in session controller (`CompleteIteration` adds elapsed to `AccumulatedDuration` when transitioning to Finished)
+- StartRun resets `StartTime` for new run, so `time.Since(StartTime)` only measures current run
+
+## Remaining
 
 ## 7. Add run modal type and rendering
 
