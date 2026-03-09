@@ -47,12 +47,19 @@ func main() {
 }
 
 func parseArgs(cfg config.Config) (mode string, promptFile string, maxIterations int, th theme.Theme, exitOnComplete bool) {
+	mode, promptFile, maxIterations, th, exitOnComplete, err := parseArgsFromSlice(os.Args[1:], cfg)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+	return
+}
+
+func parseArgsFromSlice(args []string, cfg config.Config) (mode string, promptFile string, maxIterations int, th theme.Theme, exitOnComplete bool, err error) {
 	mode = "idle"
 	promptFile = ""
 	maxIterations = 0
 	themeName := cfg.ThemeName
-
-	args := os.Args[1:]
 
 	for _, arg := range args {
 		if strings.HasPrefix(arg, "--theme=") {
@@ -69,30 +76,31 @@ func parseArgs(cfg config.Config) (mode string, promptFile string, maxIterations
 		} else if arg == "plan" {
 			mode = "plan"
 			promptFile = "PROMPT_PLAN.md"
-		} else if n, err := strconv.Atoi(arg); err == nil && n > 0 {
+		} else if n, parseErr := strconv.Atoi(arg); parseErr == nil && n > 0 {
 			maxIterations = n
 		}
 	}
 
 	// --exit requires both a prompt mode and iteration count
 	if exitOnComplete && (mode == "idle" || maxIterations == 0) {
-		fmt.Fprintln(os.Stderr, "--exit requires a prompt mode and iteration count")
-		fmt.Fprintln(os.Stderr, "Usage: skinner [--theme=<name>] [--exit] <plan|build> <max_iterations>")
-		os.Exit(1)
+		err = fmt.Errorf("--exit requires a prompt mode and iteration count\nUsage: skinner [--theme=<name>] [--exit] <plan|build> <max_iterations>")
+		return
 	}
 
 	var ok bool
 	th, ok = theme.LookupTheme(themeName)
 	if !ok {
-		fmt.Fprintf(os.Stderr, "Unknown theme %q. Available themes:\n", themeName)
+		var buf strings.Builder
+		fmt.Fprintf(&buf, "Unknown theme %q. Available themes:\n", themeName)
 		for _, name := range theme.ThemeNames() {
 			suffix := ""
 			if name == "solarized-dark" {
 				suffix = " (default)"
 			}
-			fmt.Fprintf(os.Stderr, "  %s%s\n", name, suffix)
+			fmt.Fprintf(&buf, "  %s%s\n", name, suffix)
 		}
-		os.Exit(1)
+		err = fmt.Errorf("%s", buf.String())
+		return
 	}
 
 	return

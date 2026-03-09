@@ -18,15 +18,6 @@
 14. **Keybinding config** — `ActionRun = "run"` with default `r`, added to `AllActions()` ✓
 15. **Help modal** — "Run prompt" entry in Actions section of `RenderHelpModal` ✓
 
-## Remaining
+16. **Tests** — All test categories complete ✓
 
-### 16. Tests
-
-- ✓ **model:** `Run` struct, `SessionPhase` constants
-- ✓ **session:** `StartRun()`, `Phase()` transitions, per-run limits, accumulated duration
-- ✓ **header:** Idle/running/finished phase rendering
-- ✓ **modal:** `RenderRunModal` (label, value, hints, selected state, empty value), `promptNameFromFile`
-- ✓ **root:** `r` key from picker/prompt modal, disabled while running, modal dismiss, digit input, backspace, enter starts run, pre-fill memory, non-digit ignored, view shows modal
-- ✓ **iterlist:** Run separator rendering, cursor skipping separators, separator helper functions, scroll with separators
-- ✓ **promptmodal:** Footer with/without running state
-- **CLI:** Idle mode (no args), `--exit` validation
+## All items completed.
