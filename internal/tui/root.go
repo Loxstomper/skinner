@@ -82,6 +82,12 @@ type Model struct {
 	promptModalContent string // cached file content
 	promptModalScroll  int    // scroll offset within modal
 
+	// Run modal state
+	runModalValue      string // current input value
+	runModalLastValue  string // last entered value (pre-fill memory)
+	runModalSelected   bool   // whether the pre-filled value is fully selected
+	runModalPromptFile string // which prompt file to run
+
 	// Quit state
 	quitting bool
 }
@@ -360,6 +366,14 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case config.ActionToggleLineNumbers:
 		m.lineNumbers = !m.lineNumbers
 
+	case config.ActionRun:
+		// r key: open run modal from prompt picker
+		if m.focusedPane == promptsPane && m.controller.Phase() != model.PhaseRunning {
+			if f := m.promptList.SelectedFile(); f != "" {
+				m.openRunModal(f)
+			}
+		}
+
 	case config.ActionExpand:
 		switch m.focusedPane {
 		case iterationsPane:
@@ -466,6 +480,10 @@ func (m *Model) handleModalKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.handlePromptModalKey(key)
 	}
 
+	if m.activeModal == modalRunConfig {
+		return m.handleRunModalKey(key)
+	}
+
 	return m, nil
 }
 
@@ -474,6 +492,12 @@ func (m *Model) handlePromptModalKey(key string) (tea.Model, tea.Cmd) {
 	switch key {
 	case "esc":
 		m.activeModal = modalNone
+		return m, nil
+	case "r":
+		// Open run modal from prompt read modal
+		if m.controller.Phase() != model.PhaseRunning {
+			m.openRunModal(m.promptModalFile)
+		}
 		return m, nil
 	case "e":
 		// Launch $EDITOR for the prompt file
@@ -509,6 +533,88 @@ func (m *Model) handlePromptModalKey(key string) (tea.Model, tea.Cmd) {
 		}
 	}
 	return m, nil
+}
+
+// openRunModal opens the run config modal for the given prompt file.
+func (m *Model) openRunModal(promptFile string) {
+	m.runModalPromptFile = promptFile
+	if m.runModalLastValue == "" {
+		m.runModalLastValue = "10"
+	}
+	m.runModalValue = m.runModalLastValue
+	m.runModalSelected = true
+	m.activeModal = modalRunConfig
+}
+
+// handleRunModalKey handles key presses in the run config modal.
+func (m *Model) handleRunModalKey(key string) (tea.Model, tea.Cmd) {
+	switch key {
+	case "esc":
+		m.activeModal = modalNone
+		return m, nil
+
+	case "enter":
+		// Empty value is invalid — do nothing
+		if m.runModalValue == "" {
+			return m, nil
+		}
+		// Parse the iteration count
+		maxIter := 0
+		for _, c := range m.runModalValue {
+			maxIter = maxIter*10 + int(c-'0')
+		}
+		// Save for pre-fill next time
+		m.runModalLastValue = m.runModalValue
+
+		// Close all modals
+		m.activeModal = modalNone
+
+		// Read prompt file fresh from disk
+		content, err := ReadFileContent(m.workDir, m.runModalPromptFile)
+		if err != nil {
+			return m, nil
+		}
+		m.promptContent = content
+
+		// Extract prompt name from filename (e.g. "PROMPT_BUILD.md" -> "BUILD")
+		promptName := promptNameFromFile(m.runModalPromptFile)
+
+		// Start the run
+		m.controller.StartRun(promptName, m.runModalPromptFile, maxIter)
+
+		return m, m.spawnIteration()
+
+	case "backspace":
+		if m.runModalSelected {
+			// Clear the selected value
+			m.runModalValue = ""
+			m.runModalSelected = false
+		} else if len(m.runModalValue) > 0 {
+			m.runModalValue = m.runModalValue[:len(m.runModalValue)-1]
+		}
+		return m, nil
+
+	default:
+		// Only accept digit characters
+		if len(key) == 1 && key[0] >= '0' && key[0] <= '9' {
+			if m.runModalSelected {
+				// Replace the selected value
+				m.runModalValue = key
+				m.runModalSelected = false
+			} else {
+				m.runModalValue += key
+			}
+		}
+		return m, nil
+	}
+}
+
+// promptNameFromFile extracts the prompt name from a filename.
+// e.g. "PROMPT_BUILD.md" -> "BUILD", "PROMPT_PLAN.md" -> "PLAN"
+func promptNameFromFile(filename string) string {
+	name := strings.TrimSuffix(filename, ".md")
+	name = strings.TrimPrefix(name, "PROMPT_")
+	return name
 }
 
 const mouseScrollLines = 3
@@ -669,7 +775,10 @@ func (m *Model) View() string {
 			Width:    m.width,
 			Height:   m.height,
 			Theme:    m.theme,
+			Running:  m.controller.Phase() == model.PhaseRunning,
 		})
+	case modalRunConfig:
+		view = RenderRunModal(m.width, m.height, m.theme, m.runModalValue, m.runModalSelected)
 	}
 
 	return view

@@ -16,6 +16,7 @@ const (
 	modalQuitConfirm
 	modalHelp
 	modalPromptRead
+	modalRunConfig
 )
 
 // RenderQuitConfirmModal renders a centered quit confirmation overlay.
@@ -83,6 +84,8 @@ func actionDisplayName(action string) string {
 		return "Quit"
 	case config.ActionHelp:
 		return "Help"
+	case config.ActionRun:
+		return "Run prompt"
 	case config.ActionEscape:
 		return "Escape"
 	default:
@@ -143,6 +146,7 @@ func buildHelpSections(km *config.KeyMap) []helpSection {
 			Title: "Actions",
 			Entries: []helpEntry{
 				entryFor(config.ActionExpand),
+				entryFor(config.ActionRun),
 				entryFor(config.ActionToggleView),
 				entryFor(config.ActionToggleLineNumbers),
 				entryFor(config.ActionToggleLeftPane),
@@ -270,6 +274,54 @@ func replaceInLine(line string, replacement string, pos int) string {
 	copy(result, runes)
 	copy(result[pos:], replRunes)
 	return string(result)
+}
+
+// RenderRunModal renders a centered modal for entering the iteration count before starting a run.
+// When selected is true, the value is rendered with a selection highlight (pre-filled state).
+// When selected is false, a cursor block is shown after the value.
+func RenderRunModal(width, height int, th theme.Theme, value string, selected bool) string {
+	borderStyle := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(lipgloss.Color(th.ForegroundDim)).
+		Padding(1, 3)
+
+	labelStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color(th.Foreground))
+
+	dimStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color(th.ForegroundDim))
+
+	// Build the input field display
+	var inputDisplay string
+	if selected {
+		// Selected state: render value with highlight background (selection)
+		selectedStyle := lipgloss.NewStyle().
+			Background(lipgloss.Color(th.Highlight))
+		inputDisplay = selectedStyle.Render(value)
+	} else {
+		// Normal state: render value followed by a cursor block
+		valueStyle := lipgloss.NewStyle().
+			Foreground(lipgloss.Color(th.Foreground))
+		cursorStyle := lipgloss.NewStyle().
+			Background(lipgloss.Color(th.Foreground))
+		inputDisplay = valueStyle.Render(value) + cursorStyle.Render(" ")
+	}
+
+	// "Iterations: [value]"
+	line := labelStyle.Render("Iterations: ") + inputDisplay
+
+	// Hints
+	hint1 := dimStyle.Render("enter to start")
+	hint2 := dimStyle.Render("esc to cancel")
+
+	body := line + "\n" +
+		"\n" +
+		hint1 + "\n" +
+		hint2
+
+	modal := borderStyle.Render(body)
+
+	return centerOverlay(modal, width, height)
 }
 
 // centerOverlay places a rendered block in the center of the terminal.

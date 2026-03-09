@@ -22,6 +22,7 @@ const (
 	ActionJumpBottom        = "jump_bottom"
 	ActionExpand            = "expand"
 	ActionEscape            = "escape"
+	ActionRun               = "run"
 )
 
 // KeyBinding represents a single key or key sequence that triggers an action.
@@ -83,6 +84,7 @@ func DefaultKeyMap() KeyMap {
 			ActionJumpBottom:        {Keys: []string{"G"}},
 			ActionExpand:            {Keys: []string{"enter"}},
 			ActionEscape:            {Keys: []string{"esc"}},
+			ActionRun:               {Keys: []string{"r"}},
 		},
 	}
 }
@@ -210,6 +212,7 @@ func AllActions() []string {
 		ActionToggleView,
 		ActionToggleLineNumbers,
 		ActionToggleLeftPane,
+		ActionRun,
 		ActionQuit,
 		ActionHelp,
 	}

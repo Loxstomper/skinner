@@ -16,6 +16,7 @@ type PromptModalProps struct {
 	Width    int
 	Height   int
 	Theme    theme.Theme
+	Running  bool // when true, hide "r to run" in footer
 }
 
 // RenderPromptReadModal renders a centered modal showing prompt file content
@@ -117,8 +118,12 @@ func RenderPromptReadModal(props PromptModalProps) string {
 	}
 
 	// Footer
-	footer := dimStyle.Render("e to edit · esc to close")
-	footerWidth := len("e to edit · esc to close")
+	footerText := "e to edit · r to run · esc to close"
+	if props.Running {
+		footerText = "e to edit · esc to close"
+	}
+	footer := dimStyle.Render(footerText)
+	footerWidth := len(footerText)
 	footerPad := (innerWidth - footerWidth) / 2
 	if footerPad < 0 {
 		footerPad = 0
