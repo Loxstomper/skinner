@@ -2,12 +2,7 @@
 
 ## ~~1. Remove `...` suffix from left sidebar running durations~~ ✓ DONE
 
-## 2. Remove `✓`/`✗` result indicators from right pane tool calls
-
-- [ ] Update `specs/tui-layout.md`: remove result indicator column (item 6) from tool call row spec, update examples
-- [ ] Edit `internal/tui/timeline.go` `renderToolCallLine`: remove `result` variable and `resultColor`, rely on `durColor`/`nameColor` to convey status (~lines 961-976, rendering ~line 1005)
-- [ ] Edit `internal/tui/timeline.go` `renderGroupHeaderLine`: same removal for group headers (~lines 1046-1061)
-- [ ] Update tests in `internal/tui/timeline_test.go` if any assert `✓`/`✗` in output
+## ~~2. Remove `✓`/`✗` result indicators from right pane tool calls~~ ✓ DONE
 
 ## 3. Add prompt file picker to left pane
 
@@ -107,6 +102,7 @@
 - Per-tool-call token attribution with inline display
 - Remove `...` suffix from left sidebar running durations (updated iterlist.go, specs, tests)
 - Fix staticcheck lint warnings in timeline_test.go (WriteString→Fprintf)
+- Remove `✓`/`✗` result indicators from tool call rows (timeline.go, spec, tests)
 
 ## Known Issues
 

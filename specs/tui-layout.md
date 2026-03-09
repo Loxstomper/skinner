@@ -83,8 +83,7 @@ Each tool call is a single row containing:
 3. **Arg summary** — truncated to fit available terminal width (see [stream-json-format.md](stream-json-format.md) for summary extraction per tool). Always dim (`ToolSummary`).
 4. **Line count metadata** — for Read, Edit, and Write only. Shown in parentheses after the arg summary, dim (`ToolSummary`). See [stream-json-format.md](stream-json-format.md) for extraction rules. Blank while the call is in progress (Read metadata comes from the result, so it is only available after completion; Edit and Write metadata comes from the input, so it is available immediately but should still only be shown after completion for visual consistency).
 5. **Token counts** — approximate cached vs real input tokens attributed to this tool call, shown as `[↑N ⚡N]` in `ForegroundDim`. See [token-usage.md](token-usage.md) for attribution logic.
-6. **Result indicator** — `✓` success or `✗` error, colored per state. Blank while in progress.
-7. **Duration** — right-aligned, colored per state (`DurationRunning`/`DurationSuccess`/`DurationError`). Shows `...` while the call is in progress, then the final duration.
+6. **Duration** — right-aligned, colored per state (`DurationRunning`/`DurationSuccess`/`DurationError`). Shows `...` while the call is in progress, then the final duration.
 
 For unknown tools (not in the icon table), use the fallback icon `` (`f059`, question-circle) and always show the tool name regardless of view mode.
 

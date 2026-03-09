@@ -956,21 +956,15 @@ func renderToolCallLine(tc *model.ToolCall, nameWidth, summaryWidth, durWidth in
 	}
 	combined = fmt.Sprintf("%-*s", adjSummaryWidth, combined)
 
-	var nameColor, durColor, resultColor string
-	var result string
+	var nameColor, durColor string
 	switch tc.Status {
 	case model.ToolCallDone:
-		result = "✓"
 		nameColor = th.ToolNameSuccess
 		durColor = th.DurationSuccess
-		resultColor = th.StatusSuccess
 	case model.ToolCallError:
-		result = "✗"
 		nameColor = th.ToolNameError
 		durColor = th.DurationError
-		resultColor = th.StatusError
 	default:
-		result = " "
 		nameColor = th.ToolNameRunning
 		durColor = th.DurationRunning
 	}
@@ -989,7 +983,6 @@ func renderToolCallLine(tc *model.ToolCall, nameWidth, summaryWidth, durWidth in
 
 	styledIcon := styled(nameColor, icon)
 	styledSummary := styled(th.ToolSummary, combined)
-	styledResult := styled(resultColor, result)
 	styledDur := styled(durColor, dur)
 
 	var styledTokens string
@@ -1013,10 +1006,10 @@ func renderToolCallLine(tc *model.ToolCall, nameWidth, summaryWidth, durWidth in
 			name = tc.Name[:nameWidth]
 		}
 		styledName := styled(nameColor, name)
-		return fmt.Sprintf("%s%s%s%s%s%s%s%s%s%s%s", indent, styledIcon, space, styledName, space, styledSummary, styledTokens, space, styledResult, space, styledDur)
+		return fmt.Sprintf("%s%s%s%s%s%s%s%s%s", indent, styledIcon, space, styledName, space, styledSummary, styledTokens, space, styledDur)
 	}
 
-	return fmt.Sprintf("%s%s%s%s%s%s%s%s", indent, styledIcon, space, styledSummary, styledTokens, space, styledResult, space+styledDur)
+	return fmt.Sprintf("%s%s%s%s%s%s%s", indent, styledIcon, space, styledSummary, styledTokens, space, styledDur)
 }
 
 // renderGroupHeaderLine renders a tool call group header row. When highlightBg
@@ -1041,21 +1034,15 @@ func renderGroupHeaderLine(g *model.ToolCallGroup, nameWidth, summaryWidth, durW
 	}
 	summary = fmt.Sprintf("%-*s", summaryWidth, summary)
 
-	var nameColor, durColor, resultColor string
-	var result string
+	var nameColor, durColor string
 	switch status {
 	case model.ToolCallDone:
-		result = "✓"
 		nameColor = th.ToolNameSuccess
 		durColor = th.DurationSuccess
-		resultColor = th.StatusSuccess
 	case model.ToolCallError:
-		result = "✗"
 		nameColor = th.ToolNameError
 		durColor = th.DurationError
-		resultColor = th.StatusError
 	default:
-		result = " "
 		nameColor = th.ToolNameRunning
 		durColor = th.DurationRunning
 	}
@@ -1073,7 +1060,6 @@ func renderGroupHeaderLine(g *model.ToolCallGroup, nameWidth, summaryWidth, durW
 
 	styledIcon := styled(nameColor, icon)
 	styledSummary := styled(th.ToolSummary, summary)
-	styledResult := styled(resultColor, result)
 	styledDur := styled(durColor, dur)
 
 	space := " "
@@ -1091,8 +1077,8 @@ func renderGroupHeaderLine(g *model.ToolCallGroup, nameWidth, summaryWidth, durW
 			name = g.ToolName[:nameWidth]
 		}
 		styledName := styled(nameColor, name)
-		return fmt.Sprintf("%s%s%s%s%s%s%s%s%s%s", indent, styledIcon, space, styledName, space, styledSummary, space, styledResult, space, styledDur)
+		return fmt.Sprintf("%s%s%s%s%s%s%s%s", indent, styledIcon, space, styledName, space, styledSummary, space, styledDur)
 	}
 
-	return fmt.Sprintf("%s%s%s%s%s%s%s%s", indent, styledIcon, space, styledSummary, space, styledResult, space, styledDur)
+	return fmt.Sprintf("%s%s%s%s%s%s", indent, styledIcon, space, styledSummary, space, styledDur)
 }

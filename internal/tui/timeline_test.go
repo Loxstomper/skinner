@@ -311,8 +311,8 @@ func TestTimeline_View_ToolCalls(t *testing.T) {
 	if !strings.Contains(result, "main.go") {
 		t.Error("expected 'main.go' summary")
 	}
-	if !strings.Contains(result, "✓") {
-		t.Error("expected success indicator ✓")
+	if strings.Contains(result, "✓") {
+		t.Error("result indicator ✓ should not be present")
 	}
 	if !strings.Contains(result, "(85 lines)") {
 		t.Error("expected line info '(85 lines)'")
@@ -2153,8 +2153,8 @@ func TestTimeline_View_HighlightPerSegmentBackground(t *testing.T) {
 	if !strings.Contains(result, "main.go") {
 		t.Error("expected 'main.go' summary in highlighted row")
 	}
-	if !strings.Contains(result, "✓") {
-		t.Error("expected success indicator ✓ in highlighted row")
+	if strings.Contains(result, "✓") {
+		t.Error("result indicator ✓ should not be present in highlighted row")
 	}
 }
 
@@ -2260,9 +2260,9 @@ func TestRenderToolCallLine_HighlightBg_PerSegment(t *testing.T) {
 	// With highlight: background codes should appear in each segment.
 	withHighlight := renderToolCallLine(tc, 6, 40, 8, false, th, th.Highlight)
 	occurrences := strings.Count(withHighlight, bgCode)
-	// At minimum: icon, name, summary, result, duration = 5 segments + spaces/indent
-	if occurrences < 5 {
-		t.Errorf("expected at least 5 background code occurrences (one per segment), got %d in: %q",
+	// At minimum: icon, name, summary, duration = 4 segments + spaces/indent
+	if occurrences < 4 {
+		t.Errorf("expected at least 4 background code occurrences (one per segment), got %d in: %q",
 			occurrences, withHighlight)
 	}
 }
