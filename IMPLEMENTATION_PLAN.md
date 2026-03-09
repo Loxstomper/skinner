@@ -2,25 +2,15 @@
 
 ## Tasks
 
-1. ~~Add `github.com/charmbracelet/glamour` dependency~~ — needed when planview is built
+1. ~~Add `github.com/charmbracelet/glamour` dependency~~ ✅ Done
 
-2. ~~Create `internal/tui/planlist.go`~~ ✅ Done — `PlanList` component with `ScanFiles`, `HandleAction`, `View`, `ClickRow`, `ScrollBy`, `IsInPlanSection`, `PlanSectionRow`, `PlanDisplayName`
+2. ~~Create `internal/tui/planlist.go`~~ ✅ Done
 
-3. ~~Create `internal/tui/planlist_test.go`~~ ✅ Done — 20 tests covering discovery, sorting, display name, navigation, scrolling, click, empty state, section detection
+3. ~~Create `internal/tui/planlist_test.go`~~ ✅ Done — 20 tests
 
-4. Create `internal/tui/planview.go` — plan content view for right pane
-   - `RenderPlanView(PlanViewProps)` — glamour-render markdown with `auto` style, word-wrap to pane width
-   - Title bar with centered filename
-   - Scroll state: `planViewScroll int`
-   - Navigation: j/k, gg/G, pgup/pgdn
-   - File-not-found handling: dimmed message
+4. ~~Create `internal/tui/planview.go`~~ ✅ Done — `RenderPlanView(PlanViewProps)` with glamour rendering, title bar, scroll, file-not-found, `ClampPlanScroll()`, `renderMarkdown()`. Note: glamour keeps `# ` prefix in terminal output (not stripped).
 
-5. Create `internal/tui/planview_test.go` — tests for plan content view
-   - Title bar rendering with centered filename
-   - Glamour rendering produces output
-   - Scroll position clamping
-   - Word wrap respects pane width
-   - File-not-found dimmed message
+5. ~~Create `internal/tui/planview_test.go`~~ ✅ Done — 11 tests covering title, glamour output, file-not-found, empty filename, scroll clamping, word wrap, zero size, height-one edge case
 
 6. Update `internal/tui/root.go` — integrate plan pane
    - Add `plansPane` to `paneID` enum (before `iterationsPane`)
