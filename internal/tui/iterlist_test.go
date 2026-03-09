@@ -181,12 +181,9 @@ func TestIterList_View_SingleIteration(t *testing.T) {
 	if !strings.Contains(result, "⟳") {
 		t.Error("expected running icon ⟳")
 	}
-	// Running iterations show live elapsed time with ... suffix
-	if !strings.Contains(result, "...") {
-		t.Error("expected '...' suffix for running iteration duration")
-	}
-	if !strings.Contains(result, "s...") {
-		t.Error("expected elapsed time with '...' suffix (e.g. '30.0s...')")
+	// Running iterations show live elapsed time without ... suffix
+	if strings.Contains(result, "...") {
+		t.Error("running iteration duration should not have '...' suffix")
 	}
 }
 
@@ -244,9 +241,12 @@ func TestIterList_View_RunningDurationShowsElapsed(t *testing.T) {
 
 	result := il.View(props)
 
-	// Should show elapsed time with ... suffix, e.g. "2m14s..."
-	if !strings.Contains(result, "2m14s...") {
-		t.Errorf("expected '2m14s...' for running iteration, got: %s", result)
+	// Should show elapsed time without ... suffix
+	if !strings.Contains(result, "2m14s") {
+		t.Errorf("expected '2m14s' for running iteration, got: %s", result)
+	}
+	if strings.Contains(result, "2m14s...") {
+		t.Errorf("running iteration should not have '...' suffix, got: %s", result)
 	}
 }
 

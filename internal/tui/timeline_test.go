@@ -513,7 +513,7 @@ func TestTimeline_View_ExpandedFullContent(t *testing.T) {
 		if i > 0 {
 			longContent.WriteString("\n")
 		}
-		longContent.WriteString(fmt.Sprintf("line %d", i+1))
+		fmt.Fprintf(&longContent, "line %d", i+1)
 	}
 
 	items := []model.TimelineItem{
@@ -958,7 +958,7 @@ func makeSubScrollItems(contentLines int) []model.TimelineItem {
 		if i > 0 {
 			sb.WriteString("\n")
 		}
-		sb.WriteString(fmt.Sprintf("line %d", i+1))
+		fmt.Fprintf(&sb, "line %d", i+1)
 	}
 	return []model.TimelineItem{
 		&model.ToolCall{
@@ -1332,7 +1332,7 @@ func TestTimeline_SubScroll_GroupChild(t *testing.T) {
 		if i > 0 {
 			sb.WriteString("\n")
 		}
-		sb.WriteString(fmt.Sprintf("child line %d", i+1))
+		fmt.Fprintf(&sb, "child line %d", i+1)
 	}
 
 	items := []model.TimelineItem{
@@ -1499,7 +1499,7 @@ func TestTimeline_ClickRowSubScroll_OtherRow_ExitsAndSelects(t *testing.T) {
 		if i > 0 {
 			sb.WriteString("\n")
 		}
-		sb.WriteString(fmt.Sprintf("line %d", i+1))
+		fmt.Fprintf(&sb, "line %d", i+1)
 	}
 	items := []model.TimelineItem{
 		&model.ToolCall{

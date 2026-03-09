@@ -50,13 +50,13 @@ A vertical list of all iterations in the current session. Each entry shows:
    Iter 1  ✓  (2m14s)               ← highlighted row
  ████████████████████████████████
    Iter 2  ✓  (1m48s)
-   Iter 3  ⟳  (0m32s...)
+   Iter 3  ⟳  (0m32s)
 ```
 
 - **Cursor**: The selected iteration row is highlighted with the theme's `Highlight` background color.
 - **Status icon**: `✓` completed (`StatusSuccess`), `⟳` running (`StatusRunning`), `✗` failed (`StatusError`). Colored per theme.
 - **Iteration text**: colored per state (`IterRunning`, `IterSuccess`, `IterError`).
-- **Duration**: total wallclock time of the iteration. Shown with `...` suffix while still running.
+- **Duration**: total wallclock time of the iteration. Running and completed iterations both show plain duration values; the `⟳` icon and color distinguish running state.
 
 **Scrolling**: When iterations exceed the viewport height, the list scrolls to keep the cursor visible. Moving the cursor beyond the viewport edge adjusts the scroll offset. The view renders only the visible slice of iterations.
 

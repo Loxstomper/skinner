@@ -23,7 +23,7 @@ When tool calls are grouped (see [tool-call-groups.md](tool-call-groups.md)), th
 
 Each iteration's total duration is measured from subprocess start to subprocess exit.
 
-- While running, show elapsed time with a `...` suffix.
+- While running, show live elapsed time (updated every second via tick). The `⟳` icon and color distinguish running state.
 - On completion, show the final total duration.
 
 ## Session Duration
@@ -35,4 +35,4 @@ Total wallclock time since the `skinner` process started. Displayed in the heade
 - Durations under 60s: `1.2s`, `45.0s`
 - Durations 60s and above: `1m14s`, `2m03s`
 - Tool calls in-progress: `...` (no time shown)
-- Iterations in-progress: `2m14s...` (live elapsed time with `...` suffix, updated every second via tick)
+- Iterations in-progress: `2m14s` (live elapsed time, updated every second via tick)

@@ -114,9 +114,9 @@ func (il *IterList) View(props IterListProps) string {
 
 		var dur string
 		if iter.Status == model.IterationRunning {
-			// Show live elapsed time with ... suffix per duration-tracking spec
+			// Show live elapsed time for running iterations
 			elapsed := time.Since(iter.StartTime)
-			dur = FormatDurationValue(elapsed) + "..."
+			dur = FormatDurationValue(elapsed)
 		} else {
 			dur = FormatDurationValue(iter.Duration)
 		}
