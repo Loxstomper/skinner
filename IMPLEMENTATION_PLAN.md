@@ -12,12 +12,9 @@ Implemented: `TrimPath(path, cwd)` and `TrimSummaryPath(summary, toolName, cwd)`
 
 Implemented: Added `WorkDir` field to `TimelineProps`, passed from `Model.workDir`. `renderToolCallLine` applies `TrimSummaryPath` to summaries for Read/Edit/Write/Grep/Glob. No separate expanded headers needed — paths appear only in summary lines. Note: expand.go does not show path headers separately, so no changes needed there.
 
-## 4. Add layout mode to TUI model
+## ~~4. Add layout mode to TUI model~~ ✅ DONE
 
-- **File**: `internal/tui/root.go`
-- Add `layoutMode string` field to `Model` (resolved from config + terminal width)
-- Add `effectiveLayout() string` method — returns `"side"` or `"bottom"` based on config and current width
-- Call on init and on every `tea.WindowSizeMsg`
+Implemented: `effectiveLayout()` method returns `"side"` or `"bottom"` based on `config.Layout` and terminal width (auto threshold: 80 columns). `updateLayoutForSize()` called on every `WindowSizeMsg` to set `leftPaneVisible` and handle layout transitions. Added `bottomBarVisible` field for bottom bar toggle. Updated `ActionToggleLeftPane` to toggle bottom bar in bottom mode. Updated `ActionFocusToggle` with bottom-layout cycle order (Timeline → Plans → Iterations → Prompts → Timeline). Updated `ActionFocusLeft`/`ActionFocusRight` for bottom layout navigation. Updated `rightPaneWidth()` (full width in bottom) and `rightPaneHeight()` (subtracts `BottomBarHeight=9` when bar visible). Focus preserved across layout switches. Tests in `layout_test.go` cover all modes, threshold, resize, pane dimensions, toggle, focus cycle, and focus preservation.
 
 ## 5. Implement bottom bar rendering
 

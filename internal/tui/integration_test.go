@@ -1033,7 +1033,7 @@ func TestIntegration_ToggleLeftPaneWithBracket(t *testing.T) {
 
 // --- Focus auto-switches to right pane when left pane hides ---
 
-func TestIntegration_FocusSwitchesWhenLeftPaneHides(t *testing.T) {
+func TestIntegration_FocusPreservedWhenLayoutSwitches(t *testing.T) {
 	events := []session.Event{
 		session.SubprocessExitEvent{Err: nil},
 	}
@@ -1041,15 +1041,19 @@ func TestIntegration_FocusSwitchesWhenLeftPaneHides(t *testing.T) {
 	m := newTestModel(events, 1)
 	drainEvents(t, m)
 
-	// Start on left pane.
+	// Start on iterations pane.
 	if m.focusedPane != iterationsPane {
-		t.Fatal("expected left pane focus")
+		t.Fatal("expected iterations pane focus")
 	}
 
-	// Hide left pane via resize — focus should auto-switch to right.
+	// Resize to narrow — auto layout switches to bottom.
+	// Focus is preserved: iterations pane still exists in the bottom bar.
 	m.Update(tea.WindowSizeMsg{Width: 60, Height: 30})
-	if m.focusedPane != rightPane {
-		t.Error("expected right pane focus after left pane auto-hides")
+	if m.focusedPane != iterationsPane {
+		t.Error("expected focus preserved on iterations pane after layout switch to bottom")
+	}
+	if m.leftPaneVisible {
+		t.Error("expected leftPaneVisible=false in bottom layout")
 	}
 }
 

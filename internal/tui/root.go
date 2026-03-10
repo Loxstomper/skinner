@@ -77,11 +77,12 @@ type Model struct {
 	workDir string
 
 	// UI state
-	width, height   int
-	focusedPane     paneID
-	compactView     bool
-	leftPaneVisible bool
-	lineNumbers     bool
+	width, height    int
+	focusedPane      paneID
+	compactView      bool
+	leftPaneVisible  bool
+	bottomBarVisible bool
+	lineNumbers      bool
 
 	// KeyMap-driven sequence state machine (replaces hardcoded gPending)
 	pendingAction string
@@ -129,6 +130,7 @@ func NewModel(sess model.Session, cfg config.Config, promptContent string, th th
 		theme:               th,
 		compactView:         compactView,
 		leftPaneVisible:     true,
+		bottomBarVisible:    true,
 		lineNumbers:         cfg.LineNumbers,
 		exitOnComplete:      exitOnComplete,
 		eventCh:             make(chan tea.Msg, 100),
@@ -173,14 +175,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
-		if msg.Width < 80 {
-			m.leftPaneVisible = false
-			if isLeftPane(m.focusedPane) {
-				m.focusedPane = rightPane
-			}
-		} else {
-			m.leftPaneVisible = true
-		}
+		m.updateLayoutForSize()
 		return m, nil
 
 	case tickMsg:
@@ -374,32 +369,63 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case config.ActionToggleLeftPane:
-		m.leftPaneVisible = !m.leftPaneVisible
-		if !m.leftPaneVisible && isLeftPane(m.focusedPane) {
-			m.focusedPane = rightPane
+		if m.effectiveLayout() == "bottom" {
+			m.bottomBarVisible = !m.bottomBarVisible
+			if !m.bottomBarVisible && isLeftPane(m.focusedPane) {
+				m.focusedPane = rightPane
+			}
+		} else {
+			m.leftPaneVisible = !m.leftPaneVisible
+			if !m.leftPaneVisible && isLeftPane(m.focusedPane) {
+				m.focusedPane = rightPane
+			}
 		}
 
 	case config.ActionFocusToggle:
-		if !m.leftPaneVisible {
-			// Can't toggle to hidden pane.
-			break
-		}
-		// Cycle: plans → iterations → prompts → timeline → plans
-		switch m.focusedPane {
-		case plansPane:
-			m.focusedPane = iterationsPane
-			m.rightPaneMode = timelineMode
-		case iterationsPane:
-			m.focusedPane = promptsPane
-		case promptsPane:
-			m.focusedPane = rightPane
-		case rightPane:
-			m.focusedPane = plansPane
-			m.rightPaneMode = planMode
+		if m.effectiveLayout() == "bottom" {
+			if !m.bottomBarVisible {
+				break
+			}
+			// Bottom layout cycle: Timeline → Plans → Iterations → Prompts → Timeline
+			switch m.focusedPane {
+			case rightPane:
+				m.focusedPane = plansPane
+				m.rightPaneMode = planMode
+			case plansPane:
+				m.focusedPane = iterationsPane
+				m.rightPaneMode = timelineMode
+			case iterationsPane:
+				m.focusedPane = promptsPane
+			case promptsPane:
+				m.focusedPane = rightPane
+			}
+		} else {
+			if !m.leftPaneVisible {
+				break
+			}
+			// Side layout cycle: Plans → Iterations → Prompts → Timeline → Plans
+			switch m.focusedPane {
+			case plansPane:
+				m.focusedPane = iterationsPane
+				m.rightPaneMode = timelineMode
+			case iterationsPane:
+				m.focusedPane = promptsPane
+			case promptsPane:
+				m.focusedPane = rightPane
+			case rightPane:
+				m.focusedPane = plansPane
+				m.rightPaneMode = planMode
+			}
 		}
 
 	case config.ActionFocusLeft:
-		if m.leftPaneVisible {
+		if m.effectiveLayout() == "bottom" {
+			// In bottom layout, h/← from main area focuses last-focused bottom bar section
+			if m.focusedPane == rightPane && m.bottomBarVisible {
+				// Default to iterations if no bottom section was previously focused
+				m.focusedPane = iterationsPane
+			}
+		} else if m.leftPaneVisible {
 			if m.focusedPane == rightPane {
 				// h from right pane: go to plans if in plan mode, iterations if in timeline mode
 				if m.rightPaneMode == planMode {
@@ -411,7 +437,14 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 
 	case config.ActionFocusRight:
-		m.focusedPane = rightPane
+		if m.effectiveLayout() == "bottom" {
+			// In bottom layout, l/→ from bottom bar → main area
+			if isLeftPane(m.focusedPane) {
+				m.focusedPane = rightPane
+			}
+		} else {
+			m.focusedPane = rightPane
+		}
 
 	case config.ActionToggleView:
 		m.compactView = !m.compactView
@@ -1139,9 +1172,42 @@ func waitForEvent(ch <-chan tea.Msg) tea.Cmd {
 	}
 }
 
+// updateLayoutForSize adjusts pane visibility and focus based on the effective layout.
+// Called on every WindowSizeMsg and at init.
+func (m *Model) updateLayoutForSize() {
+	layout := m.effectiveLayout()
+	switch layout {
+	case "bottom":
+		m.leftPaneVisible = false
+		// Don't force focus away from left pane sections — they still exist
+		// in bottom layout as bottom bar sections.
+	case "side":
+		m.leftPaneVisible = true
+	}
+}
+
+// effectiveLayout returns "side" or "bottom" based on config and current terminal width.
+// In "auto" mode, switches to "bottom" when width < 80 columns.
+func (m *Model) effectiveLayout() string {
+	switch m.config.Layout {
+	case "side":
+		return "side"
+	case "bottom":
+		return "bottom"
+	default: // "auto"
+		if m.width > 0 && m.width < 80 {
+			return "bottom"
+		}
+		return "side"
+	}
+}
+
 // Helpers
 
 const leftPaneFixedWidth = 32
+
+// BottomBarHeight is the total height of the bottom bar: 3 divider lines + 6 content lines.
+const BottomBarHeight = 9
 
 func (m *Model) leftPaneWidth() int {
 	if m.leftPaneVisible {
@@ -1151,6 +1217,9 @@ func (m *Model) leftPaneWidth() int {
 }
 
 func (m *Model) rightPaneWidth() int {
+	if m.effectiveLayout() == "bottom" {
+		return m.width
+	}
 	lpw := m.leftPaneWidth()
 	if lpw == 0 {
 		return m.width
@@ -1163,10 +1232,17 @@ func (m *Model) rightPaneWidth() int {
 }
 
 func (m *Model) rightPaneHeight() int {
-	if m.height > 1 {
-		return m.height - 1
+	h := m.height - 1 // subtract header
+	if h < 1 {
+		return 20
 	}
-	return 20
+	if m.effectiveLayout() == "bottom" && m.bottomBarVisible {
+		h -= BottomBarHeight
+		if h < 1 {
+			h = 1
+		}
+	}
+	return h
 }
 
 // selectedItems returns the timeline items for the currently selected iteration.
