@@ -892,6 +892,7 @@ func (m *Model) View() string {
 			CompactView: m.compactView,
 			LineNumbers: m.lineNumbers,
 			Theme:       m.theme,
+			WorkDir:     m.workDir,
 		})
 	}
 
@@ -1090,6 +1091,7 @@ func (m *Model) timelineProps(items []model.TimelineItem) TimelineProps {
 		CompactView: m.compactView,
 		LineNumbers: m.lineNumbers,
 		Theme:       m.theme,
+		WorkDir:     m.workDir,
 	}
 }
 

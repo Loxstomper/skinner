@@ -2,6 +2,8 @@ package tui
 
 import (
 	"fmt"
+	"os"
+	"strings"
 	"time"
 )
 
@@ -78,6 +80,55 @@ func GroupSummaryUnit(toolName string) string {
 		return "tasks"
 	default:
 		return "calls"
+	}
+}
+
+// TrimPath strips the CWD prefix or replaces $HOME with ~/ to shorten displayed paths.
+// Rules applied in order: (1) strip cwd+"/" prefix, (2) replace $HOME+"/" with "~/".
+func TrimPath(path, cwd string) string {
+	// Rule 1: strip CWD prefix
+	if cwd != "" {
+		prefix := cwd
+		if !strings.HasSuffix(prefix, "/") {
+			prefix += "/"
+		}
+		if strings.HasPrefix(path, prefix) {
+			return path[len(prefix):]
+		}
+	}
+
+	// Rule 2: replace $HOME with ~/
+	home, err := os.UserHomeDir()
+	if err == nil && home != "" {
+		prefix := home
+		if !strings.HasSuffix(prefix, "/") {
+			prefix += "/"
+		}
+		if strings.HasPrefix(path, prefix) {
+			return "~/" + path[len(prefix):]
+		}
+	}
+
+	return path
+}
+
+// TrimSummaryPath applies path trimming to a tool call summary based on tool name.
+func TrimSummaryPath(summary, toolName, cwd string) string {
+	switch toolName {
+	case "Read", "Edit", "Write":
+		return TrimPath(summary, cwd)
+	case "Grep":
+		// Summary format: "pattern" in path — trim the path part
+		if idx := strings.LastIndex(summary, " in "); idx >= 0 {
+			pathPart := summary[idx+4:]
+			return summary[:idx+4] + TrimPath(pathPart, cwd)
+		}
+		return summary
+	case "Glob":
+		// Pattern may contain an absolute path prefix
+		return TrimPath(summary, cwd)
+	default:
+		return summary
 	}
 }
 

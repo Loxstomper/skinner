@@ -2252,13 +2252,13 @@ func TestRenderToolCallLine_HighlightBg_PerSegment(t *testing.T) {
 	th := testTheme()
 
 	// Without highlight: no background codes expected.
-	noHighlight := renderToolCallLine(tc, 6, 40, 8, false, th, "")
+	noHighlight := renderToolCallLine(tc, 6, 40, 8, false, th, "", "")
 	if strings.Contains(noHighlight, "48;2;") {
 		t.Errorf("expected no background code without highlight, got: %q", noHighlight)
 	}
 
 	// With highlight: background codes should appear in each segment.
-	withHighlight := renderToolCallLine(tc, 6, 40, 8, false, th, th.Highlight)
+	withHighlight := renderToolCallLine(tc, 6, 40, 8, false, th, th.Highlight, "")
 	occurrences := strings.Count(withHighlight, bgCode)
 	// At minimum: icon, name, summary, duration = 4 segments + spaces/indent
 	if occurrences < 4 {

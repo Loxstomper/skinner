@@ -45,6 +45,7 @@ type TimelineProps struct {
 	CompactView bool
 	LineNumbers bool
 	Theme       theme.Theme
+	WorkDir     string // CWD for path trimming in tool call summaries
 }
 
 // renderedLine pairs a rendered text line with its flat cursor index.
@@ -363,7 +364,7 @@ func (tl *Timeline) View(props TimelineProps) string {
 			}
 			flatPos++
 		case *model.ToolCall:
-			l := renderToolCallLine(it, nameWidth, summaryWidth, durWidth, props.CompactView, props.Theme, hlBg)
+			l := renderToolCallLine(it, nameWidth, summaryWidth, durWidth, props.CompactView, props.Theme, hlBg, props.WorkDir)
 			lines = append(lines, renderedLine{text: l, flatIdx: flatPos, highlighted: isCursor})
 			if it.Expanded {
 				lines = tl.appendExpandedLines(lines, it, flatPos, "", props, contentWidth)
@@ -381,7 +382,7 @@ func (tl *Timeline) View(props TimelineProps) string {
 					if childIsCursor {
 						childHlBg = props.Theme.Highlight
 					}
-					cl := renderToolCallLine(child, nameWidth, childSummaryWidth, durWidth, props.CompactView, props.Theme, childHlBg)
+					cl := renderToolCallLine(child, nameWidth, childSummaryWidth, durWidth, props.CompactView, props.Theme, childHlBg, props.WorkDir)
 					if childHlBg != "" {
 						cl = lipgloss.NewStyle().Background(lipgloss.Color(childHlBg)).Render("  ") + cl
 					} else {
@@ -926,7 +927,7 @@ func renderTextBlockLines(tb *model.TextBlock, width int, compactView bool, th t
 // ANSI resets don't interrupt the highlight.
 //
 //nolint:unparam // nameWidth is kept as a parameter for consistency with renderGroupHeaderLine
-func renderToolCallLine(tc *model.ToolCall, nameWidth, summaryWidth, durWidth int, compactView bool, th theme.Theme, highlightBg string) string {
+func renderToolCallLine(tc *model.ToolCall, nameWidth, summaryWidth, durWidth int, compactView bool, th theme.Theme, highlightBg string, workDir string) string {
 	icon := ToolIcon(tc.Name)
 	isKnown := IsKnownTool(tc.Name)
 
@@ -940,7 +941,7 @@ func renderToolCallLine(tc *model.ToolCall, nameWidth, summaryWidth, durWidth in
 		tokenWidth++ // account for leading space
 	}
 
-	summary := tc.Summary
+	summary := TrimSummaryPath(tc.Summary, tc.Name, workDir)
 	lineInfo := ""
 	if tc.LineInfo != "" && tc.Status != model.ToolCallRunning {
 		lineInfo = " " + tc.LineInfo

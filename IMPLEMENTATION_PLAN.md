@@ -4,24 +4,13 @@
 
 Implemented: `Layout string` on Config struct, parsed from `view.layout` TOML, default `"auto"`, invalid values fall back to default. Tests cover all three valid values, default, and invalid fallback.
 
-## 2. Add path trimming utility
+## ~~2. Add path trimming utility~~ ✅ DONE
 
-- **File**: `internal/tui/format.go`
-- Add `TrimPath(path, cwd string) string` — strips CWD prefix, then `$HOME` → `~/`, else returns unchanged
-- **File**: `internal/tui/format_test.go`
-- Test CWD stripping, home dir fallback, paths outside both, edge cases (trailing slash, exact match)
+Implemented: `TrimPath(path, cwd)` and `TrimSummaryPath(summary, toolName, cwd)` in `format.go`. Rules: strip CWD+/ prefix first, then $HOME+/ → ~/. Tests cover CWD stripping, HOME fallback, non-dir-boundary prefixes, trailing slash, and paths outside both.
 
-## 3. Apply path trimming to tool call summaries
+## ~~3. Apply path trimming to tool call summaries~~ ✅ DONE
 
-- **File**: `internal/tui/timeline.go`
-- In `View()`, call `TrimPath()` on tool summary text for Read, Edit, Write, Grep, Glob before rendering
-- Store CWD on `TimelineProps` (or `Model`) so it's available at render time
-- **File**: `internal/tui/root.go`
-- Pass CWD through to timeline props (source: the directory passed to the executor)
-- **File**: `internal/tui/expand.go`
-- Trim paths in expanded detail headers (file path shown above expanded content)
-- **File**: `internal/tui/timeline_test.go`
-- Test that rendered summaries show trimmed paths
+Implemented: Added `WorkDir` field to `TimelineProps`, passed from `Model.workDir`. `renderToolCallLine` applies `TrimSummaryPath` to summaries for Read/Edit/Write/Grep/Glob. No separate expanded headers needed — paths appear only in summary lines. Note: expand.go does not show path headers separately, so no changes needed there.
 
 ## 4. Add layout mode to TUI model
 

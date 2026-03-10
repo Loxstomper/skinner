@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"os"
 	"testing"
 	"time"
 )
@@ -137,6 +138,148 @@ func TestGroupSummaryUnit(t *testing.T) {
 			got := GroupSummaryUnit(tt.toolName)
 			if got != tt.want {
 				t.Errorf("GroupSummaryUnit(%q) = %q, want %q", tt.toolName, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestTrimPath(t *testing.T) {
+	home, _ := os.UserHomeDir()
+
+	tests := []struct {
+		name string
+		path string
+		cwd  string
+		want string
+	}{
+		{
+			"strips CWD prefix",
+			"/home/lox/Development/skinner/internal/tui/view.go",
+			"/home/lox/Development/skinner",
+			"internal/tui/view.go",
+		},
+		{
+			"CWD with trailing slash",
+			"/home/lox/Development/skinner/internal/tui/view.go",
+			"/home/lox/Development/skinner/",
+			"internal/tui/view.go",
+		},
+		{
+			"replaces HOME with ~/",
+			home + "/.config/skinner/config.toml",
+			"/some/other/dir",
+			"~/.config/skinner/config.toml",
+		},
+		{
+			"CWD takes priority over HOME",
+			home + "/project/file.go",
+			home + "/project",
+			"file.go",
+		},
+		{
+			"path outside both CWD and HOME",
+			"/etc/hosts",
+			"/home/lox/Development/skinner",
+			"/etc/hosts",
+		},
+		{
+			"exact CWD match falls through to HOME rule",
+			home + "/Development/skinner",
+			home + "/Development/skinner",
+			"~/Development/skinner",
+		},
+		{
+			"empty CWD falls through to HOME",
+			home + "/project/file.go",
+			"",
+			"~/project/file.go",
+		},
+		{
+			"path is CWD prefix but not a dir boundary",
+			home + "/Development/skinnery/file.go",
+			home + "/Development/skinner",
+			"~/Development/skinnery/file.go",
+		},
+		{
+			"path outside HOME unchanged",
+			"/etc/hosts",
+			"/tmp/work",
+			"/etc/hosts",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := TrimPath(tt.path, tt.cwd)
+			if got != tt.want {
+				t.Errorf("TrimPath(%q, %q) = %q, want %q", tt.path, tt.cwd, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestTrimSummaryPath(t *testing.T) {
+	cwd := "/home/lox/Development/skinner"
+
+	tests := []struct {
+		name     string
+		summary  string
+		toolName string
+		want     string
+	}{
+		{
+			"Read trims file_path",
+			"/home/lox/Development/skinner/internal/tui/view.go",
+			"Read",
+			"internal/tui/view.go",
+		},
+		{
+			"Edit trims file_path",
+			"/home/lox/Development/skinner/cmd/main.go",
+			"Edit",
+			"cmd/main.go",
+		},
+		{
+			"Write trims file_path",
+			"/home/lox/Development/skinner/new_file.go",
+			"Write",
+			"new_file.go",
+		},
+		{
+			"Grep trims path after 'in'",
+			"\"pattern\" in /home/lox/Development/skinner/internal",
+			"Grep",
+			"\"pattern\" in internal",
+		},
+		{
+			"Grep without path unchanged",
+			"\"pattern\"",
+			"Grep",
+			"\"pattern\"",
+		},
+		{
+			"Glob trims absolute pattern",
+			"/home/lox/Development/skinner/**/*.go",
+			"Glob",
+			"**/*.go",
+		},
+		{
+			"Bash not trimmed",
+			"echo hello",
+			"Bash",
+			"echo hello",
+		},
+		{
+			"Task not trimmed",
+			"some task description",
+			"Task",
+			"some task description",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := TrimSummaryPath(tt.summary, tt.toolName, cwd)
+			if got != tt.want {
+				t.Errorf("TrimSummaryPath(%q, %q, %q) = %q, want %q", tt.summary, tt.toolName, cwd, got, tt.want)
 			}
 		})
 	}
