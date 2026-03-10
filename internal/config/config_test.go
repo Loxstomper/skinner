@@ -120,6 +120,57 @@ context_window = 150000
 	}
 }
 
+func TestDefaultConfig_Layout(t *testing.T) {
+	cfg := DefaultConfig()
+	if cfg.Layout != "auto" {
+		t.Errorf("expected default Layout=%q, got %q", "auto", cfg.Layout)
+	}
+}
+
+func TestLoadConfig_LayoutValues(t *testing.T) {
+	for _, val := range []string{"side", "bottom", "auto"} {
+		t.Run(val, func(t *testing.T) {
+			tmpDir := t.TempDir()
+			configDir := filepath.Join(tmpDir, ".config", "skinner")
+			if err := os.MkdirAll(configDir, 0755); err != nil {
+				t.Fatalf("failed to create config dir: %v", err)
+			}
+
+			configContent := "[view]\nlayout = \"" + val + "\"\n"
+			if err := os.WriteFile(filepath.Join(configDir, "config.toml"), []byte(configContent), 0644); err != nil {
+				t.Fatalf("failed to write config file: %v", err)
+			}
+
+			t.Setenv("HOME", tmpDir)
+			cfg := LoadConfig()
+
+			if cfg.Layout != val {
+				t.Errorf("expected Layout=%q, got %q", val, cfg.Layout)
+			}
+		})
+	}
+}
+
+func TestLoadConfig_LayoutInvalidFallsBackToDefault(t *testing.T) {
+	tmpDir := t.TempDir()
+	configDir := filepath.Join(tmpDir, ".config", "skinner")
+	if err := os.MkdirAll(configDir, 0755); err != nil {
+		t.Fatalf("failed to create config dir: %v", err)
+	}
+
+	configContent := "[view]\nlayout = \"invalid\"\n"
+	if err := os.WriteFile(filepath.Join(configDir, "config.toml"), []byte(configContent), 0644); err != nil {
+		t.Fatalf("failed to write config file: %v", err)
+	}
+
+	t.Setenv("HOME", tmpDir)
+	cfg := LoadConfig()
+
+	if cfg.Layout != "auto" {
+		t.Errorf("expected Layout=%q for invalid value, got %q", "auto", cfg.Layout)
+	}
+}
+
 func TestDefaultConfig_PlanCommand(t *testing.T) {
 	cfg := DefaultConfig()
 	expected := `claude "study specs/README.md"`

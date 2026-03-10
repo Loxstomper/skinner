@@ -26,3 +26,5 @@ Skinner is a Go TUI that runs Claude CLI in a loop and displays tool call activi
 | [plan-files.md](plan-files.md) | Plan file picker in left pane, glamour-rendered plan view in right pane |
 | [plan-mode.md](plan-mode.md) | Interactive Claude CLI session for creating implementation plans |
 | [run-modal.md](run-modal.md) | Iterations input modal for starting a run interactively |
+| [bottom-layout.md](bottom-layout.md) | Bottom bar layout for narrow terminals, auto/side/bottom config |
+| [path-trimming.md](path-trimming.md) | CWD and home directory path trimming for tool call summaries |

@@ -6,9 +6,9 @@ All keybindings listed here are defaults. Users can remap any action via the `[k
 
 | Key              | Action                                      |
 |------------------|---------------------------------------------|
-| `tab`            | Cycle focus: Plans → Iterations → Prompts → Timeline |
-| `h` / `←`       | Focus left pane (Plans from plan content view; Iterations from timeline) |
-| `l` / `→`       | Focus right pane (plan content view or timeline)  |
+| `tab`            | Cycle focus: Plans → Iterations → Prompts → Timeline (side layout); Timeline → Plans → Iterations → Prompts (bottom layout) |
+| `h` / `←`       | Focus left pane / bottom bar (Plans from plan content view; Iterations from timeline) |
+| `l` / `→`       | Focus right pane / main area (plan content view or timeline) |
 
 ## Navigation (operates on focused pane)
 
@@ -45,7 +45,7 @@ In the **timeline pane**, cursor movement highlights individual items (text bloc
 |------------------|---------------------------------------------|
 | `v`              | Toggle between full and compact view mode   |
 | `#`              | Toggle relative line numbers on/off         |
-| `[`              | Toggle left pane visibility                 |
+| `[`              | Toggle left pane (side layout) or bottom bar (bottom layout) visibility |
 
 ## Global
 

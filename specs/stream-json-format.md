@@ -123,6 +123,8 @@ Each tool type has different args. The following fields should be used to genera
 | Glob  | ``  | `f07b`    | `input.pattern`                                       |
 | Task  | ``  | `f085`    | `input.description`                                   |
 
+All file paths in summaries are automatically trimmed — see [path-trimming.md](path-trimming.md).
+
 For unknown tools not in this table, use the fallback icon `` (`f059`, question-circle) and always display the raw tool name alongside it.
 
 ## Line Count Metadata

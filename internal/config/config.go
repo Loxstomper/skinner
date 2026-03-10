@@ -18,6 +18,7 @@ type ModelPricing struct {
 
 type Config struct {
 	ViewMode    string // "full" or "compact"
+	Layout      string // "side", "bottom", "auto"
 	LineNumbers bool   // show relative line numbers in right pane
 	ThemeName   string
 	KeyMap      KeyMap
@@ -28,6 +29,7 @@ type Config struct {
 func DefaultConfig() Config {
 	return Config{
 		ViewMode:    "full",
+		Layout:      "auto",
 		LineNumbers: true,
 		ThemeName:   "solarized-dark",
 		KeyMap:      DefaultKeyMap(),
@@ -109,6 +111,9 @@ func LoadConfig() Config {
 		case section == "view":
 			if key == "mode" && (value == "full" || value == "compact") {
 				cfg.ViewMode = value
+			}
+			if key == "layout" && (value == "side" || value == "bottom" || value == "auto") {
+				cfg.Layout = value
 			}
 			if key == "line_numbers" {
 				cfg.LineNumbers = value == "true"

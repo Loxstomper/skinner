@@ -8,14 +8,15 @@ The TUI enables cell-motion mouse tracking (`tea.WithMouseCellMotion()`). This r
 
 ## Scroll Wheel
 
-- **Target pane**: determined by the X coordinate of the event — left of the separator (column 32) targets the left column (iteration list or prompt list depending on Y position), right targets the right pane. Within the left column, the Y coordinate determines whether the target is the iteration list (above the divider) or the prompt list (at the bottom). When the right pane is in plan mode (showing rendered plan content), scroll events target the plan content view instead of the timeline.
+- **Target pane (side layout)**: determined by the X coordinate of the event — left of the separator (column 32) targets the left column (iteration list or prompt list depending on Y position), right targets the right pane. Within the left column, the Y coordinate determines whether the target is the iteration list (above the divider) or the prompt list (at the bottom). When the right pane is in plan mode (showing rendered plan content), scroll events target the plan content view instead of the timeline.
+- **Target pane (bottom layout)**: determined by the Y coordinate — events in the main area target the timeline or plan content view; events in the bottom bar region target the section under the pointer (Plans, Iterations, or Prompts) based on Y offset relative to divider positions. See [bottom-layout.md](bottom-layout.md).
 - **Scroll amount**: 3 lines per wheel tick.
 - **Focus switch**: scrolling a pane switches focus to that pane.
 - **Auto-follow**: any mouse scroll calls `AutoFollow.OnManualMove()` to pause auto-follow.
 
 ## Click
 
-- **Target pane**: same X-coordinate rule as scroll.
+- **Target pane**: same coordinate rules as scroll (X-based for side layout, Y-based for bottom layout).
 - **Button**: only left-click (`MouseButtonLeft` with `MouseActionPress`) is handled; other buttons are ignored.
 - **Focus switch**: clicking a pane switches focus to that pane.
 - **Row mapping**: subtract the header height (1 line) from `msg.Y` to get the pane-relative row. Add the pane's scroll offset to get the absolute row index.

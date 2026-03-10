@@ -36,9 +36,21 @@ No tokens, cost, context %, rate limits, or iteration counter. Just the stopped 
 - **Iteration progress** — `Iter N` (unlimited mode) or `Iter N/M` (when max iterations is set).
 - **Status icon** — `⟳` while an iteration is running, `✓` when the session has finished all iterations, `✗` if the last iteration failed. Colored per theme (`StatusRunning`/`StatusSuccess`/`StatusError`).
 
-## Responsive Layout
+## Layout Modes
 
-The two-pane layout adapts to terminal width:
+The TUI supports two layout modes, controlled by `view.layout` in the config (see [config.md](config.md)):
+
+| Mode     | Behavior                                              |
+|----------|-------------------------------------------------------|
+| `side`   | Traditional left sidebar + right main pane            |
+| `bottom` | Sidebar sections stacked at bottom of screen          |
+| `auto`   | Bottom when width < 80, side when ≥ 80 (default)     |
+
+In `auto` mode, resizing the terminal past the threshold switches layout live, preserving focus. See [bottom-layout.md](bottom-layout.md) for full bottom layout spec.
+
+## Responsive Layout (Side Mode)
+
+In side layout mode, the two-pane layout adapts to terminal width:
 
 | Terminal width | Left pane | Right pane |
 |----------------|-----------|------------|
@@ -46,6 +58,8 @@ The two-pane layout adapts to terminal width:
 | < 80 columns | Hidden | Full width |
 
 When the left pane is hidden, it can be toggled with `[` (see [keybindings.md](keybindings.md)). Pressing `[` on a wide terminal also toggles the left pane off/on.
+
+In bottom layout mode, `[` toggles the bottom bar instead. See [bottom-layout.md](bottom-layout.md).
 
 ## Focus Model
 

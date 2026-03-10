@@ -11,6 +11,7 @@ The config file is optional. If missing or incomplete, defaults apply for all va
 ```toml
 [view]
 mode = "full"            # "full" or "compact"
+layout = "auto"          # "side", "bottom", "auto"
 line_numbers = true      # show relative line numbers in right pane
 
 [theme]
@@ -68,6 +69,7 @@ context_window = 200000
 | Section | Key    | Values                  | Default            |
 |---------|--------|-------------------------|---------------------|
 | `view`  | `mode` | `"full"`, `"compact"`   | `"full"`            |
+| `view`  | `layout` | `"side"`, `"bottom"`, `"auto"` | `"auto"`    |
 | `view`  | `line_numbers` | `true`, `false`  | `true`             |
 | `theme` | `name` | Any built-in theme name | `"solarized-dark"`  |
 
@@ -128,6 +130,7 @@ The command is executed via `sh -c`, so shell quoting, environment variables, an
 ## Defaults
 
 - `view.mode` = `"full"` — show icon + tool name + summary; text blocks up to 3 lines.
+- `view.layout` = `"auto"` — bottom layout when width < 80, side layout when ≥ 80. See [bottom-layout.md](bottom-layout.md).
 - `view.line_numbers` = `true` — show relative line numbers in the right pane gutter. See [line-numbers.md](line-numbers.md).
 - `theme.name` = `"solarized-dark"` — see [theme.md](theme.md) for available themes.
 - `plan.command` = `'claude "study specs/README.md"'` — see [plan-mode.md](plan-mode.md).
