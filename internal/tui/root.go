@@ -789,21 +789,52 @@ func (m *Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
-	// Determine target pane by X coordinate
-	leftWidth := m.leftPaneWidth()
-	isLeft := leftWidth > 0 && msg.X < leftWidth
-
-	// For left pane, determine if the click is in plans, iterations, or prompts section
+	// Determine target pane and whether the event is in the bottom bar
 	targetPane := rightPane
-	if isLeft {
-		paneHeight := m.rightPaneHeight()
-		switch {
-		case IsInPlanSection(paneRow):
-			targetPane = plansPane
-		case IsInPromptSection(paneRow, paneHeight):
-			targetPane = promptsPane
-		default:
-			targetPane = iterationsPane
+	inBottomBar := false
+	bottomContentRow := 0 // row within a bottom bar section's content (0 or 1)
+
+	if m.effectiveLayout() == "bottom" {
+		mainHeight := m.rightPaneHeight()
+		if paneRow >= mainHeight && m.bottomBarVisible {
+			// Bottom bar region — map Y offset to section
+			bottomOffset := paneRow - mainHeight
+			// Structure: [divider, content×2] × 3
+			// Plans:      0=divider, 1-2=content
+			// Iterations: 3=divider, 4-5=content
+			// Prompts:    6=divider, 7-8=content
+			switch {
+			case bottomOffset >= 1 && bottomOffset <= 2:
+				targetPane = plansPane
+				bottomContentRow = bottomOffset - 1
+				inBottomBar = true
+			case bottomOffset >= 4 && bottomOffset <= 5:
+				targetPane = iterationsPane
+				bottomContentRow = bottomOffset - 4
+				inBottomBar = true
+			case bottomOffset >= 7 && bottomOffset <= 8:
+				targetPane = promptsPane
+				bottomContentRow = bottomOffset - 7
+				inBottomBar = true
+			default:
+				// Divider line — ignore
+				return m, nil
+			}
+		}
+		// else: paneRow < mainHeight → targetPane stays rightPane
+	} else {
+		// Side layout: determine target by X coordinate
+		leftWidth := m.leftPaneWidth()
+		if leftWidth > 0 && msg.X < leftWidth {
+			paneHeight := m.rightPaneHeight()
+			switch {
+			case IsInPlanSection(paneRow):
+				targetPane = plansPane
+			case IsInPromptSection(paneRow, paneHeight):
+				targetPane = promptsPane
+			default:
+				targetPane = iterationsPane
+			}
 		}
 	}
 
@@ -816,7 +847,12 @@ func (m *Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 			m.planList.ScrollBy(-mouseScrollLines)
 		case iterationsPane:
 			count := len(m.controller.Session.Iterations)
-			m.iterList.ScrollBy(-mouseScrollLines, count, m.iterListHeight(), m.controller.Session.Runs)
+			if inBottomBar {
+				// Bottom bar: no run separators, use bottomBarSectionHeight
+				m.iterList.ScrollBy(-mouseScrollLines, count, bottomBarSectionHeight, nil)
+			} else {
+				m.iterList.ScrollBy(-mouseScrollLines, count, m.iterListHeight(), m.controller.Session.Runs)
+			}
 		case promptsPane:
 			m.promptList.ScrollBy(-mouseScrollLines)
 		default:
@@ -836,7 +872,11 @@ func (m *Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 			m.planList.ScrollBy(mouseScrollLines)
 		case iterationsPane:
 			count := len(m.controller.Session.Iterations)
-			m.iterList.ScrollBy(mouseScrollLines, count, m.iterListHeight(), m.controller.Session.Runs)
+			if inBottomBar {
+				m.iterList.ScrollBy(mouseScrollLines, count, bottomBarSectionHeight, nil)
+			} else {
+				m.iterList.ScrollBy(mouseScrollLines, count, m.iterListHeight(), m.controller.Session.Runs)
+			}
 		case promptsPane:
 			m.promptList.ScrollBy(mouseScrollLines)
 		default:
@@ -851,41 +891,71 @@ func (m *Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 	case msg.Button == tea.MouseButtonLeft && msg.Action == tea.MouseActionPress:
 		m.focusedPane = targetPane
 		m.updateRightPaneModeForFocus(targetPane)
-		switch targetPane {
-		case plansPane:
-			planRow := PlanSectionRow(paneRow)
-			oldCursor := m.planList.Cursor
-			m.planList.ClickRow(planRow)
-			if m.planList.Cursor != oldCursor {
-				m.planViewScroll = 0
-			}
-		case iterationsPane:
-			// Adjust row for plan section + divider above iterations
-			iterRow := paneRow - PlanListTotalHeight() - 1
-			count := len(m.controller.Session.Iterations)
-			oldCursor := m.iterList.Cursor
-			if iterRow >= 0 {
-				if m.iterList.ClickRow(iterRow, count, m.iterListHeight(), m.controller.Session.Runs) {
-					if m.iterList.Cursor != oldCursor {
-						m.timeline.ResetPosition()
+		if inBottomBar {
+			m.handleBottomBarClick(targetPane, bottomContentRow)
+		} else {
+			switch targetPane {
+			case plansPane:
+				planRow := PlanSectionRow(paneRow)
+				oldCursor := m.planList.Cursor
+				m.planList.ClickRow(planRow)
+				if m.planList.Cursor != oldCursor {
+					m.planViewScroll = 0
+				}
+			case iterationsPane:
+				// Adjust row for plan section + divider above iterations
+				iterRow := paneRow - PlanListTotalHeight() - 1
+				count := len(m.controller.Session.Iterations)
+				oldCursor := m.iterList.Cursor
+				if iterRow >= 0 {
+					if m.iterList.ClickRow(iterRow, count, m.iterListHeight(), m.controller.Session.Runs) {
+						if m.iterList.Cursor != oldCursor {
+							m.timeline.ResetPosition()
+						}
 					}
 				}
-			}
-		case promptsPane:
-			paneHeight := m.rightPaneHeight()
-			promptRow := PromptSectionRow(paneRow, paneHeight)
-			m.promptList.ClickRow(promptRow)
-		default:
-			props := m.currentTimelineProps()
-			if m.timeline.InSubScroll() {
-				m.timeline.ClickRowSubScroll(paneRow, props)
-			} else {
-				m.timeline.ClickRow(paneRow, props)
+			case promptsPane:
+				paneHeight := m.rightPaneHeight()
+				promptRow := PromptSectionRow(paneRow, paneHeight)
+				m.promptList.ClickRow(promptRow)
+			default:
+				props := m.currentTimelineProps()
+				if m.timeline.InSubScroll() {
+					m.timeline.ClickRowSubScroll(paneRow, props)
+				} else {
+					m.timeline.ClickRow(paneRow, props)
+				}
 			}
 		}
 	}
 
 	return m, nil
+}
+
+// handleBottomBarClick handles a left-click on a bottom bar section.
+// contentRow is the row within the section's content area (0 or 1).
+func (m *Model) handleBottomBarClick(target paneID, contentRow int) {
+	switch target {
+	case plansPane:
+		// ViewBottom has no title row — add 1 to match ClickRow's title offset
+		oldCursor := m.planList.Cursor
+		m.planList.ClickRow(contentRow + 1)
+		if m.planList.Cursor != oldCursor {
+			m.planViewScroll = 0
+		}
+	case iterationsPane:
+		// ViewBottom has no run separators — pass nil runs
+		count := len(m.controller.Session.Iterations)
+		oldCursor := m.iterList.Cursor
+		if m.iterList.ClickRow(contentRow, count, bottomBarSectionHeight, nil) {
+			if m.iterList.Cursor != oldCursor {
+				m.timeline.ResetPosition()
+			}
+		}
+	case promptsPane:
+		// ViewBottom has no title row — add 1 to match ClickRow's title offset
+		m.promptList.ClickRow(contentRow + 1)
+	}
 }
 
 func (m *Model) View() string {

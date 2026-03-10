@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/loxstomper/skinner/internal/config"
 	"github.com/loxstomper/skinner/internal/executor"
 	"github.com/loxstomper/skinner/internal/model"
@@ -368,5 +369,317 @@ func TestBottomLayout_PromptListViewBottom_NoTitle(t *testing.T) {
 	}
 	if !strings.Contains(output, "BUILD") {
 		t.Error("expected ViewBottom to contain prompt file display name")
+	}
+}
+
+// newTestModelBottomWithIters creates a bottom-layout model with iterations for mouse testing.
+func newTestModelBottomWithIters(numIters int) *Model {
+	m := newTestModelWithLayoutSize("bottom", 60, 30)
+	for i := 0; i < numIters; i++ {
+		m.controller.Session.Iterations = append(m.controller.Session.Iterations, model.Iteration{
+			Index:    i,
+			Status:   model.IterationCompleted,
+			Duration: time.Duration(i+1) * time.Second,
+		})
+	}
+	return m
+}
+
+// bottomBarMainHeight returns the main pane height for a bottom layout model.
+// The bottom bar starts at Y = 1 (header) + mainHeight.
+func bottomBarMainHeight(m *Model) int {
+	return m.rightPaneHeight()
+}
+
+func TestBottomLayout_MouseClickMainAreaFocusesTimeline(t *testing.T) {
+	m := newTestModelBottomWithIters(3)
+	m.focusedPane = iterationsPane
+
+	// Click in main area (Y = 5, well above bottom bar)
+	m.Update(tea.MouseMsg{
+		X:      10,
+		Y:      5,
+		Button: tea.MouseButtonLeft,
+		Action: tea.MouseActionPress,
+	})
+	if m.focusedPane != rightPane {
+		t.Errorf("expected rightPane focus after main area click, got %d", m.focusedPane)
+	}
+}
+
+func TestBottomLayout_MouseClickIterationsSection(t *testing.T) {
+	m := newTestModelBottomWithIters(3)
+	m.focusedPane = rightPane
+
+	// Iterations content starts at: header(1) + mainHeight + Plans divider(1) + Plans content(2) + Iter divider(1)
+	// = 1 + mainHeight + 4
+	mainH := bottomBarMainHeight(m)
+	iterContentY := 1 + mainH + 4 // first iterations content row
+
+	m.Update(tea.MouseMsg{
+		X:      10,
+		Y:      iterContentY,
+		Button: tea.MouseButtonLeft,
+		Action: tea.MouseActionPress,
+	})
+	if m.focusedPane != iterationsPane {
+		t.Errorf("expected iterationsPane focus after clicking iterations section, got %d", m.focusedPane)
+	}
+}
+
+func TestBottomLayout_MouseClickPlansSection(t *testing.T) {
+	m := newTestModelBottomWithIters(1)
+	m.planList.Files = []string{"TEST_PLAN.md"}
+	m.focusedPane = rightPane
+
+	// Plans content starts at: header(1) + mainHeight + Plans divider(1)
+	mainH := bottomBarMainHeight(m)
+	plansContentY := 1 + mainH + 1 // first plans content row
+
+	m.Update(tea.MouseMsg{
+		X:      10,
+		Y:      plansContentY,
+		Button: tea.MouseButtonLeft,
+		Action: tea.MouseActionPress,
+	})
+	if m.focusedPane != plansPane {
+		t.Errorf("expected plansPane focus after clicking plans section, got %d", m.focusedPane)
+	}
+	if m.rightPaneMode != planMode {
+		t.Error("expected planMode after clicking plans section")
+	}
+}
+
+func TestBottomLayout_MouseClickPromptsSection(t *testing.T) {
+	m := newTestModelBottomWithIters(1)
+	m.promptList.Files = []string{"PROMPT_BUILD.md"}
+	m.focusedPane = rightPane
+
+	// Prompts content starts at: header(1) + mainHeight + 6 dividers/content + Prompts divider(1)
+	mainH := bottomBarMainHeight(m)
+	promptsContentY := 1 + mainH + 7 // first prompts content row
+
+	m.Update(tea.MouseMsg{
+		X:      10,
+		Y:      promptsContentY,
+		Button: tea.MouseButtonLeft,
+		Action: tea.MouseActionPress,
+	})
+	if m.focusedPane != promptsPane {
+		t.Errorf("expected promptsPane focus after clicking prompts section, got %d", m.focusedPane)
+	}
+}
+
+func TestBottomLayout_MouseClickDividerIgnored(t *testing.T) {
+	m := newTestModelBottomWithIters(3)
+	m.focusedPane = rightPane
+
+	// Click on Plans divider (first divider, offset 0 from bottom bar start)
+	mainH := bottomBarMainHeight(m)
+	dividerY := 1 + mainH // Plans divider row
+
+	m.Update(tea.MouseMsg{
+		X:      10,
+		Y:      dividerY,
+		Button: tea.MouseButtonLeft,
+		Action: tea.MouseActionPress,
+	})
+	// Focus should not change — divider clicks are ignored
+	if m.focusedPane != rightPane {
+		t.Errorf("expected focus unchanged after divider click, got %d", m.focusedPane)
+	}
+}
+
+func TestBottomLayout_MouseClickIterationsDividerIgnored(t *testing.T) {
+	m := newTestModelBottomWithIters(3)
+	m.focusedPane = rightPane
+
+	mainH := bottomBarMainHeight(m)
+	iterDividerY := 1 + mainH + 3 // Iterations divider row
+
+	m.Update(tea.MouseMsg{
+		X:      10,
+		Y:      iterDividerY,
+		Button: tea.MouseButtonLeft,
+		Action: tea.MouseActionPress,
+	})
+	if m.focusedPane != rightPane {
+		t.Errorf("expected focus unchanged after iterations divider click, got %d", m.focusedPane)
+	}
+}
+
+func TestBottomLayout_MouseScrollIterationsSection(t *testing.T) {
+	m := newTestModelBottomWithIters(10)
+	m.focusedPane = rightPane
+
+	mainH := bottomBarMainHeight(m)
+	iterContentY := 1 + mainH + 4
+
+	// Scroll down in iterations section
+	m.Update(tea.MouseMsg{
+		X:      10,
+		Y:      iterContentY,
+		Button: tea.MouseButtonWheelDown,
+	})
+	if m.focusedPane != iterationsPane {
+		t.Errorf("expected iterationsPane focus after scrolling iterations, got %d", m.focusedPane)
+	}
+	if m.iterList.Scroll == 0 {
+		t.Error("expected scroll to increase after wheel down in iterations")
+	}
+}
+
+func TestBottomLayout_MouseScrollMainArea(t *testing.T) {
+	m := newTestModelBottomWithIters(3)
+	m.focusedPane = iterationsPane
+
+	// Scroll in the main area
+	m.Update(tea.MouseMsg{
+		X:      10,
+		Y:      5,
+		Button: tea.MouseButtonWheelDown,
+	})
+	if m.focusedPane != rightPane {
+		t.Errorf("expected rightPane focus after scrolling main area, got %d", m.focusedPane)
+	}
+}
+
+func TestBottomLayout_MouseClickSelectsIteration(t *testing.T) {
+	m := newTestModelBottomWithIters(5)
+	m.iterList.Cursor = 0
+
+	mainH := bottomBarMainHeight(m)
+	// Click second row of iterations content (should select iteration at Scroll+1)
+	iterContent2ndRow := 1 + mainH + 5
+
+	m.Update(tea.MouseMsg{
+		X:      10,
+		Y:      iterContent2ndRow,
+		Button: tea.MouseButtonLeft,
+		Action: tea.MouseActionPress,
+	})
+
+	if m.iterList.Cursor != 1 {
+		t.Errorf("expected cursor=1 after clicking second iteration row, got %d", m.iterList.Cursor)
+	}
+}
+
+func TestBottomLayout_MouseClickSelectsPlan(t *testing.T) {
+	m := newTestModelBottomWithIters(1)
+	m.planList.Files = []string{"PLAN_A.md", "PLAN_B.md"}
+	m.planList.Cursor = 0
+
+	mainH := bottomBarMainHeight(m)
+	// Click second row of plans content
+	planContent2ndRow := 1 + mainH + 2
+
+	m.Update(tea.MouseMsg{
+		X:      10,
+		Y:      planContent2ndRow,
+		Button: tea.MouseButtonLeft,
+		Action: tea.MouseActionPress,
+	})
+
+	if m.planList.Cursor != 1 {
+		t.Errorf("expected plan cursor=1 after clicking second plan row, got %d", m.planList.Cursor)
+	}
+}
+
+func TestBottomLayout_MouseClickSelectsPrompt(t *testing.T) {
+	m := newTestModelBottomWithIters(1)
+	m.promptList.Files = []string{"PROMPT_A.md", "PROMPT_B.md"}
+	m.promptList.Cursor = 0
+
+	mainH := bottomBarMainHeight(m)
+	// Click second row of prompts content
+	promptContent2ndRow := 1 + mainH + 8
+
+	m.Update(tea.MouseMsg{
+		X:      10,
+		Y:      promptContent2ndRow,
+		Button: tea.MouseButtonLeft,
+		Action: tea.MouseActionPress,
+	})
+
+	if m.promptList.Cursor != 1 {
+		t.Errorf("expected prompt cursor=1 after clicking second prompt row, got %d", m.promptList.Cursor)
+	}
+}
+
+func TestBottomLayout_MouseHeaderIgnored(t *testing.T) {
+	m := newTestModelBottomWithIters(3)
+	m.focusedPane = iterationsPane
+
+	// Click on header (Y=0)
+	m.Update(tea.MouseMsg{
+		X:      10,
+		Y:      0,
+		Button: tea.MouseButtonLeft,
+		Action: tea.MouseActionPress,
+	})
+	if m.focusedPane != iterationsPane {
+		t.Errorf("expected focus unchanged after header click, got %d", m.focusedPane)
+	}
+}
+
+func TestBottomLayout_MouseBottomBarHiddenAllMainArea(t *testing.T) {
+	m := newTestModelBottomWithIters(3)
+	m.bottomBarVisible = false
+	m.focusedPane = iterationsPane
+
+	// Click anywhere — should target main area since bar is hidden
+	m.Update(tea.MouseMsg{
+		X:      10,
+		Y:      25, // would be bottom bar region if visible
+		Button: tea.MouseButtonLeft,
+		Action: tea.MouseActionPress,
+	})
+	if m.focusedPane != rightPane {
+		t.Errorf("expected rightPane focus when bottom bar hidden, got %d", m.focusedPane)
+	}
+}
+
+func TestBottomLayout_MouseClickIterationResetsTimeline(t *testing.T) {
+	m := newTestModelBottomWithIters(3)
+	m.iterList.Cursor = 2
+	m.timeline.Cursor = 5 // non-zero cursor
+
+	mainH := bottomBarMainHeight(m)
+	iterContentY := 1 + mainH + 4 // first iteration row
+
+	m.Update(tea.MouseMsg{
+		X:      10,
+		Y:      iterContentY,
+		Button: tea.MouseButtonLeft,
+		Action: tea.MouseActionPress,
+	})
+
+	// Clicking a different iteration should reset timeline position
+	if m.iterList.Cursor != 2 && m.timeline.Cursor != 0 {
+		t.Error("expected timeline position reset after clicking a different iteration")
+	}
+}
+
+func TestBottomLayout_MouseClickPlanResetsPlanScroll(t *testing.T) {
+	m := newTestModelBottomWithIters(1)
+	m.planList.Files = []string{"PLAN_A.md", "PLAN_B.md"}
+	m.planList.Cursor = 0
+	m.planViewScroll = 10
+
+	mainH := bottomBarMainHeight(m)
+	planContent2ndRow := 1 + mainH + 2
+
+	m.Update(tea.MouseMsg{
+		X:      10,
+		Y:      planContent2ndRow,
+		Button: tea.MouseButtonLeft,
+		Action: tea.MouseActionPress,
+	})
+
+	if m.planList.Cursor != 1 {
+		t.Fatalf("expected plan cursor=1, got %d", m.planList.Cursor)
+	}
+	if m.planViewScroll != 0 {
+		t.Errorf("expected planViewScroll reset to 0 after selecting different plan, got %d", m.planViewScroll)
 	}
 }

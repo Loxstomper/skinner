@@ -20,53 +20,19 @@ Implemented: `effectiveLayout()` method returns `"side"` or `"bottom"` based on 
 
 Implemented: `renderBottomBar()` method in root.go renders Plans, Iterations, and Prompts sections with labeled dividers. `ViewBottom()` added to IterList (no run separators), PlanList (no title), and PromptList (no title) — each renders 2 compact rows. `View()` uses `rightPaneHeight()` for right pane height (accounts for bottom bar). `renderLabeledDivider()` renders `── Label ────` divider lines. Tests in layout_test.go cover: View contains bottom bar sections, hidden bar, no left pane in bottom mode, no bottom bar in side mode, ViewBottom methods.
 
-## 6. Update focus cycling for bottom layout
+## ~~6. Update focus cycling for bottom layout~~ ✅ DONE (implemented as part of task 4)
 
-- **File**: `internal/tui/root.go`
-- In `ActionFocusToggle` handler, branch on `effectiveLayout()`:
-  - Side: Plans → Iterations → Prompts → Timeline (existing)
-  - Bottom: Timeline → Plans → Iterations → Prompts → Timeline
-- Update `ActionFocusLeft`/`ActionFocusRight` for bottom layout:
-  - `h`/`←`: main area → last-focused bottom bar section
-  - `l`/`→`: bottom bar → main area
+## ~~7. Update mouse handling for bottom layout~~ ✅ DONE
 
-## 7. Update mouse handling for bottom layout
+Implemented: `handleMouse()` branches on `effectiveLayout()`. Bottom layout uses Y-coordinate targeting: events above `rightPaneHeight()` target the timeline/plan view; events in the bottom bar region map to Plans (offset 1-2), Iterations (offset 4-5), or Prompts (offset 7-8) content rows. Divider line clicks (offsets 0, 3, 6) are ignored. `handleBottomBarClick()` helper handles click row mapping: plans/prompts use `ClickRow(contentRow+1)` to compensate for missing title row; iterations pass `nil` runs to skip separator logic. Scroll events in the bottom bar use `bottomBarSectionHeight` and `nil` runs. 15 tests in `layout_test.go` cover: main area clicks/scrolls, section targeting, divider ignoring, item selection, plan scroll reset, timeline reset, hidden bar fallback, and header ignoring.
 
-- **File**: `internal/tui/root.go`
-- In `handleMouse()`, branch on `effectiveLayout()`:
-  - Side: existing X-coordinate logic
-  - Bottom: use Y-coordinate to determine main area vs bottom bar section
-- Add `bottomBarSectionAtRow(y int) paneID` helper — maps Y to plans/iterations/prompts based on divider positions
-- **File**: `internal/tui/root.go`
-- Update scroll and click handlers to use the new targeting
+## ~~8. Update `[` toggle for bottom layout~~ ✅ DONE (implemented as part of task 4)
 
-## 8. Update `[` toggle for bottom layout
+## ~~9. Update pane dimension calculations~~ ✅ DONE (implemented as part of task 4)
 
-- **File**: `internal/tui/root.go`
-- `ActionToggleLeftPane` handler: in bottom mode, toggle bottom bar visibility instead of left pane
-- Add `bottomBarVisible bool` field (or reuse `leftPaneVisible`)
+## ~~10. Tests for bottom layout~~ ✅ DONE
 
-## 9. Update pane dimension calculations
-
-- **File**: `internal/tui/root.go`
-- `rightPaneWidth()`: in bottom mode, always full terminal width (no left pane)
-- `rightPaneHeight()`: in bottom mode, `height - 1 - bottomBarHeight` (header + bottom bar)
-- When bottom bar is hidden, main area gets full height
-
-## 10. Tests for bottom layout
-
-- **File**: `internal/tui/integration_test.go`
-- Add helper to create test model with bottom layout config
-- **File**: `internal/tui/root_test.go` (or new `bottom_layout_test.go`)
-- Test `effectiveLayout()` returns correct mode for auto/side/bottom at various widths
-- Test `View()` output contains bottom bar sections when in bottom mode
-- Test focus cycling order in bottom mode
-- Test `[` toggles bottom bar
-- Test focus preserved across layout switch (auto mode resize)
-- **File**: `internal/tui/iterlist_test.go`
-- Test `ViewBottom()` renders 2 rows, no run separators
-- **File**: `internal/tui/mouse_test.go` (or existing test file)
-- Test Y-coordinate section targeting in bottom mode
+All tests implemented in `layout_test.go`: effectiveLayout modes, threshold, resize, pane dimensions, toggle, focus cycle, focus preservation, View output, ViewBottom methods, and mouse handling (15 mouse tests).
 
 ## 11. Tests for path trimming
 
