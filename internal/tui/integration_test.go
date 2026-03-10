@@ -1788,6 +1788,7 @@ func TestIntegration_CustomKeybindings_EndToEnd(t *testing.T) {
 	cfg := config.DefaultConfig()
 	cfg.KeyMap.Bindings[config.ActionMoveDown] = config.KeyBinding{Keys: []string{"n"}}
 	cfg.KeyMap.Bindings[config.ActionMoveUp] = config.KeyBinding{Keys: []string{"p"}}
+	cfg.KeyMap.Bindings[config.ActionPlanMode] = config.KeyBinding{Keys: []string{"P"}} // avoid conflict with custom move_up
 	cfg.KeyMap.Bindings[config.ActionQuit] = config.KeyBinding{Keys: []string{"x"}}
 	cfg.KeyMap.Bindings[config.ActionToggleView] = config.KeyBinding{Keys: []string{"m"}}
 	th := testTheme()

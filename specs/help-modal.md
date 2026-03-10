@@ -32,6 +32,7 @@ A centered overlay with a two-column layout showing action names and their bound
   │                                     │
   │  Actions                            │
   │    Expand / collapse     enter      │
+  │    Plan mode             p          │
   │    Toggle view mode      v          │
   │    Toggle line numbers   #          │
   │    Toggle left pane      [          │

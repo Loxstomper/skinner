@@ -22,6 +22,7 @@ type Config struct {
 	ThemeName   string
 	KeyMap      KeyMap
 	Pricing     map[string]ModelPricing
+	PlanCommand string // shell command for plan mode (run via sh -c)
 }
 
 func DefaultConfig() Config {
@@ -31,6 +32,7 @@ func DefaultConfig() Config {
 		ThemeName:   "solarized-dark",
 		KeyMap:      DefaultKeyMap(),
 		Pricing:     DefaultPricing(),
+		PlanCommand: `claude "study specs/README.md"`,
 	}
 }
 
@@ -119,6 +121,10 @@ func LoadConfig() Config {
 			// Validate that the action name is known before overriding.
 			if _, ok := cfg.KeyMap.Bindings[key]; ok {
 				cfg.KeyMap.Bindings[key] = ParseKeyBinding(value)
+			}
+		case section == "plan":
+			if key == "command" && value != "" {
+				cfg.PlanCommand = value
 			}
 		case strings.HasPrefix(section, "pricing."):
 			modelName := strings.TrimPrefix(section, "pricing.")

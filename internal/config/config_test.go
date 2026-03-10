@@ -120,6 +120,37 @@ context_window = 150000
 	}
 }
 
+func TestDefaultConfig_PlanCommand(t *testing.T) {
+	cfg := DefaultConfig()
+	expected := `claude "study specs/README.md"`
+	if cfg.PlanCommand != expected {
+		t.Errorf("expected default PlanCommand=%q, got %q", expected, cfg.PlanCommand)
+	}
+}
+
+func TestLoadConfig_PlanCommandOverride(t *testing.T) {
+	tmpDir := t.TempDir()
+	configDir := filepath.Join(tmpDir, ".config", "skinner")
+	if err := os.MkdirAll(configDir, 0755); err != nil {
+		t.Fatalf("failed to create config dir: %v", err)
+	}
+
+	configContent := `[plan]
+command = "claude --verbose"
+`
+	if err := os.WriteFile(filepath.Join(configDir, "config.toml"), []byte(configContent), 0644); err != nil {
+		t.Fatalf("failed to write config file: %v", err)
+	}
+
+	t.Setenv("HOME", tmpDir)
+	cfg := LoadConfig()
+
+	expected := "claude --verbose"
+	if cfg.PlanCommand != expected {
+		t.Errorf("expected PlanCommand=%q, got %q", expected, cfg.PlanCommand)
+	}
+}
+
 func TestLoadConfig_NoConfigFile(t *testing.T) {
 	// Create a temporary directory with no config file
 	tmpDir := t.TempDir()

@@ -22,6 +22,7 @@ const (
 	ActionJumpBottom        = "jump_bottom"
 	ActionExpand            = "expand"
 	ActionEscape            = "escape"
+	ActionPlanMode          = "plan_mode"
 	ActionRun               = "run"
 )
 
@@ -84,6 +85,7 @@ func DefaultKeyMap() KeyMap {
 			ActionJumpBottom:        {Keys: []string{"G"}},
 			ActionExpand:            {Keys: []string{"enter"}},
 			ActionEscape:            {Keys: []string{"esc"}},
+			ActionPlanMode:          {Keys: []string{"p"}},
 			ActionRun:               {Keys: []string{"r"}},
 		},
 	}
@@ -212,6 +214,7 @@ func AllActions() []string {
 		ActionToggleView,
 		ActionToggleLineNumbers,
 		ActionToggleLeftPane,
+		ActionPlanMode,
 		ActionRun,
 		ActionQuit,
 		ActionHelp,

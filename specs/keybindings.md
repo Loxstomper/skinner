@@ -35,6 +35,7 @@ In the **timeline pane**, cursor movement highlights individual items (text bloc
 |------------------|---------------------------------------------|
 | `enter`          | Focus timeline (iterations/prompts pane); expand/collapse selected text block, tool call, or tool call group (timeline); enter sub-scroll mode (on already-expanded tool call) |
 | `e`              | Open `$EDITOR` for the selected plan file (plan list or plan content view) or prompt file (prompt read modal) |
+| `p`              | Enter plan mode — launch Claude CLI interactively. Disabled while a run is in progress. See [plan-mode.md](plan-mode.md). |
 | `r`              | Start a run from selected prompt file (prompt picker or read modal); opens iterations input modal. Disabled while a run is in progress. |
 | `escape`         | Exit sub-scroll mode (returns to timeline); dismiss modal |
 

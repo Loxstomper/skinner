@@ -20,6 +20,7 @@ name = "solarized-dark"
 # Values are key strings: single keys ("q"), modifiers ("ctrl+c"), or sequences ("g g").
 [keybindings]
 # quit = "q"
+# plan_mode = "p"
 # help = "?"
 # toggle_left_pane = "["
 # toggle_line_numbers = "#"
@@ -33,6 +34,9 @@ name = "solarized-dark"
 # jump_bottom = "G"
 # expand = "enter"
 # escape = "escape"
+
+[plan]
+command = 'claude "study specs/README.md"'
 
 # Per-model pricing (cost per token in USD) and context window size.
 # Prices sourced from https://docs.anthropic.com/en/docs/about-claude/models
@@ -86,6 +90,7 @@ The `[keybindings]` section allows remapping any action to a different key. Only
 | `jump_top` | Jump to top | `"g g"` |
 | `jump_bottom` | Jump to bottom | `"G"` |
 | `expand` | Expand/collapse item | `"enter"` |
+| `plan_mode` | Enter plan mode | `"p"` |
 | `escape` | Exit sub-scroll / dismiss modal | `"escape"` |
 
 Key string format:
@@ -112,11 +117,20 @@ The model key must match the `message.model` value from the stream-json output (
 
 If the model from a stream event is not found in the pricing table, tokens are tracked but cost and context window percentage are not calculated — both displays are omitted from the header.
 
+### Plan Mode
+
+| Section | Key | Values | Default |
+|---------|-----|--------|---------|
+| `plan` | `command` | Any shell command string | `'claude "study specs/README.md"'` |
+
+The command is executed via `sh -c`, so shell quoting, environment variables, and pipes are supported. See [plan-mode.md](plan-mode.md).
+
 ## Defaults
 
 - `view.mode` = `"full"` — show icon + tool name + summary; text blocks up to 3 lines.
 - `view.line_numbers` = `true` — show relative line numbers in the right pane gutter. See [line-numbers.md](line-numbers.md).
 - `theme.name` = `"solarized-dark"` — see [theme.md](theme.md) for available themes.
+- `plan.command` = `'claude "study specs/README.md"'` — see [plan-mode.md](plan-mode.md).
 - `keybindings` — all actions use hardcoded defaults. See [keybindings.md](keybindings.md).
 - `pricing` — see below for defaults.
 
