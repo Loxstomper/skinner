@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"os/exec"
 	"strings"
@@ -26,6 +27,7 @@ type subprocessExitMsg struct{ err error }
 type tickMsg time.Time
 type promptEditorDoneMsg struct{ err error }
 type planEditorDoneMsg struct{ err error }
+type planModeDoneMsg struct{ err error }
 
 // Pane focus
 
@@ -104,6 +106,9 @@ type Model struct {
 	runModalLastValue  string // last entered value (pre-fill memory)
 	runModalSelected   bool   // whether the pre-filled value is fully selected
 	runModalPromptFile string // which prompt file to run
+
+	// Status flash message (transient, clears on next keypress)
+	statusFlash string
 
 	// Quit state
 	quitting bool
@@ -244,6 +249,14 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.rightPaneMode = planMode
 		return m, nil
 
+	case planModeDoneMsg:
+		// Plan mode CLI exited; rescan plan files
+		m.planList.ScanFiles(m.workDir)
+		if msg.err != nil {
+			m.statusFlash = fmt.Sprintf("plan command failed (exit %v)", msg.err)
+		}
+		return m, nil
+
 	case tea.KeyMsg:
 		return m.handleKey(msg)
 
@@ -259,6 +272,11 @@ const ctrlCForceQuitWindow = 500 * time.Millisecond
 func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	key := msg.String()
 	km := &m.config.KeyMap
+
+	// Clear status flash on any keypress.
+	if m.statusFlash != "" {
+		m.statusFlash = ""
+	}
 
 	// ctrl+c: double within 500ms force-quits, single shows quit modal.
 	if key == "ctrl+c" {
@@ -409,6 +427,12 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			}
 		}
 
+	case config.ActionPlanMode:
+		// p key: launch interactive plan mode CLI (disabled while running)
+		if m.controller.Phase() != model.PhaseRunning {
+			return m, m.launchPlanMode()
+		}
+
 	case config.ActionExpand:
 		switch m.focusedPane {
 		case plansPane:
@@ -548,6 +572,13 @@ func (m *Model) launchPlanEditor(filename string) tea.Cmd {
 	filePath := m.workDir + "/" + filename
 	return tea.ExecProcess(exec.Command(editor, filePath), func(err error) tea.Msg {
 		return planEditorDoneMsg{err: err}
+	})
+}
+
+// launchPlanMode launches an interactive CLI session via sh -c with the configured plan command.
+func (m *Model) launchPlanMode() tea.Cmd {
+	return tea.ExecProcess(exec.Command("sh", "-c", m.config.PlanCommand), func(err error) tea.Msg {
+		return planModeDoneMsg{err: err}
 	})
 }
 
@@ -974,6 +1005,7 @@ func (m *Model) headerProps() HeaderProps {
 		IterationCount:  len(sess.Iterations),
 		MaxIterations:   sess.MaxIterations,
 		SessionStatus:   sessionStatus,
+		StatusFlash:     m.statusFlash,
 		Width:           m.width,
 		Theme:           m.theme,
 	}

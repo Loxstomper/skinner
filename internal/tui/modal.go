@@ -86,6 +86,8 @@ func actionDisplayName(action string) string {
 		return "Help"
 	case config.ActionRun:
 		return "Run prompt"
+	case config.ActionPlanMode:
+		return "Plan mode"
 	case config.ActionEscape:
 		return "Escape"
 	default:
@@ -147,6 +149,7 @@ func buildHelpSections(km *config.KeyMap) []helpSection {
 			Entries: []helpEntry{
 				entryFor(config.ActionExpand),
 				entryFor(config.ActionRun),
+				entryFor(config.ActionPlanMode),
 				{Label: "Edit plan file", Key: "e"},
 				entryFor(config.ActionToggleView),
 				entryFor(config.ActionToggleLineNumbers),

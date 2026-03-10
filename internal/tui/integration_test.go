@@ -2279,6 +2279,105 @@ func TestIntegration_PlanMouseWheelScrollsPlanContent(t *testing.T) {
 	}
 }
 
+// TestIntegration_PlanModeDisabledDuringRun verifies that pressing 'p' while
+// a run is in progress does nothing — plan mode must not interrupt active work.
+func TestIntegration_PlanModeDisabledDuringRun(t *testing.T) {
+	// Use a long-running event stream so the model stays in PhaseRunning.
+	events := []session.Event{
+		session.TextEvent{Text: "working..."},
+	}
+	m := newTestModel(events, 1)
+
+	// Init starts the run — model enters PhaseRunning.
+	_ = m.Init()
+
+	// Press 'p' while running — should return nil cmd.
+	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'p'}})
+	if cmd != nil {
+		t.Error("expected nil cmd when pressing 'p' during PhaseRunning")
+	}
+}
+
+// TestIntegration_PlanModeKeyReturnsExecCmd verifies that pressing 'p' while
+// idle returns a non-nil tea.Cmd (the tea.ExecProcess command).
+func TestIntegration_PlanModeKeyReturnsExecCmd(t *testing.T) {
+	m := newTestModel(nil, 0)
+	// Force idle mode so Init doesn't start a run.
+	m.controller.Session.Mode = "idle"
+	m.Init()
+
+	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'p'}})
+	if cmd == nil {
+		t.Error("expected non-nil cmd when pressing 'p' in idle mode")
+	}
+}
+
+// TestIntegration_PlanModeErrorSetsFlash verifies that receiving a
+// planModeDoneMsg with an error sets the statusFlash field.
+func TestIntegration_PlanModeErrorSetsFlash(t *testing.T) {
+	m := newTestModel(nil, 0)
+	m.controller.Session.Mode = "idle"
+	m.Init()
+
+	_, _ = m.Update(planModeDoneMsg{err: fmt.Errorf("exit status 1")})
+
+	if m.statusFlash == "" {
+		t.Error("expected statusFlash to be set after planModeDoneMsg with error")
+	}
+	if !strings.Contains(m.statusFlash, "plan command failed") {
+		t.Errorf("expected flash to contain 'plan command failed', got %q", m.statusFlash)
+	}
+}
+
+// TestIntegration_PlanModeFlashClearsOnKeypress verifies that the status
+// flash message clears on the next keypress, preventing stale error display.
+func TestIntegration_PlanModeFlashClearsOnKeypress(t *testing.T) {
+	m := newTestModel(nil, 0)
+	m.controller.Session.Mode = "idle"
+	m.Init()
+
+	// Set flash via error message.
+	_, _ = m.Update(planModeDoneMsg{err: fmt.Errorf("exit status 1")})
+	if m.statusFlash == "" {
+		t.Fatal("expected statusFlash to be set")
+	}
+
+	// Press any key — flash should clear.
+	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+	if m.statusFlash != "" {
+		t.Errorf("expected statusFlash to be cleared after keypress, got %q", m.statusFlash)
+	}
+}
+
+// TestIntegration_PlanModeSuccessNoFlash verifies that a successful plan mode
+// exit (no error) does not set a flash message.
+func TestIntegration_PlanModeSuccessNoFlash(t *testing.T) {
+	m := newTestModel(nil, 0)
+	m.controller.Session.Mode = "idle"
+	m.Init()
+
+	_, _ = m.Update(planModeDoneMsg{err: nil})
+
+	if m.statusFlash != "" {
+		t.Errorf("expected no flash on successful exit, got %q", m.statusFlash)
+	}
+}
+
+// TestIntegration_PlanModeFlashRendersInHeader verifies that the status flash
+// message appears in the rendered header output.
+func TestIntegration_PlanModeFlashRendersInHeader(t *testing.T) {
+	m := newTestModel(nil, 0)
+	m.controller.Session.Mode = "idle"
+	m.Init()
+
+	_, _ = m.Update(planModeDoneMsg{err: fmt.Errorf("exit status 1")})
+
+	view := m.View()
+	if !strings.Contains(view, "plan command failed") {
+		t.Error("expected 'plan command failed' in rendered view")
+	}
+}
+
 type testError struct{ msg string }
 
 func (e *testError) Error() string { return e.msg }

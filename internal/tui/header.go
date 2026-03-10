@@ -23,6 +23,7 @@ type HeaderProps struct {
 	IterationCount  int
 	MaxIterations   int
 	SessionStatus   model.IterationStatus
+	StatusFlash     string
 	Width           int
 	Theme           theme.Theme
 }
@@ -31,6 +32,22 @@ type HeaderProps struct {
 // It is a pure function with no side effects.
 func RenderHeader(p HeaderProps) string {
 	dim := lipgloss.NewStyle().Foreground(lipgloss.Color(p.Theme.ForegroundDim))
+
+	// Status flash: show error message centered in header bar
+	if p.StatusFlash != "" {
+		errorStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(p.Theme.StatusError))
+		flashRendered := errorStyle.Render(p.StatusFlash)
+		flashWidth := lipgloss.Width(flashRendered)
+		leftPad := (p.Width - flashWidth) / 2
+		if leftPad < 1 {
+			leftPad = 1
+		}
+		rightPad := p.Width - leftPad - flashWidth
+		if rightPad < 0 {
+			rightPad = 0
+		}
+		return strings.Repeat(" ", leftPad) + flashRendered + strings.Repeat(" ", rightPad)
+	}
 
 	// Idle state: only show stopped timer placeholder and "Idle" status
 	if p.Phase == model.PhaseIdle {
