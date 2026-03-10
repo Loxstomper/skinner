@@ -16,20 +16,9 @@ Implemented: Added `WorkDir` field to `TimelineProps`, passed from `Model.workDi
 
 Implemented: `effectiveLayout()` method returns `"side"` or `"bottom"` based on `config.Layout` and terminal width (auto threshold: 80 columns). `updateLayoutForSize()` called on every `WindowSizeMsg` to set `leftPaneVisible` and handle layout transitions. Added `bottomBarVisible` field for bottom bar toggle. Updated `ActionToggleLeftPane` to toggle bottom bar in bottom mode. Updated `ActionFocusToggle` with bottom-layout cycle order (Timeline → Plans → Iterations → Prompts → Timeline). Updated `ActionFocusLeft`/`ActionFocusRight` for bottom layout navigation. Updated `rightPaneWidth()` (full width in bottom) and `rightPaneHeight()` (subtracts `BottomBarHeight=9` when bar visible). Focus preserved across layout switches. Tests in `layout_test.go` cover all modes, threshold, resize, pane dimensions, toggle, focus cycle, and focus preservation.
 
-## 5. Implement bottom bar rendering
+## ~~5. Implement bottom bar rendering~~ ✅ DONE
 
-- **File**: `internal/tui/root.go`
-- In `View()`, branch on `effectiveLayout()`:
-  - `"side"`: existing rendering path (unchanged)
-  - `"bottom"`: render header, then main area (full width), then bottom bar
-- Bottom bar renderer: 3 labeled dividers + 2-line sections for plans, iterations, prompts
-- **File**: `internal/tui/iterlist.go`
-- Add `ViewBottom(props)` method — renders 2 visible rows (no run separators), reuses existing item rendering
-- **File**: `internal/tui/planlist.go`
-- Add `ViewBottom(props)` method — renders 2 visible rows with label divider
-- **File**: `internal/tui/promptlist.go`
-- Add `ViewBottom(props)` method — renders 2 visible rows with label divider
-- Layout height helpers: `BottomBarHeight() int` returning 9 (3 dividers + 6 content)
+Implemented: `renderBottomBar()` method in root.go renders Plans, Iterations, and Prompts sections with labeled dividers. `ViewBottom()` added to IterList (no run separators), PlanList (no title), and PromptList (no title) — each renders 2 compact rows. `View()` uses `rightPaneHeight()` for right pane height (accounts for bottom bar). `renderLabeledDivider()` renders `── Label ────` divider lines. Tests in layout_test.go cover: View contains bottom bar sections, hidden bar, no left pane in bottom mode, no bottom bar in side mode, ViewBottom methods.
 
 ## 6. Update focus cycling for bottom layout
 

@@ -168,6 +168,79 @@ func (il *IterList) View(props IterListProps) string {
 	return style.Render(content)
 }
 
+// ViewBottom renders a compact 2-row iteration list for the bottom bar.
+// No run separators are shown — only a flat list of iterations.
+func (il *IterList) ViewBottom(props IterListProps) string {
+	height := props.Height
+	style := lipgloss.NewStyle().Width(props.Width).Height(height)
+	highlight := lipgloss.NewStyle().Background(lipgloss.Color(props.Theme.Highlight))
+
+	var allLines []string
+	for i, iter := range props.Iterations {
+		var statusIcon string
+		var statusColor, iterColor string
+		switch iter.Status {
+		case model.IterationRunning:
+			statusIcon = "⟳"
+			statusColor = props.Theme.StatusRunning
+			iterColor = props.Theme.IterRunning
+		case model.IterationCompleted:
+			statusIcon = "✓"
+			statusColor = props.Theme.StatusSuccess
+			iterColor = props.Theme.IterSuccess
+		case model.IterationFailed:
+			statusIcon = "✗"
+			statusColor = props.Theme.StatusError
+			iterColor = props.Theme.IterError
+		}
+
+		var dur string
+		if iter.Status == model.IterationRunning {
+			elapsed := time.Since(iter.StartTime)
+			dur = FormatDurationValue(elapsed)
+		} else {
+			dur = FormatDurationValue(iter.Duration)
+		}
+		styledIcon := lipgloss.NewStyle().Foreground(lipgloss.Color(statusColor)).Render(statusIcon)
+		iterText := fmt.Sprintf("  Iter %d  ", iter.Index+1)
+		metaText := fmt.Sprintf("  (%s)", dur)
+
+		iterStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(iterColor))
+		line := iterStyle.Render(iterText) + styledIcon + iterStyle.Render(metaText)
+
+		if i == il.Cursor {
+			displayWidth := lipgloss.Width(line)
+			if displayWidth < props.Width {
+				line += strings.Repeat(" ", props.Width-displayWidth)
+			}
+			line = highlight.Render(line)
+		}
+		allLines = append(allLines, line)
+	}
+
+	// Apply scroll: show only the visible slice
+	start := il.Scroll
+	if start >= len(allLines) {
+		start = len(allLines) - 1
+	}
+	if start < 0 {
+		start = 0
+	}
+	end := start + height
+	if end > len(allLines) {
+		end = len(allLines)
+	}
+
+	visible := allLines[start:end]
+
+	// Pad to fill height
+	for len(visible) < height {
+		visible = append(visible, "")
+	}
+
+	return style.Render(strings.Join(visible, "\n"))
+}
+
 // OnNewIteration updates auto-follow state when a new iteration is added.
 // If auto-follow is active, the cursor moves to the latest iteration.
 func (il *IterList) OnNewIteration(count int, height int, runs []model.Run) {

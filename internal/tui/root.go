@@ -901,6 +901,7 @@ func (m *Model) View() string {
 	paneHeight := m.height - 1 // subtract 1 for the header line
 	leftWidth := m.leftPaneWidth()
 	rightWidth := m.rightPaneWidth()
+	rightHeight := m.rightPaneHeight() // accounts for bottom bar
 
 	// Right pane: plan content view or timeline depending on mode
 	var right string
@@ -910,7 +911,7 @@ func (m *Model) View() string {
 			Filename: m.planList.SelectedFile(),
 			Dir:      m.workDir,
 			Width:    rightWidth,
-			Height:   paneHeight,
+			Height:   rightHeight,
 			Scroll:   m.planViewScroll,
 			Focused:  m.focusedPane == rightPane,
 			Theme:    m.theme,
@@ -920,7 +921,7 @@ func (m *Model) View() string {
 		right = m.timeline.View(TimelineProps{
 			Items:       m.selectedItems(),
 			Width:       rightWidth,
-			Height:      paneHeight,
+			Height:      rightHeight,
 			Focused:     m.focusedPane == rightPane,
 			CompactView: m.compactView,
 			LineNumbers: m.lineNumbers,
@@ -977,6 +978,12 @@ func (m *Model) View() string {
 		panes = lipgloss.JoinHorizontal(lipgloss.Top, left, separator, right)
 	} else {
 		panes = right
+	}
+
+	// Bottom bar: render below the main area in bottom layout
+	if m.effectiveLayout() == "bottom" && m.bottomBarVisible {
+		bottomBar := m.renderBottomBar(rightWidth)
+		panes = lipgloss.JoinVertical(lipgloss.Left, panes, bottomBar)
 	}
 
 	view := header + "\n" + panes
@@ -1209,6 +1216,9 @@ const leftPaneFixedWidth = 32
 // BottomBarHeight is the total height of the bottom bar: 3 divider lines + 6 content lines.
 const BottomBarHeight = 9
 
+// bottomBarSectionHeight is the number of content rows per section in the bottom bar.
+const bottomBarSectionHeight = 2
+
 func (m *Model) leftPaneWidth() int {
 	if m.leftPaneVisible {
 		return leftPaneFixedWidth
@@ -1243,6 +1253,62 @@ func (m *Model) rightPaneHeight() int {
 		}
 	}
 	return h
+}
+
+// renderBottomBar renders the bottom bar with Plans, Iterations, and Prompts sections.
+// Each section has a labeled divider and 2 content rows.
+func (m *Model) renderBottomBar(width int) string {
+	th := m.theme
+
+	plansDivider := renderLabeledDivider("Plans", width, th)
+	plansContent := m.planList.ViewBottom(PlanListProps{
+		Width:   width,
+		Height:  bottomBarSectionHeight,
+		Focused: m.focusedPane == plansPane,
+		Theme:   th,
+	})
+
+	iterDivider := renderLabeledDivider("Iterations", width, th)
+	iterContent := m.iterList.ViewBottom(IterListProps{
+		Iterations: m.controller.Session.Iterations,
+		Runs:       m.controller.Session.Runs,
+		Width:      width,
+		Height:     bottomBarSectionHeight,
+		Focused:    m.focusedPane == iterationsPane,
+		Theme:      th,
+	})
+
+	promptsDivider := renderLabeledDivider("Prompts", width, th)
+	promptsContent := m.promptList.ViewBottom(PromptListProps{
+		Width:   width,
+		Height:  bottomBarSectionHeight,
+		Focused: m.focusedPane == promptsPane,
+		Theme:   th,
+	})
+
+	return lipgloss.JoinVertical(lipgloss.Left,
+		plansDivider, plansContent,
+		iterDivider, iterContent,
+		promptsDivider, promptsContent,
+	)
+}
+
+// renderLabeledDivider renders a "── Label ──────────" divider line.
+func renderLabeledDivider(label string, width int, th theme.Theme) string {
+	dimStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(th.ForegroundDim))
+	nameStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(th.Foreground)).Bold(true)
+
+	styledName := nameStyle.Render(label)
+	prefix := "── "
+	suffix := " "
+
+	usedWidth := lipgloss.Width(prefix) + lipgloss.Width(styledName) + lipgloss.Width(suffix)
+	trailing := width - usedWidth
+	if trailing < 0 {
+		trailing = 0
+	}
+
+	return dimStyle.Render(prefix) + styledName + dimStyle.Render(suffix+strings.Repeat("─", trailing))
 }
 
 // selectedItems returns the timeline items for the currently selected iteration.

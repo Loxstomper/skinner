@@ -202,6 +202,60 @@ func (pl *PromptList) View(props PromptListProps) string {
 	return lipgloss.NewStyle().Width(props.Width).Height(totalHeight).Render(content)
 }
 
+// ViewBottom renders a compact 2-row prompt list for the bottom bar (no title line).
+func (pl *PromptList) ViewBottom(props PromptListProps) string {
+	height := props.Height
+	style := lipgloss.NewStyle().Width(props.Width).Height(height)
+	highlight := lipgloss.NewStyle().Background(lipgloss.Color(props.Theme.Highlight))
+	dimStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(props.Theme.ForegroundDim))
+
+	var contentLines []string
+
+	if len(pl.Files) == 0 {
+		contentLines = append(contentLines, dimStyle.Render("  No prompt files"))
+	} else {
+		for i, f := range pl.Files {
+			displayName := DisplayName(f)
+			line := "  " + displayName
+
+			if props.Focused && i == pl.Cursor {
+				displayWidth := lipgloss.Width(line)
+				if displayWidth < props.Width {
+					line += strings.Repeat(" ", props.Width-displayWidth)
+				}
+				line = highlight.Render(line)
+			} else {
+				line = lipgloss.NewStyle().
+					Foreground(lipgloss.Color(props.Theme.Foreground)).
+					Render(line)
+			}
+			contentLines = append(contentLines, line)
+		}
+	}
+
+	// Apply scroll: show only the visible slice
+	start := pl.Scroll
+	if start >= len(contentLines) {
+		start = len(contentLines) - 1
+	}
+	if start < 0 {
+		start = 0
+	}
+	end := start + height
+	if end > len(contentLines) {
+		end = len(contentLines)
+	}
+
+	visible := contentLines[start:end]
+
+	// Pad to fill height
+	for len(visible) < height {
+		visible = append(visible, "")
+	}
+
+	return style.Render(strings.Join(visible, "\n"))
+}
+
 // ensureCursorVisible adjusts scroll so the cursor row is within the viewport.
 func (pl *PromptList) ensureCursorVisible() {
 	if pl.Cursor < pl.Scroll {

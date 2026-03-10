@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -246,5 +247,126 @@ func TestSideLayout_RightPaneHeightVarying(t *testing.T) {
 	m := newTestModelWithLayoutSize("side", 120, 50)
 	if got := m.rightPaneHeight(); got != 49 {
 		t.Errorf("rightPaneHeight() = %d, want %d", got, 49)
+	}
+}
+
+func TestBottomLayout_ViewContainsBottomBarSections(t *testing.T) {
+	m := newTestModelWithLayoutSize("bottom", 60, 30)
+	m.bottomBarVisible = true
+
+	view := m.View()
+
+	// Bottom bar should contain labeled dividers
+	if !strings.Contains(view, "Plans") {
+		t.Error("expected View() to contain 'Plans' divider in bottom layout")
+	}
+	if !strings.Contains(view, "Iterations") {
+		t.Error("expected View() to contain 'Iterations' divider in bottom layout")
+	}
+	if !strings.Contains(view, "Prompts") {
+		t.Error("expected View() to contain 'Prompts' divider in bottom layout")
+	}
+}
+
+func TestBottomLayout_ViewNoBottomBarWhenHidden(t *testing.T) {
+	m := newTestModelWithLayoutSize("bottom", 60, 30)
+	m.bottomBarVisible = false
+
+	view := m.View()
+
+	// When hidden, bottom bar sections should not appear
+	// (Plans/Iterations/Prompts text can appear in other contexts, so check for divider chars)
+	if strings.Contains(view, "── Plans") {
+		t.Error("expected View() to NOT contain bottom bar dividers when hidden")
+	}
+}
+
+func TestBottomLayout_ViewNoLeftPane(t *testing.T) {
+	m := newTestModelWithLayoutSize("bottom", 60, 30)
+	view := m.View()
+
+	// No vertical separator from left pane
+	if strings.Contains(view, "│") {
+		t.Error("expected no left pane separator in bottom layout")
+	}
+}
+
+func TestSideLayout_ViewNoBottomBar(t *testing.T) {
+	m := newTestModelWithLayoutSize("side", 120, 30)
+	view := m.View()
+
+	// Side layout should not contain bottom bar dividers
+	if strings.Contains(view, "── Plans") {
+		t.Error("expected no bottom bar dividers in side layout")
+	}
+}
+
+func TestBottomLayout_IterListViewBottom_NoRunSeparators(t *testing.T) {
+	il := NewIterList()
+	th := testTheme()
+
+	props := IterListProps{
+		Iterations: []model.Iteration{
+			{Index: 0, Status: model.IterationCompleted, Duration: 10 * time.Second},
+			{Index: 1, Status: model.IterationRunning, StartTime: time.Now()},
+		},
+		Runs: []model.Run{
+			{StartIndex: 0, PromptName: "run1"},
+			{StartIndex: 1, PromptName: "run2"},
+		},
+		Width:   40,
+		Height:  2,
+		Focused: true,
+		Theme:   th,
+	}
+
+	output := il.ViewBottom(props)
+
+	// Should contain iteration text but no run separators
+	if !strings.Contains(output, "Iter 1") {
+		t.Error("expected ViewBottom to contain 'Iter 1'")
+	}
+	if strings.Contains(output, "run1") || strings.Contains(output, "run2") {
+		t.Error("expected ViewBottom to NOT contain run separator names")
+	}
+}
+
+func TestBottomLayout_PlanListViewBottom_NoTitle(t *testing.T) {
+	pl := NewPlanList("/nonexistent")
+	pl.Files = []string{"TEST_PLAN.md", "OTHER_PLAN.md"}
+	th := testTheme()
+
+	output := pl.ViewBottom(PlanListProps{
+		Width:   40,
+		Height:  2,
+		Focused: false,
+		Theme:   th,
+	})
+
+	if strings.Contains(output, "📋") {
+		t.Error("expected ViewBottom to NOT contain title emoji")
+	}
+	if !strings.Contains(output, "TEST") {
+		t.Error("expected ViewBottom to contain plan file display name")
+	}
+}
+
+func TestBottomLayout_PromptListViewBottom_NoTitle(t *testing.T) {
+	pl := NewPromptList("/nonexistent")
+	pl.Files = []string{"PROMPT_BUILD.md", "PROMPT_TEST.md"}
+	th := testTheme()
+
+	output := pl.ViewBottom(PromptListProps{
+		Width:   40,
+		Height:  2,
+		Focused: false,
+		Theme:   th,
+	})
+
+	if strings.Contains(output, "📄") {
+		t.Error("expected ViewBottom to NOT contain title emoji")
+	}
+	if !strings.Contains(output, "BUILD") {
+		t.Error("expected ViewBottom to contain prompt file display name")
 	}
 }
