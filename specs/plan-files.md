@@ -132,7 +132,14 @@ If a plan file is deleted externally while it is being viewed in the right pane:
 
 ## Mouse Support
 
+### Plan List (Left Pane)
+
 - **Target detection**: clicks/scrolls in the left column above the first divider (between plans and iterations) target the plan list.
 - **Scroll**: 3 lines per wheel tick, same as other panes.
 - **Click**: single click selects a plan file. Clicking the title row is ignored.
 - **Focus**: any mouse interaction switches focus to the targeted pane.
+
+### Plan Content View (Right Pane)
+
+- **Scroll**: mouse wheel scrolls the plan content when the right pane is in plan mode. 3 lines per wheel tick, clamped to content bounds.
+- **Focus**: scrolling the plan content view switches focus to the right pane.

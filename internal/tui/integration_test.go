@@ -2190,6 +2190,94 @@ func TestIntegration_PlanMouseClickSelectsPlan(t *testing.T) {
 	}
 }
 
+func TestIntegration_PlanMouseWheelScrollsPlanContent(t *testing.T) {
+	events := []session.Event{
+		session.AssistantBatchEvent{Events: []session.Event{
+			session.ToolUseEvent{ID: "tc1", Name: "Read", Summary: "main.go"},
+		}},
+		session.ToolResultEvent{ToolUseID: "tc1", IsError: false},
+		session.SubprocessExitEvent{Err: nil},
+	}
+
+	m := newTestModel(events, 1)
+	drainEvents(t, m)
+
+	// Set up plan mode with enough content to scroll
+	m.focusedPane = rightPane
+	m.rightPaneMode = planMode
+	m.planViewTotalLines = 100
+	m.planViewScroll = 0
+
+	// Scroll down on right pane — should increase planViewScroll
+	m.Update(tea.MouseMsg{
+		X:      50,
+		Y:      5,
+		Button: tea.MouseButtonWheelDown,
+	})
+
+	if m.focusedPane != rightPane {
+		t.Error("expected right pane focus after scrolling right pane")
+	}
+	if m.planViewScroll != 3 {
+		t.Errorf("expected planViewScroll=3 after wheel down, got %d", m.planViewScroll)
+	}
+
+	// Scroll up — should decrease planViewScroll
+	m.Update(tea.MouseMsg{
+		X:      50,
+		Y:      5,
+		Button: tea.MouseButtonWheelUp,
+	})
+
+	if m.planViewScroll != 0 {
+		t.Errorf("expected planViewScroll=0 after wheel up, got %d", m.planViewScroll)
+	}
+
+	// Verify clamping at 0 — scroll up beyond top
+	m.Update(tea.MouseMsg{
+		X:      50,
+		Y:      5,
+		Button: tea.MouseButtonWheelUp,
+	})
+
+	if m.planViewScroll != 0 {
+		t.Errorf("expected planViewScroll clamped at 0, got %d", m.planViewScroll)
+	}
+
+	// Verify clamping at max — scroll to near the end then past it
+	m.planViewScroll = 90
+	m.Update(tea.MouseMsg{
+		X:      50,
+		Y:      5,
+		Button: tea.MouseButtonWheelDown,
+	})
+
+	// Max scroll = totalLines - (viewHeight - 1) = 100 - (29 - 1) = 72
+	// (window height 30 minus header 1 = 29 for right pane, minus 1 for title = 28 content rows)
+	// So scroll of 93 should clamp to 72
+	maxScroll := 100 - (m.rightPaneHeight() - 1)
+	if m.planViewScroll != maxScroll {
+		t.Errorf("expected planViewScroll clamped at %d, got %d", maxScroll, m.planViewScroll)
+	}
+
+	// Verify focus switches to right pane when scrolling from another pane
+	m.focusedPane = plansPane
+	m.rightPaneMode = planMode
+	m.planViewScroll = 5
+	m.Update(tea.MouseMsg{
+		X:      50,
+		Y:      5,
+		Button: tea.MouseButtonWheelDown,
+	})
+
+	if m.focusedPane != rightPane {
+		t.Error("expected focus switch to right pane on mouse scroll")
+	}
+	if m.planViewScroll != 8 {
+		t.Errorf("expected planViewScroll=8 after scrolling from plans pane, got %d", m.planViewScroll)
+	}
+}
+
 type testError struct{ msg string }
 
 func (e *testError) Error() string { return e.msg }

@@ -756,7 +756,12 @@ func (m *Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 		case promptsPane:
 			m.promptList.ScrollBy(-mouseScrollLines)
 		default:
-			m.timeline.ScrollBy(-mouseScrollLines, m.currentTimelineProps())
+			if m.rightPaneMode == planMode {
+				m.planViewScroll -= mouseScrollLines
+				m.planViewScroll = ClampPlanScroll(m.planViewScroll, m.planViewTotalLines, m.rightPaneHeight())
+			} else {
+				m.timeline.ScrollBy(-mouseScrollLines, m.currentTimelineProps())
+			}
 		}
 
 	case msg.Button == tea.MouseButtonWheelDown:
@@ -771,7 +776,12 @@ func (m *Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 		case promptsPane:
 			m.promptList.ScrollBy(mouseScrollLines)
 		default:
-			m.timeline.ScrollBy(mouseScrollLines, m.currentTimelineProps())
+			if m.rightPaneMode == planMode {
+				m.planViewScroll += mouseScrollLines
+				m.planViewScroll = ClampPlanScroll(m.planViewScroll, m.planViewTotalLines, m.rightPaneHeight())
+			} else {
+				m.timeline.ScrollBy(mouseScrollLines, m.currentTimelineProps())
+			}
 		}
 
 	case msg.Button == tea.MouseButtonLeft && msg.Action == tea.MouseActionPress:
