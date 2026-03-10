@@ -2266,3 +2266,150 @@ func TestRenderToolCallLine_HighlightBg_PerSegment(t *testing.T) {
 			occurrences, withHighlight)
 	}
 }
+
+// --- Path trimming integration tests ---
+
+func TestTimeline_View_PathTrimming_CWD(t *testing.T) {
+	tl := NewTimeline()
+	items := []model.TimelineItem{
+		&model.ToolCall{
+			ID: "tc1", Name: "Read",
+			Summary: "/home/lox/Development/skinner/internal/tui/view.go",
+			Status:  model.ToolCallDone, Duration: 2 * time.Second,
+		},
+	}
+	props := timelineProps(items)
+	props.WorkDir = "/home/lox/Development/skinner"
+
+	result := tl.View(props)
+
+	// The trimmed relative path should appear in the output.
+	if !strings.Contains(result, "internal/tui/view.go") {
+		t.Error("expected trimmed path 'internal/tui/view.go' in rendered output")
+	}
+	// The full absolute path should NOT appear (CWD prefix stripped).
+	if strings.Contains(result, "/home/lox/Development/skinner/internal") {
+		t.Error("full absolute path should be trimmed when WorkDir is set")
+	}
+}
+
+func TestTimeline_View_PathTrimming_HomeFallback(t *testing.T) {
+	tl := NewTimeline()
+	homeDir := "/home/lox"
+	t.Setenv("HOME", homeDir)
+
+	items := []model.TimelineItem{
+		&model.ToolCall{
+			ID: "tc1", Name: "Read",
+			Summary: "/home/lox/.config/skinner/config.toml",
+			Status:  model.ToolCallDone, Duration: 1 * time.Second,
+		},
+	}
+	props := timelineProps(items)
+	// WorkDir is a different directory, so CWD rule won't match — HOME fallback applies.
+	props.WorkDir = "/tmp/other"
+
+	result := tl.View(props)
+
+	if !strings.Contains(result, "~/.config/skinner/config.toml") {
+		t.Error("expected home-trimmed path '~/.config/skinner/config.toml' in rendered output")
+	}
+}
+
+func TestTimeline_View_PathTrimming_NoWorkDir(t *testing.T) {
+	tl := NewTimeline()
+	absPath := "/etc/hosts"
+	items := []model.TimelineItem{
+		&model.ToolCall{
+			ID: "tc1", Name: "Read", Summary: absPath,
+			Status: model.ToolCallDone, Duration: 1 * time.Second,
+		},
+	}
+	props := timelineProps(items)
+	// No WorkDir set — path should appear unchanged.
+
+	result := tl.View(props)
+
+	if !strings.Contains(result, "/etc/hosts") {
+		t.Error("expected full path '/etc/hosts' when no WorkDir is set")
+	}
+}
+
+func TestTimeline_View_PathTrimming_EditTool(t *testing.T) {
+	tl := NewTimeline()
+	items := []model.TimelineItem{
+		&model.ToolCall{
+			ID: "tc1", Name: "Edit",
+			Summary: "/home/lox/Development/skinner/main.go (+2/-2)",
+			Status:  model.ToolCallDone, Duration: 500 * time.Millisecond,
+		},
+	}
+	props := timelineProps(items)
+	props.WorkDir = "/home/lox/Development/skinner"
+
+	result := tl.View(props)
+
+	if !strings.Contains(result, "main.go (+2/-2)") {
+		t.Error("expected trimmed Edit summary 'main.go (+2/-2)' in rendered output")
+	}
+	if strings.Contains(result, "/home/lox/Development/skinner/main.go") {
+		t.Error("full absolute path should be trimmed for Edit tool")
+	}
+}
+
+func TestTimeline_View_PathTrimming_GrepTool(t *testing.T) {
+	tl := NewTimeline()
+	items := []model.TimelineItem{
+		&model.ToolCall{
+			ID: "tc1", Name: "Grep",
+			Summary: "TODO in /home/lox/Development/skinner/internal",
+			Status:  model.ToolCallDone, Duration: 1 * time.Second,
+		},
+	}
+	props := timelineProps(items)
+	props.WorkDir = "/home/lox/Development/skinner"
+
+	result := tl.View(props)
+
+	// Grep trims only the path part after " in ".
+	if !strings.Contains(result, "TODO in internal") {
+		t.Error("expected trimmed Grep summary 'TODO in internal' in rendered output")
+	}
+}
+
+func TestTimeline_View_PathTrimming_InGroup(t *testing.T) {
+	tl := NewTimeline()
+	group := &model.ToolCallGroup{
+		ToolName: "Read",
+		Children: []*model.ToolCall{
+			{
+				ID: "tc1", Name: "Read",
+				Summary: "/home/lox/Development/skinner/go.mod",
+				Status:  model.ToolCallDone, Duration: 1 * time.Second,
+			},
+			{
+				ID: "tc2", Name: "Read",
+				Summary: "/home/lox/Development/skinner/go.sum",
+				Status:  model.ToolCallDone, Duration: 1 * time.Second,
+			},
+		},
+	}
+	group.Expanded = true
+
+	items := []model.TimelineItem{group}
+	props := timelineProps(items)
+	props.WorkDir = "/home/lox/Development/skinner"
+
+	result := tl.View(props)
+
+	// Expanded group children should have trimmed paths.
+	if !strings.Contains(result, "go.mod") {
+		t.Error("expected trimmed path 'go.mod' for first group child")
+	}
+	if !strings.Contains(result, "go.sum") {
+		t.Error("expected trimmed path 'go.sum' for second group child")
+	}
+	if strings.Contains(result, "/home/lox/Development/skinner/go.mod") {
+		t.Error("full path should be trimmed in group children")
+	}
+}
