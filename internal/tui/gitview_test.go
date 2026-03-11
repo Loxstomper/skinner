@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -987,5 +988,183 @@ func TestGitRefreshMsgSchedulesNextTick(t *testing.T) {
 	}
 	if len(m.gitCommits) != 2 {
 		t.Errorf("expected 2 commits after refresh, got %d", len(m.gitCommits))
+	}
+}
+
+// --- Bottom layout integration tests ---
+
+// newGitTestModelBottom creates a Model in bottom layout for git view testing.
+func newGitTestModelBottom() *Model {
+	fake := &executor.FakeExecutor{}
+	sess := model.Session{
+		Mode:          "idle",
+		MaxIterations: 0,
+		StartTime:     time.Now(),
+	}
+	cfg := config.DefaultConfig()
+	cfg.Layout = "bottom"
+	th := testTheme()
+	m := NewModel(sess, cfg, "", th, false, false, fake)
+	m.width = 60 // narrow terminal triggers bottom layout
+	m.height = 30
+	m.updateLayoutForSize()
+	return &m
+}
+
+// TestGitViewBottomLayoutRendersBottomBar verifies git view renders a bottom bar
+// with commits section in bottom layout mode.
+func TestGitViewBottomLayoutRendersBottomBar(t *testing.T) {
+	m := newGitTestModelBottom()
+	setupGitView(m)
+
+	result := m.renderGitView()
+	if result == "" {
+		t.Fatal("expected non-empty git view output")
+	}
+
+	// The bottom bar should contain "Commits" divider label
+	if !strings.Contains(result, "Commits") {
+		t.Error("expected bottom bar to contain 'Commits' label")
+	}
+}
+
+// TestGitViewBottomLayoutFilesSection verifies bottom bar shows "Files" at depth 1.
+func TestGitViewBottomLayoutFilesSection(t *testing.T) {
+	m := newGitTestModelBottom()
+	setupGitViewWithFiles(m)
+
+	result := m.renderGitView()
+
+	if !strings.Contains(result, "Files") {
+		t.Error("expected bottom bar to contain 'Files' label at depth 1")
+	}
+}
+
+// TestGitViewBottomLayoutNoLeftPane verifies no left pane separator in bottom layout.
+func TestGitViewBottomLayoutNoLeftPane(t *testing.T) {
+	m := newGitTestModelBottom()
+	setupGitView(m)
+
+	if m.leftPaneWidth() != 0 {
+		t.Error("expected leftPaneWidth=0 in bottom layout")
+	}
+}
+
+// TestGitViewBottomLayoutHiddenBar verifies bottom bar is hidden when toggled off.
+func TestGitViewBottomLayoutHiddenBar(t *testing.T) {
+	m := newGitTestModelBottom()
+	setupGitView(m)
+	m.bottomBarVisible = false
+
+	result := m.renderGitView()
+
+	if strings.Contains(result, "Commits") {
+		t.Error("expected no bottom bar when bottomBarVisible=false")
+	}
+}
+
+// TestGitViewBottomLayoutContentHeight verifies gitContentHeight subtracts
+// the git-specific bottom bar height, not the regular bottom bar height.
+func TestGitViewBottomLayoutContentHeight(t *testing.T) {
+	m := newGitTestModelBottom()
+	setupGitView(m)
+
+	contentH := m.gitContentHeight()
+	expectedH := m.height - 1 - GitBottomBarHeight // header + git bottom bar
+	if contentH != expectedH {
+		t.Errorf("gitContentHeight() = %d, want %d", contentH, expectedH)
+	}
+
+	// Compare with rightPaneHeight which subtracts regular BottomBarHeight
+	regularH := m.rightPaneHeight()
+	if regularH == contentH {
+		t.Error("gitContentHeight should differ from rightPaneHeight (different bar heights)")
+	}
+}
+
+// TestGitViewBottomLayoutToggle verifies [ key toggles the bottom bar in git view.
+func TestGitViewBottomLayoutToggle(t *testing.T) {
+	m := newGitTestModelBottom()
+	setupGitView(m)
+
+	if !m.bottomBarVisible {
+		t.Fatal("bottom bar should be visible by default")
+	}
+
+	m.handleGitViewKey(config.ActionToggleLeftPane)
+	if m.bottomBarVisible {
+		t.Error("expected bottom bar hidden after toggle")
+	}
+
+	m.handleGitViewKey(config.ActionToggleLeftPane)
+	if !m.bottomBarVisible {
+		t.Error("expected bottom bar visible after second toggle")
+	}
+}
+
+// TestGitViewAutoScrollToSelection verifies the commit list auto-scrolls
+// to keep the selected item visible in a 2-line bottom bar.
+func TestGitViewAutoScrollToSelection(t *testing.T) {
+	commits := make([]git.Commit, 10)
+	for i := range commits {
+		commits[i] = git.Commit{
+			Hash:       fmt.Sprintf("hash%04d", i),
+			Subject:    fmt.Sprintf("Commit %d", i),
+			AuthorDate: time.Now().Add(-time.Duration(i) * time.Hour),
+		}
+	}
+
+	result := RenderGitCommitList(GitCommitListProps{
+		Commits:  commits,
+		Selected: 5, // Selected item is beyond 2-line window
+		Scroll:   0,
+		Width:    60,
+		Height:   2,
+		Theme:    testTheme(),
+	})
+
+	// The selected commit should be visible in the output
+	if !strings.Contains(stripAnsi(result), "Commit 5") {
+		t.Error("expected selected commit to be visible in auto-scrolled output")
+	}
+}
+
+// TestGitViewFileListAutoScrollToSelection verifies the file list auto-scrolls.
+func TestGitViewFileListAutoScrollToSelection(t *testing.T) {
+	files := make([]git.FileChange, 10)
+	for i := range files {
+		files[i] = git.FileChange{
+			Status: "M",
+			Path:   fmt.Sprintf("file%d.go", i),
+		}
+	}
+
+	result := RenderGitFileList(GitFileListProps{
+		Files:    files,
+		Selected: 7,
+		Scroll:   0,
+		Width:    60,
+		Height:   2,
+		Theme:    testTheme(),
+	})
+
+	if !strings.Contains(stripAnsi(result), "file7.go") {
+		t.Error("expected selected file to be visible in auto-scrolled output")
+	}
+}
+
+// TestGitViewSideLayoutUnchanged verifies side layout still works correctly.
+func TestGitViewSideLayoutUnchanged(t *testing.T) {
+	m := newGitTestModel() // default side layout at 120 width
+	setupGitView(m)
+
+	result := m.renderGitView()
+	if result == "" {
+		t.Fatal("expected non-empty git view output")
+	}
+
+	// Should NOT contain bottom bar labels in side layout
+	if strings.Contains(result, "── Commits") {
+		t.Error("side layout should not render bottom bar")
 	}
 }

@@ -10,12 +10,32 @@ import (
 	"github.com/loxstomper/skinner/internal/theme"
 )
 
+// GitBottomBarHeight is the total height of the git bottom bar: 1 divider + 2 content rows.
+const GitBottomBarHeight = 3
+
+// gitContentHeight returns the height available for the main content area in git view,
+// accounting for the git-specific bottom bar height instead of the regular bottom bar.
+func (m *Model) gitContentHeight() int {
+	h := m.height - 1 // subtract header
+	if h < 1 {
+		return 20
+	}
+	if m.effectiveLayout() == "bottom" && m.bottomBarVisible {
+		h -= GitBottomBarHeight
+		if h < 1 {
+			h = 1
+		}
+	}
+	return h
+}
+
 // renderGitView renders the full git view (left pane + right pane).
 func (m *Model) renderGitView() string {
 	paneHeight := m.height - 1
 	leftWidth := m.leftPaneWidth()
 	rightWidth := m.rightPaneWidth()
-	rightHeight := m.rightPaneHeight()
+	rightHeight := m.gitContentHeight()
+	isBottom := m.effectiveLayout() == "bottom" && m.bottomBarVisible
 
 	// Right pane content
 	var right string
@@ -61,7 +81,10 @@ func (m *Model) renderGitView() string {
 	// Pad right pane to full height
 	right = padToHeight(right, rightWidth, rightHeight)
 
-	// Left pane content
+	// Build the result
+	var result string
+
+	// Left pane content (side layout only)
 	if leftWidth > 0 {
 		var left string
 		switch m.gitViewDepth {
@@ -94,10 +117,53 @@ func (m *Model) renderGitView() string {
 			Foreground(lipgloss.Color(m.theme.ForegroundDim)).
 			Render(strings.Join(sepLines, "\n"))
 
-		return lipgloss.JoinHorizontal(lipgloss.Top, left, separator, right)
+		result = lipgloss.JoinHorizontal(lipgloss.Top, left, separator, right)
+	} else {
+		result = right
 	}
 
-	return right
+	// Bottom bar (bottom layout only)
+	if isBottom {
+		bottomBar := m.renderGitBottomBar(rightWidth)
+		result = lipgloss.JoinVertical(lipgloss.Left, result, bottomBar)
+	}
+
+	return result
+}
+
+// renderGitBottomBar renders the git view bottom bar with either Commits or Files section.
+func (m *Model) renderGitBottomBar(width int) string {
+	th := m.theme
+
+	var label string
+	var content string
+
+	switch m.gitViewDepth {
+	case 0:
+		label = "Commits"
+		content = RenderGitCommitList(GitCommitListProps{
+			Commits:      m.gitCommits,
+			Selected:     m.gitSelectedCommit,
+			Scroll:       m.gitCommitScroll,
+			Width:        width,
+			Height:       bottomBarSectionHeight,
+			SessionStart: m.gitSessionStart,
+			Theme:        th,
+		})
+	case 1, 2:
+		label = "Files"
+		content = RenderGitFileList(GitFileListProps{
+			Files:    m.gitFiles,
+			Selected: m.gitSelectedFile,
+			Scroll:   m.gitFileScroll,
+			Width:    width,
+			Height:   bottomBarSectionHeight,
+			Theme:    th,
+		})
+	}
+
+	divider := renderLabeledDivider(label, width, th)
+	return lipgloss.JoinVertical(lipgloss.Left, divider, content)
 }
 
 // GitCommitListProps are the props for rendering the commit list.
@@ -128,6 +194,14 @@ func RenderGitCommitList(props GitCommitListProps) string {
 	var lines []string
 	visible := props.Commits
 	scroll := props.Scroll
+
+	// Auto-scroll to keep selected item visible
+	if props.Height > 0 && props.Selected >= scroll+props.Height {
+		scroll = props.Selected - props.Height + 1
+	}
+	if props.Selected < scroll {
+		scroll = props.Selected
+	}
 
 	// Clamp scroll
 	if scroll > len(visible)-props.Height {
@@ -222,6 +296,14 @@ func RenderGitFileList(props GitFileListProps) string {
 
 	var lines []string
 	scroll := props.Scroll
+
+	// Auto-scroll to keep selected item visible
+	if props.Height > 0 && props.Selected >= scroll+props.Height {
+		scroll = props.Selected - props.Height + 1
+	}
+	if props.Selected < scroll {
+		scroll = props.Selected
+	}
 
 	if scroll > len(props.Files)-props.Height {
 		scroll = len(props.Files) - props.Height

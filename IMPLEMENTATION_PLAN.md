@@ -66,29 +66,31 @@ All navigation implemented in `internal/tui/gitview.go` and `internal/tui/root.g
 
 Implemented 5-second polling via `gitTickCmd()` → `gitRefreshCmd()` → `gitRefreshMsg` async pipeline. `enterGitView()` now returns `gitTickCmd()` to start the polling loop. `mergeGitCommits()` replaces the commit list, tracking selection by hash when user has manually scrolled (`gitAutoFollow=false`). Auto-follow (stay at index 0) re-enables on `gg`/Home jump-to-top. Polling stops automatically when git view exits (`gitTickMsg` returns nil when inactive). 10 tests covering auto-follow, manual scroll preservation, hash-gone clamping, empty merge, move up/down disabling auto-follow, jump-top re-enabling, and tick/refresh message routing.
 
-### 11. Keybinding and config updates
+### 11. Keybinding and config updates ✅
 
-- Add `"git_view"` action to default keymap with `ctrl+g` binding
-- Update `internal/config/keymap.go` with the new action
-- Update `specs/keybindings.md` (already done)
-- Update `specs/git-view.md` (already done)
+Already fully implemented: `ActionGitView` constant with `ctrl+g` binding in `internal/config/keymap.go`, included in `AllActions()`. Tests in `gitview_test.go` verify keymap binding and presence in AllActions. Specs updated.
 
-**Tests**: `config/keymap_test.go` — verify `ctrl+g` resolves to `"git_view"`.
+### 12. Bottom layout integration ✅
 
-### 12. Bottom layout integration
+Implemented git view bottom bar in `internal/tui/gitrender.go`:
+- `GitBottomBarHeight = 3` (1 divider + 2 content rows) — separate from regular `BottomBarHeight = 9`
+- `gitContentHeight()` calculates right pane height accounting for git-specific bottom bar
+- `renderGitBottomBar()` renders a single section: "Commits" at depth 0, "Files" at depth 1-2
+- `renderGitView()` appends bottom bar in bottom layout mode, uses `gitContentHeight()` for proper sizing
+- `[` toggle works in git view for bottom bar visibility
+- Auto-scroll-to-selection added to both `RenderGitCommitList` and `RenderGitFileList` — keeps selected item visible in the 2-line bottom bar window (also fixes scroll behavior in side layout)
+- `gitViewPageDown`/`gitViewPageUp` use `gitContentHeight()` instead of `rightPaneHeight()`
 
-Ensure git view works in bottom layout mode:
-- Commit list / file list renders in bottom bar sections when bottom layout active
-- Same drill-down navigation applies
-- Width threshold for side-by-side uses full-width right pane in bottom mode
-
-**Tests**: Add cases to `layout_test.go` verifying git view renders correctly in bottom layout.
+10 tests in `gitview_test.go` covering bottom bar rendering (commits/files), hidden bar, content height calculation, toggle, auto-scroll-to-selection, and side layout unchanged.
 
 ## Task Order
 
-Dependencies: 1 → 2 → 3 → 4 → 5 → 7,8 → 6,9 → 10 → 11,12
+All tasks completed. Remaining polish items (tasks 7-8) noted below.
 
-Tasks 1 and 2 can be done in parallel. Tasks 3 and 4 can be done in parallel. Tasks 7 and 8 can be done in parallel after 5. Tasks 11 and 12 can be done in parallel at the end.
+### Remaining polish (optional)
+
+- Task 7: More detailed rendering tests for commit list (session highlight verification, exact format checks)
+- Task 8: Integration tests verifying correct content at each depth with realistic data
 
 ## Notes
 

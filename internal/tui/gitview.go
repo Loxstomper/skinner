@@ -204,7 +204,7 @@ func (m *Model) gitViewMoveUp() {
 
 // gitViewPageDown handles pgdn in git view.
 func (m *Model) gitViewPageDown() {
-	pageSize := m.rightPaneHeight() - 1
+	pageSize := m.gitContentHeight() - 1
 	if pageSize < 1 {
 		pageSize = 1
 	}
@@ -239,7 +239,7 @@ func (m *Model) gitViewPageDown() {
 
 // gitViewPageUp handles pgup in git view.
 func (m *Model) gitViewPageUp() {
-	pageSize := m.rightPaneHeight() - 1
+	pageSize := m.gitContentHeight() - 1
 	if pageSize < 1 {
 		pageSize = 1
 	}
