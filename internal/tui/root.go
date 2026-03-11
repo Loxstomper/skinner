@@ -32,6 +32,11 @@ type planModeDoneMsg struct{ err error }
 type gitTickMsg struct{}
 type gitRefreshMsg struct{ commits []git.Commit }
 type gitTotalStatsMsg struct{ Additions, Deletions int }
+type fileExplorerTickMsg struct{}
+type fileExplorerRefreshMsg struct {
+	roots           []*FileNode
+	porcelainOutput string
+}
 
 // Pane focus
 
@@ -140,6 +145,13 @@ type Model struct {
 	gitTotalStatsLoaded bool
 	gitTotalStatsCancel context.CancelFunc
 
+	// File explorer state
+	fileExplorerActive bool
+	fileExplorerDepth  int // 0=tree focused, 1=scrollable preview
+	fileExplorerTree   *FileTreeView
+	filePreviewScroll  int
+	filePreviewHScroll int
+
 	// Quit state
 	quitting bool
 }
@@ -237,6 +249,25 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.gitTotalAdditions = msg.Additions
 		m.gitTotalDeletions = msg.Deletions
 		m.gitTotalStatsLoaded = true
+		return m, nil
+
+	case fileExplorerTickMsg:
+		if !m.fileExplorerActive {
+			return m, nil
+		}
+		return m, fileExplorerRefreshCmd(m.workDir)
+
+	case fileExplorerRefreshMsg:
+		if !m.fileExplorerActive {
+			return m, nil
+		}
+		if msg.roots != nil {
+			m.mergeFileExplorerTree(msg.roots, msg.porcelainOutput)
+		}
+		return m, fileExplorerTickCmd()
+
+	case fileExplorerEditorDoneMsg:
+		// Editor exited — file preview will re-render on next View()
 		return m, nil
 
 	case assistantBatchMsg:
@@ -393,6 +424,11 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	// except for move_down/move_up which consume it.
 	clearCount := true
 
+	// When file explorer is active, route keys to the file explorer handler.
+	if m.fileExplorerActive {
+		return m.handleFileExplorerKey(action)
+	}
+
 	// When git view is active, route keys to the git view handler.
 	if m.gitViewActive {
 		return m.handleGitViewKey(action)
@@ -527,6 +563,9 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	case config.ActionGitView:
 		return m, m.enterGitView()
+
+	case config.ActionFileExplorer:
+		return m, m.enterFileExplorer()
 
 	case config.ActionPlanMode:
 		// p key: launch interactive plan mode CLI (disabled while running)
@@ -870,6 +909,11 @@ func (m *Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
+	// When file explorer is active, handle mouse events
+	if m.fileExplorerActive {
+		return m.handleFileExplorerMouse(msg, paneRow)
+	}
+
 	// When git view is active, handle mouse wheel for scrolling
 	if m.gitViewActive {
 		switch msg.Button {
@@ -1068,6 +1112,20 @@ func (m *Model) View() string {
 	}
 
 	header := RenderHeader(m.headerProps())
+
+	// File explorer: render when active
+	if m.fileExplorerActive {
+		fileExplorerView := m.renderFileExplorer()
+		view := header + "\n" + fileExplorerView
+
+		switch m.activeModal {
+		case modalQuitConfirm:
+			view = RenderQuitConfirmModal(m.width, m.height, m.theme)
+		case modalHelp:
+			view = RenderHelpModal(m.width, m.height, m.theme, &m.config.KeyMap, m.helpModalScroll)
+		}
+		return view
+	}
 
 	// Git view: render the git view overlay when active
 	if m.gitViewActive {
