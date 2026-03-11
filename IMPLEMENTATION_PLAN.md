@@ -6,7 +6,7 @@ Read-only git history viewer (`ctrl+g`) with side-by-side diffs, syntax highligh
 
 ## Dependencies
 
-- [ ] Add `github.com/sergi/go-diff` for character-level intra-line diffing
+- [x] Add `github.com/sergi/go-diff` for character-level intra-line diffing
 - [ ] Add `github.com/alecthomas/chroma/v2` as direct dependency (currently indirect via glamour)
 
 ## Tasks
@@ -23,13 +23,9 @@ Implemented `internal/git` package with 4 public functions (`LogCommits`, `DiffT
 
 Implemented `internal/tui/diffparse.go` with types `DiffLineType`, `DiffLine`, `Hunk`, `SideBySideLine`. Two main functions: `ParseUnifiedDiff` parses unified diff strings into `[]Hunk` with `@@ ` header extraction and line number tracking; `PairLines` converts hunks into `[]SideBySideLine` for side-by-side rendering with context on both sides, removed+added blocks paired row-by-row, and nil padding for unequal blocks. Handles `\ No newline at end of file` markers, missing count in hunk headers, and multi-hunk diffs. 15 tests covering parsing, line numbering, pairing, padding, and edge cases.
 
-### 4. Intra-line highlighting
+### 4. Intra-line highlighting ✅
 
-New file `internal/tui/diffhighlight.go`:
-- `IntraLineChanges(oldLine, newLine string) ([]CharRange, []CharRange)` — uses `sergi/go-diff` Myers algorithm to compute character-level differences
-- Returns ranges of changed characters for each side
-
-**Tests**: `internal/tui/diffhighlight_test.go` — test character range computation: identical lines (no ranges), single word change, multiple changes, entire line changed.
+Implemented `internal/tui/diffhighlight.go` with `CharRange` type and `IntraLineChanges` function using `sergi/go-diff` Myers algorithm with semantic cleanup. Handles identical lines (nil ranges), single word changes, multiple changes, entire line changes, pure insertions, and pure deletions. Uses rune-based positions for Unicode correctness. 8 tests covering all cases plus range validity checks across multiple inputs.
 
 ### 5. Diff renderer: side-by-side and unified rendering
 
