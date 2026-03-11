@@ -29,3 +29,4 @@ Skinner is a Go TUI that runs Claude CLI in a loop and displays tool call activi
 | [bottom-layout.md](bottom-layout.md) | Bottom bar layout for narrow terminals, auto/side/bottom config |
 | [path-trimming.md](path-trimming.md) | CWD and home directory path trimming for tool call summaries |
 | [git-view.md](git-view.md) | Read-only git history viewer with side-by-side diffs and syntax highlighting |
+| [file-explorer.md](file-explorer.md) | File tree browser with syntax-highlighted preview, fuzzy search, git status |
