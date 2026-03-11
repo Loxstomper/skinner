@@ -14,11 +14,11 @@ Remove per-commit addition/deletion stats from unselected rows in the git view c
 - [x] Add tests in `internal/git/git_test.go` for all formatting thresholds (16 test cases covering all boundaries)
 
 ### 3. Add `TotalStats` function to `internal/git/git.go`
-- Add function that runs `git log --shortstat --no-merges` and parses the output
-- Parse lines matching `N files changed, N insertions(+), N deletions(-)` and accumulate totals
-- Accept a `context.Context` for cancellation
-- Add `ParseShortstatLine(line string) (additions, deletions int, ok bool)` as a testable helper
-- Add tests in `internal/git/git_test.go` for parsing various shortstat formats (insertions only, deletions only, both, binary-only commits)
+- [x] Add function that runs `git log --shortstat --no-merges` and parses the output
+- [x] Parse lines matching `N files changed, N insertions(+), N deletions(-)` and accumulate totals
+- [x] Accept a `context.Context` for cancellation
+- [x] Add `ParseShortstatLine(line string) (additions, deletions int, ok bool)` as a testable helper
+- [x] Add tests in `internal/git/git_test.go` for parsing various shortstat formats (insertions only, deletions only, both, binary-only commits)
 
 ### 4. Add Bubble Tea message types for async stats
 - Add `gitTotalStatsMsg struct{ Additions, Deletions int }` to `internal/tui/root.go`

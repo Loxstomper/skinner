@@ -26,12 +26,37 @@ The same layout rules apply — side layout, bottom layout, and auto switching a
 
 The left pane initially shows a list of all commits on the current branch via `git log`.
 
+### Header Line
+
+The first line of the commit list is a centered divider showing total additions and deletions across all commits in the repository:
+
+```
+────── +12.3K -4.2K ──────
+```
+
+- **Additions**: displayed in `DiffAdded` color
+- **Deletions**: displayed in `DiffRemoved` color
+- **Divider**: `─` characters in `ForegroundDim`, filling remaining width
+- **Loading state**: shows `────── ... ──────` while the async count is in progress
+
+The totals are computed asynchronously via `git log --shortstat --no-merges` over the entire history. A background goroutine runs on git view entry, accumulates totals incrementally, and sends Bubble Tea messages to update the header. The goroutine is cancelled if the user exits git view before it completes. The result is not cached — re-entering git view re-runs the count.
+
+#### Number Formatting
+
+| Value          | Format    | Example  |
+|----------------|-----------|----------|
+| < 1,000        | raw       | `+42`    |
+| 1,000–9,999    | 1 decimal K | `+1.2K`  |
+| 10,000–999,999 | whole K   | `+15K`   |
+| 1,000,000+     | 1 decimal M | `+1.2M`  |
+| 10,000,000+    | whole M   | `+15M`   |
+
 ### Display Format
 
 Each commit row shows:
 
 ```
-a3f2c1b  Fix parser edge case       3m ago  +42 -7
+a3f  Fix parser edge case       3m ago
 ```
 
 | Field          | Source                       | Color                |
@@ -39,8 +64,8 @@ a3f2c1b  Fix parser edge case       3m ago  +42 -7
 | Short hash     | `git log --format=%h`        | `ForegroundDim`      |
 | Subject line   | `git log --format=%s`        | `Foreground`         |
 | Relative time  | `git log --format=%cr`       | `ForegroundDim`      |
-| Additions      | `git log --stat`             | `DiffAdded`          |
-| Deletions      | `git log --stat`             | `DiffRemoved`        |
+
+The hash is truncated to **3 characters**.
 
 ### Session Highlighting
 
@@ -48,7 +73,15 @@ Commits made during the current Skinner session are highlighted with a `DiffSess
 
 ### Selected Row
 
-The selected commit row uses `Highlight` background, consistent with other list panes.
+The selected commit row uses `Highlight` background, consistent with other list panes. On the selected row, the relative time is **replaced** with the commit's addition and deletion counts:
+
+```
+a3f  Fix parser edge case       +42 -7
+```
+
+- **Additions**: `DiffAdded` color
+- **Deletions**: `DiffRemoved` color
+- Merge commits or commits with no changes show `+0 -0`
 
 ## Drill-Down Navigation
 

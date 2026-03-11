@@ -289,6 +289,79 @@ func TestFormatStatNumber(t *testing.T) {
 	}
 }
 
+func TestParseShortstatLine(t *testing.T) {
+	tests := []struct {
+		name          string
+		input         string
+		wantAdditions int
+		wantDeletions int
+		wantOK        bool
+	}{
+		{
+			name:          "both insertions and deletions",
+			input:         " 3 files changed, 20 insertions(+), 7 deletions(-)",
+			wantAdditions: 20, wantDeletions: 7, wantOK: true,
+		},
+		{
+			name:          "insertions only",
+			input:         " 1 file changed, 5 insertions(+)",
+			wantAdditions: 5, wantDeletions: 0, wantOK: true,
+		},
+		{
+			name:          "deletions only",
+			input:         " 2 files changed, 10 deletions(-)",
+			wantAdditions: 0, wantDeletions: 10, wantOK: true,
+		},
+		{
+			name:          "single file single insertion",
+			input:         " 1 file changed, 1 insertion(+)",
+			wantAdditions: 1, wantDeletions: 0, wantOK: true,
+		},
+		{
+			name:          "single file single deletion",
+			input:         " 1 file changed, 1 deletion(-)",
+			wantAdditions: 0, wantDeletions: 1, wantOK: true,
+		},
+		{
+			name:          "binary-only commit (files changed, no stats)",
+			input:         " 1 file changed, 0 insertions(+), 0 deletions(-)",
+			wantAdditions: 0, wantDeletions: 0, wantOK: true,
+		},
+		{
+			name:  "empty line",
+			input: "", wantOK: false,
+		},
+		{
+			name:  "non-matching line",
+			input: "commit abc123", wantOK: false,
+		},
+		{
+			name:  "blank line",
+			input: "   ", wantOK: false,
+		},
+		{
+			name:          "large numbers",
+			input:         " 150 files changed, 12345 insertions(+), 6789 deletions(-)",
+			wantAdditions: 12345, wantDeletions: 6789, wantOK: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			a, d, ok := ParseShortstatLine(tt.input)
+			if ok != tt.wantOK {
+				t.Fatalf("ParseShortstatLine() ok = %v, want %v", ok, tt.wantOK)
+			}
+			if a != tt.wantAdditions {
+				t.Errorf("ParseShortstatLine() additions = %d, want %d", a, tt.wantAdditions)
+			}
+			if d != tt.wantDeletions {
+				t.Errorf("ParseShortstatLine() deletions = %d, want %d", d, tt.wantDeletions)
+			}
+		})
+	}
+}
+
 func TestNonEmptyLines(t *testing.T) {
 	tests := []struct {
 		name  string

@@ -1,8 +1,11 @@
 package git
 
 import (
+	"bufio"
+	"context"
 	"fmt"
 	"os/exec"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -197,6 +200,60 @@ func FormatStatNumber(n int) string {
 	default:
 		return fmt.Sprintf("%dM", n/1000000)
 	}
+}
+
+var shortstatRe = regexp.MustCompile(
+	`\d+ files? changed(?:, (\d+) insertions?\(\+\))?(?:, (\d+) deletions?\(-\))?`,
+)
+
+// ParseShortstatLine parses a single --shortstat summary line and returns
+// the number of insertions and deletions. Returns ok=false if the line
+// doesn't match the expected format.
+func ParseShortstatLine(line string) (additions, deletions int, ok bool) {
+	m := shortstatRe.FindStringSubmatch(line)
+	if m == nil {
+		return 0, 0, false
+	}
+	if m[1] != "" {
+		additions, _ = strconv.Atoi(m[1])
+	}
+	if m[2] != "" {
+		deletions, _ = strconv.Atoi(m[2])
+	}
+	return additions, deletions, true
+}
+
+// TotalStats runs git log --shortstat --no-merges over the entire history and
+// accumulates total additions and deletions. It respects context cancellation.
+func TotalStats(ctx context.Context) (totalAdditions, totalDeletions int, err error) {
+	cmd := exec.CommandContext(ctx, "git", "log", "--shortstat", "--no-merges", "--format=")
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		return 0, 0, fmt.Errorf("git log pipe: %w", err)
+	}
+	if err := cmd.Start(); err != nil {
+		return 0, 0, fmt.Errorf("git log start: %w", err)
+	}
+
+	scanner := bufio.NewScanner(stdout)
+	for scanner.Scan() {
+		if ctx.Err() != nil {
+			break
+		}
+		line := scanner.Text()
+		if a, d, ok := ParseShortstatLine(line); ok {
+			totalAdditions += a
+			totalDeletions += d
+		}
+	}
+
+	if err := cmd.Wait(); err != nil {
+		if ctx.Err() != nil {
+			return totalAdditions, totalDeletions, ctx.Err()
+		}
+		return 0, 0, fmt.Errorf("git log: %w", err)
+	}
+	return totalAdditions, totalDeletions, nil
 }
 
 // FileDiff returns the unified diff for a single file in a commit.
