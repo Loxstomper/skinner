@@ -25,6 +25,7 @@ const (
 	ActionPlanMode          = "plan_mode"
 	ActionRun               = "run"
 	ActionGitView           = "git_view"
+	ActionEditPlan          = "edit_plan"
 )
 
 // KeyBinding represents a single key or key sequence that triggers an action.
@@ -89,6 +90,7 @@ func DefaultKeyMap() KeyMap {
 			ActionPlanMode:          {Keys: []string{"p"}},
 			ActionRun:               {Keys: []string{"r"}},
 			ActionGitView:           {Keys: []string{"ctrl+g"}},
+			ActionEditPlan:          {Keys: []string{"e"}},
 		},
 	}
 }
@@ -219,6 +221,7 @@ func AllActions() []string {
 		ActionPlanMode,
 		ActionRun,
 		ActionGitView,
+		ActionEditPlan,
 		ActionQuit,
 		ActionHelp,
 	}

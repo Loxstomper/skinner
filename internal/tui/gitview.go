@@ -75,6 +75,7 @@ func (m *Model) handleGitViewKey(action string) (tea.Model, tea.Cmd) {
 
 	case config.ActionHelp:
 		m.activeModal = modalHelp
+		m.helpModalScroll = 0
 		return m, nil
 
 	case config.ActionGitView:

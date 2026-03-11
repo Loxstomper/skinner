@@ -99,8 +99,9 @@ type Model struct {
 	exitOnComplete bool
 
 	// Modal state
-	activeModal modalType
-	lastCtrlCAt time.Time
+	activeModal     modalType
+	lastCtrlCAt     time.Time
+	helpModalScroll int
 
 	// Prompt read modal state
 	promptModalFile    string // filename (e.g. "PROMPT_BUILD.md")
@@ -405,6 +406,7 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.activeModal = modalQuitConfirm
 		case config.ActionHelp:
 			m.activeModal = modalHelp
+			m.helpModalScroll = 0
 		case config.ActionEscape:
 			m.timeline.ExitSubScroll()
 		case config.ActionMoveDown, config.ActionMoveUp,
@@ -425,6 +427,7 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case config.ActionHelp:
 		m.timeline.ClearCount()
 		m.activeModal = modalHelp
+		m.helpModalScroll = 0
 		return m, nil
 
 	case config.ActionToggleLeftPane:
@@ -647,8 +650,8 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 	}
 
-	// 'e' key: launch editor for plan files (from plan list or plan content view)
-	if key == "e" && (m.focusedPane == plansPane || (m.focusedPane == rightPane && m.rightPaneMode == planMode)) {
+	// Edit plan file: launch editor for plan files (from plan list or plan content view)
+	if action == config.ActionEditPlan && (m.focusedPane == plansPane || (m.focusedPane == rightPane && m.rightPaneMode == planMode)) {
 		if f := m.planList.SelectedFile(); f != "" {
 			return m, m.launchPlanEditor(f)
 		}
@@ -699,8 +702,21 @@ func (m *Model) handleModalKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	}
 
 	if m.activeModal == modalHelp {
-		// Any key dismisses the help modal.
+		// pgup/pgdn scroll the help modal when content overflows.
+		switch key {
+		case "pgup":
+			m.helpModalScroll -= 5
+			if m.helpModalScroll < 0 {
+				m.helpModalScroll = 0
+			}
+			return m, nil
+		case "pgdown":
+			m.helpModalScroll += 5
+			return m, nil
+		}
+		// Any other key dismisses the help modal.
 		m.activeModal = modalNone
+		m.helpModalScroll = 0
 		return m, nil
 	}
 
@@ -1063,7 +1079,7 @@ func (m *Model) View() string {
 		case modalQuitConfirm:
 			view = RenderQuitConfirmModal(m.width, m.height, m.theme)
 		case modalHelp:
-			view = RenderHelpModal(m.width, m.height, m.theme, &m.config.KeyMap)
+			view = RenderHelpModal(m.width, m.height, m.theme, &m.config.KeyMap, m.helpModalScroll)
 		}
 		return view
 	}
@@ -1163,7 +1179,7 @@ func (m *Model) View() string {
 	case modalQuitConfirm:
 		view = RenderQuitConfirmModal(m.width, m.height, m.theme)
 	case modalHelp:
-		view = RenderHelpModal(m.width, m.height, m.theme, &m.config.KeyMap)
+		view = RenderHelpModal(m.width, m.height, m.theme, &m.config.KeyMap, m.helpModalScroll)
 	case modalPromptRead:
 		view = RenderPromptReadModal(PromptModalProps{
 			Filename: m.promptModalFile,

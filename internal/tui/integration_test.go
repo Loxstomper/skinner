@@ -32,7 +32,7 @@ func newTestModelWithExit(events []session.Event, maxIterations int, exitOnCompl
 	th := testTheme()
 	m := NewModel(sess, cfg, "test prompt content", th, false, exitOnComplete, fake)
 	m.width = 120
-	m.height = 30
+	m.height = 40
 	return &m
 }
 

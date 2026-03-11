@@ -243,7 +243,7 @@ func TestIntegration_DoubleCtrlCExpired(t *testing.T) {
 func TestRenderHelpModal(t *testing.T) {
 	th := testTheme()
 	km := config.DefaultKeyMap()
-	result := RenderHelpModal(80, 24, th, &km)
+	result := RenderHelpModal(80, 40, th, &km, 0)
 
 	// Check that section headers are present.
 	if !strings.Contains(result, "Navigation") {
@@ -280,7 +280,7 @@ func TestRenderHelpModal_ReflectsCustomBindings(t *testing.T) {
 	// Remap quit from q to x.
 	km.Bindings[config.ActionQuit] = config.ParseKeyBinding("x")
 
-	result := RenderHelpModal(80, 24, th, &km)
+	result := RenderHelpModal(80, 40, th, &km, 0)
 
 	if !strings.Contains(result, "x") {
 		t.Error("expected remapped key 'x' in help modal")
@@ -396,6 +396,76 @@ func TestIntegration_HelpModal_BlocksNavigation(t *testing.T) {
 	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
 	if m.iterList.Cursor != savedCursor {
 		t.Error("expected cursor unchanged when key dismissed help modal")
+	}
+}
+
+func TestRenderHelpModal_ScrollsWhenTooSmall(t *testing.T) {
+	th := testTheme()
+	km := config.DefaultKeyMap()
+
+	// Render with a very small height — content should be clipped.
+	result := RenderHelpModal(80, 15, th, &km, 0)
+
+	// Should show the top content (Navigation header) but not the footer.
+	if !strings.Contains(result, "Navigation") {
+		t.Error("expected 'Navigation' section visible at scroll offset 0")
+	}
+	if strings.Contains(result, "Press any key to close") {
+		t.Error("expected footer to be clipped at small height")
+	}
+
+	// With a large scroll offset, the top content should be hidden.
+	result2 := RenderHelpModal(80, 15, th, &km, 20)
+	if strings.Contains(result2, "Navigation") {
+		t.Error("expected 'Navigation' section scrolled away at offset 20")
+	}
+	// Footer should now be visible.
+	if !strings.Contains(result2, "Press any key to close") {
+		t.Error("expected footer visible after scrolling down")
+	}
+}
+
+func TestIntegration_HelpModal_PgUpPgDnScroll(t *testing.T) {
+	events := []session.Event{
+		session.SubprocessExitEvent{Err: nil},
+	}
+
+	m := newTestModel(events, 1)
+	m.height = 15 // Small terminal to trigger scrolling.
+	drainEvents(t, m)
+
+	// Open help modal.
+	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'?'}})
+	if m.activeModal != modalHelp {
+		t.Fatal("expected help modal open")
+	}
+
+	// pgdn should scroll, not dismiss.
+	m.Update(tea.KeyMsg{Type: tea.KeyPgDown})
+	if m.activeModal != modalHelp {
+		t.Error("expected help modal still open after pgdn")
+	}
+	if m.helpModalScroll == 0 {
+		t.Error("expected helpModalScroll to increase after pgdn")
+	}
+
+	// pgup should scroll back.
+	saved := m.helpModalScroll
+	m.Update(tea.KeyMsg{Type: tea.KeyPgUp})
+	if m.activeModal != modalHelp {
+		t.Error("expected help modal still open after pgup")
+	}
+	if m.helpModalScroll >= saved {
+		t.Error("expected helpModalScroll to decrease after pgup")
+	}
+
+	// Any other key should dismiss.
+	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'x'}})
+	if m.activeModal != modalNone {
+		t.Error("expected help modal dismissed after pressing x")
+	}
+	if m.helpModalScroll != 0 {
+		t.Error("expected helpModalScroll reset after dismissal")
 	}
 }
 

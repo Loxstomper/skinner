@@ -88,6 +88,10 @@ func actionDisplayName(action string) string {
 		return "Run prompt"
 	case config.ActionPlanMode:
 		return "Plan mode"
+	case config.ActionEditPlan:
+		return "Edit plan file"
+	case config.ActionGitView:
+		return "Git view"
 	case config.ActionEscape:
 		return "Escape"
 	default:
@@ -134,6 +138,8 @@ func buildHelpSections(km *config.KeyMap) []helpSection {
 				entryFor(config.ActionMoveUp),
 				entryFor(config.ActionJumpTop),
 				entryFor(config.ActionJumpBottom),
+				{Label: "Page down", Key: "pgdn"},
+				{Label: "Page up", Key: "pgup"},
 			},
 		},
 		{
@@ -150,7 +156,8 @@ func buildHelpSections(km *config.KeyMap) []helpSection {
 				entryFor(config.ActionExpand),
 				entryFor(config.ActionRun),
 				entryFor(config.ActionPlanMode),
-				{Label: "Edit plan file", Key: "e"},
+				entryFor(config.ActionEditPlan),
+				entryFor(config.ActionGitView),
 				entryFor(config.ActionToggleView),
 				entryFor(config.ActionToggleLineNumbers),
 				entryFor(config.ActionToggleLeftPane),
@@ -168,7 +175,8 @@ func buildHelpSections(km *config.KeyMap) []helpSection {
 }
 
 // RenderHelpModal renders a centered help overlay showing all keybindings.
-func RenderHelpModal(width, height int, th theme.Theme, km *config.KeyMap) string {
+// scrollOffset controls vertical scrolling when the modal is taller than the terminal.
+func RenderHelpModal(width, height int, th theme.Theme, km *config.KeyMap, scrollOffset int) string {
 	sections := buildHelpSections(km)
 
 	titleStyle := lipgloss.NewStyle().
@@ -232,6 +240,28 @@ func RenderHelpModal(width, height int, th theme.Theme, km *config.KeyMap) strin
 		footerPad = 0
 	}
 	lines = append(lines, strings.Repeat(" ", footerPad)+footer)
+
+	// Clip content vertically if the terminal is too small.
+	// Border uses 2 rows (top+bottom), padding uses 2 rows (top+bottom).
+	maxContentLines := height - 4 // 2 border + 2 padding
+	if maxContentLines < 3 {
+		maxContentLines = 3
+	}
+	if len(lines) > maxContentLines {
+		// Clamp scroll offset.
+		maxScroll := len(lines) - maxContentLines
+		if scrollOffset > maxScroll {
+			scrollOffset = maxScroll
+		}
+		if scrollOffset < 0 {
+			scrollOffset = 0
+		}
+		end := scrollOffset + maxContentLines
+		if end > len(lines) {
+			end = len(lines)
+		}
+		lines = lines[scrollOffset:end]
+	}
 
 	body := strings.Join(lines, "\n")
 
