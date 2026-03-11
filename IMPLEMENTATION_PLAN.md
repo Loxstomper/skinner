@@ -15,17 +15,9 @@ Read-only git history viewer (`ctrl+g`) with side-by-side diffs, syntax highligh
 
 Added 8 new fields to `Theme` struct: `DiffAdded`, `DiffRemoved`, `DiffAddedBg`, `DiffRemovedBg`, `DiffAddedEmphasis`, `DiffRemovedEmphasis`, `DiffLineNumber`, `DiffSessionCommit`. All 4 built-in themes populated per spec. Tests verify non-empty on all themes.
 
-### 2. Git data layer: commit list and diff loading
+### 2. Git data layer: commit list and diff loading ✅
 
-New package `internal/git` with functions:
-- `LogCommits(limit int) ([]Commit, error)` — runs `git log`, returns slice of `Commit{Hash, Subject, AuthorDate, Additions, Deletions}`
-- `DiffTreeFiles(sha string) ([]FileChange, error)` — runs `git diff-tree --no-commit-id -r --numstat <sha>`, returns `FileChange{Status, Path, Additions, Deletions}`
-- `ShowCommit(sha string) (string, error)` — runs `git show --stat <sha>`, returns full commit message + stats
-- `FileDiff(sha, path string) (string, error)` — runs `git diff --diff-algorithm=histogram <sha>~1 <sha> -- <path>`, returns unified diff
-
-All functions shell out to git CLI. No domain logic beyond parsing output.
-
-**Tests**: `internal/git/git_test.go` — test output parsing with canned git output (no real git repo required; test the parsers, not git itself).
+Implemented `internal/git` package with 4 public functions (`LogCommits`, `DiffTreeFiles`, `ShowCommit`, `FileDiff`) that shell out to git CLI, plus exported parse functions (`ParseLogOutput`, `ParseDiffTreeOutput`) for testability. `DiffTreeFiles` runs two git commands (`--numstat` and `--name-status`) merged by index position (tree order). Handles binary files (numstat `-\t-`), renames (`R100` normalized to `R`), and merge commits (no numstat). Tests use canned output — 17 test cases covering all parsers.
 
 ### 3. Diff parser: unified diff to structured hunks
 
