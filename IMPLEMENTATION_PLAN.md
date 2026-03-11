@@ -7,7 +7,7 @@ Read-only git history viewer (`ctrl+g`) with side-by-side diffs, syntax highligh
 ## Dependencies
 
 - [x] Add `github.com/sergi/go-diff` for character-level intra-line diffing
-- [ ] Add `github.com/alecthomas/chroma/v2` as direct dependency (currently indirect via glamour)
+- [x] Add `github.com/alecthomas/chroma/v2` as direct dependency (currently indirect via glamour)
 
 ## Tasks
 
@@ -27,19 +27,9 @@ Implemented `internal/tui/diffparse.go` with types `DiffLineType`, `DiffLine`, `
 
 Implemented `internal/tui/diffhighlight.go` with `CharRange` type and `IntraLineChanges` function using `sergi/go-diff` Myers algorithm with semantic cleanup. Handles identical lines (nil ranges), single word changes, multiple changes, entire line changes, pure insertions, and pure deletions. Uses rune-based positions for Unicode correctness. 8 tests covering all cases plus range validity checks across multiple inputs.
 
-### 5. Diff renderer: side-by-side and unified rendering
+### 5. Diff renderer: side-by-side and unified rendering ✅
 
-New file `internal/tui/diffview.go`:
-- `RenderDiff(props DiffViewProps) string` — renders parsed hunks as styled output
-- Side-by-side when width >= 80, unified when < 80
-- Line number gutters (non-scrolling), code content (horizontally scrollable)
-- Applies diff line backgrounds (`DiffAddedBg`/`DiffRemovedBg`) via theme
-- Applies intra-line emphasis (`DiffAddedEmphasis`/`DiffRemovedEmphasis`) from task 4
-- Syntax highlighting via chroma token iterator, using theme-mapped chroma style
-
-`DiffViewProps` includes: parsed hunks, file path (for language detection), theme, pane width, horizontal scroll offset.
-
-**Tests**: `internal/tui/diffview_test.go` — test side-by-side vs unified switching at width threshold, line number rendering, horizontal scroll offset clipping.
+Implemented `internal/tui/diffview.go` with `RenderDiff(props DiffViewProps) string` function. Side-by-side rendering at width >= 80, unified at < 80. Features: line number gutters (non-scrolling), horizontally scrollable code content, diff line backgrounds (`DiffAddedBg`/`DiffRemovedBg`), intra-line emphasis overlays (`DiffAddedEmphasis`/`DiffRemovedEmphasis`), and chroma syntax highlighting with theme-mapped styles (solarized-dark/light, monokai, nord). Character-level rendering pipeline: chroma tokenization → foreground colors → diff background → emphasis overlay → horizontal scroll clipping. Added chroma/v2 as direct dependency. 12 tests covering side-by-side vs unified switching, line numbers, horizontal scroll, empty input, prefixes, padding, syntax highlighting, and intra-line emphasis.
 
 ### 6. Git view model state
 
