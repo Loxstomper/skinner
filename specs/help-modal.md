@@ -37,6 +37,12 @@ A centered overlay with a two-column layout showing action names and their bound
   │    Toggle line numbers   #          │
   │    Toggle left pane      [          │
   │                                     │
+  │  File Explorer                      │
+  │    Search files          /          │
+  │    Open in editor        e          │
+  │    Expand / collapse     enter      │
+  │    Back / exit           escape     │
+  │                                     │
   │  Global                             │
   │    Quit                  q          │
   │    Force quit            ctrl+c ×2  │

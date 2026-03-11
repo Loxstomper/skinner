@@ -62,15 +62,16 @@ Tasks 1–7 complete. `FileNode`, `BuildFileTree`, `ApplyGitStatus`, `FileTreeVi
     - Refresh deferred during search to avoid disrupting results
     - 18 new tests: matching, navigation, cancel/confirm, view rendering, integration
 
-### Remaining Tasks
+15. ~~**Update help modal**~~ ✅ Implemented:
+    - New "File Explorer" section added to help modal with: Search files (/), Open in editor (e), Expand/collapse (enter), Back/exit (escape)
+    - `f` — File explorer already present in Actions section
+    - `specs/help-modal.md` updated with the new section
+    - Tests updated and passing (including scroll offset adjustments for increased content height)
 
-15. **Update help modal** — Add file explorer keybindings to help modal sections:
-    - Global section: `f` — Enter file explorer
-    - File explorer section (new): tree navigation, search, editor, depth keys
-    - Update `specs/help-modal.md` if needed.
+### Remaining Tasks
 
 16. **Final verification** — `make check` passes (vet, lint, tests). Review spec compliance against `specs/file-explorer.md`. No TODOs/FIXMEs.
 
 ## Status
 
-All prior specs fully implemented. `make check` passes (vet, lint, tests). File explorer Phase 4 (tasks 8-14) complete. Remaining: help modal updates (task 15), final verification (task 16).
+All prior specs fully implemented. `make check` passes (vet, lint, tests). File explorer tasks 1-15 complete. Remaining: final verification (task 16).

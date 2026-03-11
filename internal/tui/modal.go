@@ -167,6 +167,15 @@ func buildHelpSections(km *config.KeyMap) []helpSection {
 			},
 		},
 		{
+			Title: "File Explorer",
+			Entries: []helpEntry{
+				{Label: "Search files", Key: "/"},
+				entryFor(config.ActionEditPlan),
+				entryFor(config.ActionExpand),
+				entryFor(config.ActionEscape),
+			},
+		},
+		{
 			Title: "Global",
 			Entries: []helpEntry{
 				entryFor(config.ActionQuit),

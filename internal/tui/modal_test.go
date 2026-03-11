@@ -255,6 +255,9 @@ func TestRenderHelpModal(t *testing.T) {
 	if !strings.Contains(result, "Actions") {
 		t.Error("expected 'Actions' section in help modal")
 	}
+	if !strings.Contains(result, "File Explorer") {
+		t.Error("expected 'File Explorer' section in help modal")
+	}
 	if !strings.Contains(result, "Global") {
 		t.Error("expected 'Global' section in help modal")
 	}
@@ -265,6 +268,10 @@ func TestRenderHelpModal(t *testing.T) {
 	}
 	if !strings.Contains(result, "Quit") {
 		t.Error("expected 'Quit' in help modal")
+	}
+	// Check file explorer entries.
+	if !strings.Contains(result, "Search files") {
+		t.Error("expected 'Search files' in help modal")
 	}
 	if !strings.Contains(result, "Press any key to close") {
 		t.Error("expected footer text in help modal")
@@ -415,9 +422,9 @@ func TestRenderHelpModal_ScrollsWhenTooSmall(t *testing.T) {
 	}
 
 	// With a large scroll offset, the top content should be hidden.
-	result2 := RenderHelpModal(80, 15, th, &km, 20)
+	result2 := RenderHelpModal(80, 15, th, &km, 30)
 	if strings.Contains(result2, "Navigation") {
-		t.Error("expected 'Navigation' section scrolled away at offset 20")
+		t.Error("expected 'Navigation' section scrolled away at offset 30")
 	}
 	// Footer should now be visible.
 	if !strings.Contains(result2, "Press any key to close") {

@@ -1593,7 +1593,7 @@ func TestIntegration_HelpModal_ReflectsCustomKeybindings(t *testing.T) {
 	th := testTheme()
 	m := NewModel(sess, cfg, "prompt", th, false, false, fake)
 	m.width = 120
-	m.height = 30
+	m.height = 50
 	drainEvents(t, &m)
 
 	// Open help modal.
