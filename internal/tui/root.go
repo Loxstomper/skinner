@@ -261,6 +261,10 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if !m.fileExplorerActive {
 			return m, nil
 		}
+		// Defer refresh while searching to avoid disrupting the search results
+		if m.fileExplorerTree != nil && m.fileExplorerTree.IsSearching() {
+			return m, fileExplorerTickCmd()
+		}
 		if msg.roots != nil {
 			m.mergeFileExplorerTree(msg.roots, msg.porcelainOutput)
 		}
@@ -378,6 +382,14 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.handleModalKey(msg)
 	}
 
+	// When file explorer is active and in search mode, route raw keys to search handler
+	// before action resolution (search needs raw character input).
+	if m.fileExplorerActive && m.fileExplorerTree != nil && m.fileExplorerTree.IsSearching() {
+		if m.handleFileExplorerSearchKey(key) {
+			return m, nil
+		}
+	}
+
 	// Resolve the key through the KeyMap, handling sequence state.
 	action, newPending := km.Resolve(key, m.pendingAction)
 	m.pendingAction = newPending
@@ -426,6 +438,10 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	// When file explorer is active, route keys to the file explorer handler.
 	if m.fileExplorerActive {
+		// `/` activates fuzzy search at depth 0 — not a configured action
+		if action == "" && key == "/" && m.fileExplorerDepth == 0 {
+			action = "search"
+		}
 		return m.handleFileExplorerKey(action)
 	}
 

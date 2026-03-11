@@ -555,3 +555,331 @@ func TestFileTreeView_LeftCollapsesParentFromNestedFile(t *testing.T) {
 		t.Errorf("cursor should be on tui/, got %s", ftv.SelectedNode().Name)
 	}
 }
+
+// --- Fuzzy Search Tests ---
+
+func TestFileTreeView_EnterSearch(t *testing.T) {
+	ftv := NewFileTreeView(makeTestNodes())
+	ftv.Cursor = 2 // some non-zero cursor
+
+	ftv.EnterSearch()
+
+	if !ftv.IsSearching() {
+		t.Error("expected IsSearching() to be true")
+	}
+	if ftv.SearchQuery() != "" {
+		t.Errorf("expected empty query, got %q", ftv.SearchQuery())
+	}
+}
+
+func TestFileTreeView_SearchMatchesFiles(t *testing.T) {
+	ftv := NewFileTreeView(makeTestNodes())
+	ftv.EnterSearch()
+
+	ftv.HandleSearchKey("r")
+	ftv.HandleSearchKey("o")
+	ftv.HandleSearchKey("o")
+	ftv.HandleSearchKey("t")
+
+	if ftv.SearchQuery() != "root" {
+		t.Errorf("expected query 'root', got %q", ftv.SearchQuery())
+	}
+
+	node := ftv.SearchSelectedNode()
+	if node == nil {
+		t.Fatal("expected a search result")
+	}
+	if node.Path != "internal/tui/root.go" {
+		t.Errorf("expected root.go, got %s", node.Path)
+	}
+}
+
+func TestFileTreeView_SearchNoResults(t *testing.T) {
+	ftv := NewFileTreeView(makeTestNodes())
+	ftv.EnterSearch()
+
+	ftv.HandleSearchKey("z")
+	ftv.HandleSearchKey("z")
+	ftv.HandleSearchKey("z")
+
+	node := ftv.SearchSelectedNode()
+	if node != nil {
+		t.Errorf("expected no results, got %s", node.Path)
+	}
+}
+
+func TestFileTreeView_SearchBackspace(t *testing.T) {
+	ftv := NewFileTreeView(makeTestNodes())
+	ftv.EnterSearch()
+
+	ftv.HandleSearchKey("r")
+	ftv.HandleSearchKey("o")
+	ftv.HandleSearchKey("o")
+	if ftv.SearchQuery() != "roo" {
+		t.Fatalf("expected 'roo', got %q", ftv.SearchQuery())
+	}
+
+	ftv.HandleSearchKey("backspace")
+	if ftv.SearchQuery() != "ro" {
+		t.Errorf("expected 'ro' after backspace, got %q", ftv.SearchQuery())
+	}
+}
+
+func TestFileTreeView_SearchNavigateResults(t *testing.T) {
+	ftv := NewFileTreeView(makeTestNodes())
+	ftv.EnterSearch()
+
+	// Search for ".go" — should match multiple files
+	ftv.HandleSearchKey(".")
+	ftv.HandleSearchKey("g")
+	ftv.HandleSearchKey("o")
+
+	first := ftv.SearchSelectedNode()
+	if first == nil {
+		t.Fatal("expected search results for '.go'")
+	}
+
+	// Move down
+	ftv.HandleSearchKey("down")
+	second := ftv.SearchSelectedNode()
+	if second == nil {
+		t.Fatal("expected second result")
+	}
+	if first.Path == second.Path {
+		t.Error("down should move to different result")
+	}
+
+	// Move back up
+	ftv.HandleSearchKey("up")
+	backToFirst := ftv.SearchSelectedNode()
+	if backToFirst.Path != first.Path {
+		t.Errorf("up should return to first result, got %s", backToFirst.Path)
+	}
+}
+
+func TestFileTreeView_SearchCancel(t *testing.T) {
+	ftv := NewFileTreeView(makeTestNodes())
+	initialCursor := ftv.Cursor
+	initialScroll := ftv.Scroll
+
+	// Expand internal/tui/ before search
+	for _, n := range ftv.Roots() {
+		if n.Name == "internal" {
+			for _, c := range n.Children {
+				if c.Name == "tui" {
+					c.Expanded = true
+				}
+			}
+		}
+	}
+	ftv.SetRoots(ftv.Roots()) // rebuild rows
+
+	ftv.EnterSearch()
+	ftv.HandleSearchKey("m")
+	ftv.HandleSearchKey("a")
+	ftv.HandleSearchKey("i")
+	ftv.HandleSearchKey("n")
+
+	// Cancel should restore state
+	ftv.CancelSearch()
+
+	if ftv.IsSearching() {
+		t.Error("should not be searching after cancel")
+	}
+	if ftv.Cursor != initialCursor {
+		t.Errorf("cursor should be restored to %d, got %d", initialCursor, ftv.Cursor)
+	}
+	if ftv.Scroll != initialScroll {
+		t.Errorf("scroll should be restored to %d, got %d", initialScroll, ftv.Scroll)
+	}
+
+	// tui/ should still be expanded (restored)
+	for _, n := range ftv.Roots() {
+		if n.Name == "internal" {
+			for _, c := range n.Children {
+				if c.Name == "tui" && !c.Expanded {
+					t.Error("tui/ should still be expanded after cancel")
+				}
+			}
+		}
+	}
+}
+
+func TestFileTreeView_SearchConfirm(t *testing.T) {
+	nodes := makeTestNodes()
+	ftv := NewFileTreeView(nodes)
+
+	ftv.EnterSearch()
+	ftv.HandleSearchKey("r")
+	ftv.HandleSearchKey("o")
+	ftv.HandleSearchKey("o")
+	ftv.HandleSearchKey("t")
+
+	node := ftv.ConfirmSearch()
+
+	if ftv.IsSearching() {
+		t.Error("should not be searching after confirm")
+	}
+	if node == nil {
+		t.Fatal("expected confirm to return a node")
+	}
+	if node.Path != "internal/tui/root.go" {
+		t.Errorf("expected root.go, got %s", node.Path)
+	}
+
+	// The parent dirs should be expanded
+	for _, n := range ftv.Roots() {
+		if n.Name == "internal" {
+			if !n.Expanded {
+				t.Error("internal/ should be expanded after confirm")
+			}
+			for _, c := range n.Children {
+				if c.Name == "tui" && !c.Expanded {
+					t.Error("internal/tui/ should be expanded after confirm")
+				}
+			}
+		}
+	}
+
+	// Cursor should be on root.go
+	sel := ftv.SelectedNode()
+	if sel == nil || sel.Path != "internal/tui/root.go" {
+		var got string
+		if sel != nil {
+			got = sel.Path
+		}
+		t.Errorf("cursor should be on root.go, got %s", got)
+	}
+}
+
+func TestFileTreeView_SearchConfirmEmpty(t *testing.T) {
+	ftv := NewFileTreeView(makeTestNodes())
+	ftv.EnterSearch()
+
+	// No query typed, confirm should cancel
+	node := ftv.ConfirmSearch()
+	if node != nil {
+		t.Error("confirm with no results should return nil")
+	}
+	if ftv.IsSearching() {
+		t.Error("should not be searching after confirm with no results")
+	}
+}
+
+func TestFileTreeView_SearchEnterKey(t *testing.T) {
+	ftv := NewFileTreeView(makeTestNodes())
+	ftv.EnterSearch()
+
+	result := ftv.HandleSearchKey("enter")
+	if result != "confirm" {
+		t.Errorf("enter should return 'confirm', got %q", result)
+	}
+}
+
+func TestFileTreeView_SearchEscKey(t *testing.T) {
+	ftv := NewFileTreeView(makeTestNodes())
+	ftv.EnterSearch()
+
+	result := ftv.HandleSearchKey("esc")
+	if result != "cancel" {
+		t.Errorf("esc should return 'cancel', got %q", result)
+	}
+}
+
+func TestFileTreeView_SearchViewRendering(t *testing.T) {
+	ftv := NewFileTreeView(makeTestNodes())
+	props := testProps(40, 10)
+
+	ftv.EnterSearch()
+	ftv.HandleSearchKey("m")
+	ftv.HandleSearchKey("a")
+	ftv.HandleSearchKey("i")
+	ftv.HandleSearchKey("n")
+
+	view := ftv.View(props)
+
+	// Should contain the search input bar
+	if !strings.Contains(view, "/ main") {
+		t.Error("search view should contain the search input bar")
+	}
+
+	// Should contain search results (main.go path)
+	if !strings.Contains(view, "main.go") {
+		t.Error("search view should contain matching file paths")
+	}
+}
+
+func TestFileTreeView_SearchViewEmpty(t *testing.T) {
+	ftv := NewFileTreeView(makeTestNodes())
+	props := testProps(40, 10)
+
+	ftv.EnterSearch()
+	ftv.HandleSearchKey("z")
+	ftv.HandleSearchKey("z")
+	ftv.HandleSearchKey("z")
+
+	view := ftv.View(props)
+
+	if !strings.Contains(view, "No matches") {
+		t.Error("search view with no results should show 'No matches'")
+	}
+	if !strings.Contains(view, "/ zzz") {
+		t.Error("search view should show the query in the input bar")
+	}
+}
+
+func TestCollectAllFiles(t *testing.T) {
+	nodes := makeTestNodes()
+	var files []fileEntry
+	collectAllFiles(nodes, &files)
+
+	paths := make(map[string]bool)
+	for _, f := range files {
+		paths[f.path] = true
+	}
+
+	expected := []string{"cmd/main.go", "internal/tui/root.go", "internal/app.go", "go.mod", "README.md"}
+	for _, p := range expected {
+		if !paths[p] {
+			t.Errorf("expected file %q in collected files", p)
+		}
+	}
+
+	// Should not include directories
+	if paths["cmd"] || paths["internal"] || paths["internal/tui"] {
+		t.Error("collected files should not include directories")
+	}
+}
+
+func TestExpandPathToNode(t *testing.T) {
+	nodes := makeTestNodes()
+	// Everything should be collapsed initially in this test
+	collapseAll(nodes)
+
+	expandPathToNode(nodes, "internal/tui/root.go")
+
+	if !nodes[1].Expanded {
+		t.Error("internal/ should be expanded")
+	}
+	if !nodes[1].Children[0].Expanded {
+		t.Error("internal/tui/ should be expanded")
+	}
+	// cmd should remain collapsed
+	if nodes[0].Expanded {
+		t.Error("cmd/ should remain collapsed")
+	}
+}
+
+func TestExpandPathToNode_RootFile(t *testing.T) {
+	nodes := makeTestNodes()
+	collapseAll(nodes)
+
+	expandPathToNode(nodes, "go.mod")
+
+	// Root-level file — no parents to expand
+	for _, n := range nodes {
+		if n.IsDir && n.Expanded {
+			t.Errorf("no directories should be expanded for root file, but %s is", n.Name)
+		}
+	}
+}

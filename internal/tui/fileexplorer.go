@@ -93,6 +93,28 @@ func (m *Model) handleFileExplorerKey(action string) (tea.Model, tea.Cmd) {
 	return m.handleFileExplorerDepth1(action)
 }
 
+// handleFileExplorerSearchKey handles raw key input during fuzzy search mode.
+// Returns true if the key was consumed by search.
+func (m *Model) handleFileExplorerSearchKey(key string) bool {
+	if m.fileExplorerTree == nil || !m.fileExplorerTree.IsSearching() {
+		return false
+	}
+
+	result := m.fileExplorerTree.HandleSearchKey(key)
+	switch result {
+	case "confirm":
+		node := m.fileExplorerTree.ConfirmSearch()
+		if node != nil {
+			m.filePreviewScroll = 0
+			m.filePreviewHScroll = 0
+		}
+	case "cancel":
+		m.fileExplorerTree.CancelSearch()
+	}
+
+	return true
+}
+
 // handleFileExplorerDepth0 handles tree navigation at depth 0.
 func (m *Model) handleFileExplorerDepth0(action string) (tea.Model, tea.Cmd) {
 	props := m.fileTreeViewProps()
@@ -151,6 +173,12 @@ func (m *Model) handleFileExplorerDepth0(action string) (tea.Model, tea.Cmd) {
 	case config.ActionEditPlan:
 		// e: open editor for selected file
 		return m, m.launchFileExplorerEditor()
+
+	case "search":
+		// / activates fuzzy search in the file tree
+		if m.fileExplorerTree != nil {
+			m.fileExplorerTree.EnterSearch()
+		}
 	}
 
 	return m, nil

@@ -52,16 +52,17 @@ Tasks 1–7 complete. `FileNode`, `BuildFileTree`, `ApplyGitStatus`, `FileTreeVi
     - Left pane scroll: 3 lines per tick
     - Right pane scroll: scroll preview, enter depth 1 if not already
 
-### Remaining Tasks
+13. ~~**Fuzzy search mode**~~ ✅ Implemented in `FileTreeView`:
+    - `/` activates search at depth 0: input bar at bottom of left pane (`/ query█`)
+    - `sahilm/fuzzy` dependency added, matches against all file paths (flat list)
+    - Tree view replaced by ranked flat result list during search
+    - `j`/`k` (↓/↑) navigate results, `SearchSelectedNode()` updates preview
+    - `enter` confirms: expands parent dirs, cursor on selected file
+    - `escape` cancels: restores pre-search tree state (cursor, scroll, expand state)
+    - Refresh deferred during search to avoid disrupting results
+    - 18 new tests: matching, navigation, cancel/confirm, view rendering, integration
 
-13. **Fuzzy search mode** — In `FileTreeView`:
-    - `/` activates search: show input bar at bottom of left pane (`/ query█`)
-    - Collect all file paths (flat list from tree), feed to `sahilm/fuzzy` on each keystroke
-    - Replace tree view with ranked flat result list during search
-    - `j`/`k` navigate results, preview live-updates to selected match
-    - `enter` confirms: dismiss search, expand parents of selected file, cursor on file
-    - `escape` cancels: restore pre-search tree state
-    - Tests: fuzzy matching ranks correct results, enter expands path to file, escape restores state.
+### Remaining Tasks
 
 15. **Update help modal** — Add file explorer keybindings to help modal sections:
     - Global section: `f` — Enter file explorer
@@ -72,4 +73,4 @@ Tasks 1–7 complete. `FileNode`, `BuildFileTree`, `ApplyGitStatus`, `FileTreeVi
 
 ## Status
 
-All prior specs fully implemented. `make check` passes (vet, lint, tests). File explorer Phase 4 (tasks 8-12, 14) complete. Remaining: fuzzy search (task 13), help modal updates (task 15), final verification (task 16).
+All prior specs fully implemented. `make check` passes (vet, lint, tests). File explorer Phase 4 (tasks 8-14) complete. Remaining: help modal updates (task 15), final verification (task 16).

@@ -554,3 +554,144 @@ func TestRestoreExpandedPaths(t *testing.T) {
 		t.Error("'d' should not be expanded")
 	}
 }
+
+// --- Fuzzy Search Integration Tests ---
+
+// TestFileExplorerSearchActivation verifies / activates search at depth 0.
+func TestFileExplorerSearchActivation(t *testing.T) {
+	m := newFileExplorerTestModel(t.TempDir())
+	setupFileExplorerTree(m)
+
+	// Send / key via handleKey
+	m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("/")})
+
+	if !m.fileExplorerTree.IsSearching() {
+		t.Error("/ should activate search in file explorer")
+	}
+}
+
+// TestFileExplorerSearchNotAtDepth1 verifies / does not activate search at depth 1.
+func TestFileExplorerSearchNotAtDepth1(t *testing.T) {
+	m := newFileExplorerTestModel(t.TempDir())
+	setupFileExplorerTree(m)
+	m.fileExplorerDepth = 1
+
+	m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("/")})
+
+	if m.fileExplorerTree.IsSearching() {
+		t.Error("/ should not activate search at depth 1")
+	}
+}
+
+// TestFileExplorerSearchTyping verifies typing during search updates the query.
+func TestFileExplorerSearchTyping(t *testing.T) {
+	m := newFileExplorerTestModel(t.TempDir())
+	setupFileExplorerTree(m)
+
+	// Enter search
+	m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("/")})
+
+	// Type "main"
+	m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("m")})
+	m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("a")})
+	m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("i")})
+	m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("n")})
+
+	if m.fileExplorerTree.SearchQuery() != "main" {
+		t.Errorf("expected query 'main', got %q", m.fileExplorerTree.SearchQuery())
+	}
+}
+
+// TestFileExplorerSearchEscCancels verifies escape cancels search.
+func TestFileExplorerSearchEscCancels(t *testing.T) {
+	m := newFileExplorerTestModel(t.TempDir())
+	setupFileExplorerTree(m)
+
+	m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("/")})
+	m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("t")})
+
+	// Escape should cancel
+	m.handleKey(tea.KeyMsg{Type: tea.KeyEscape})
+
+	if m.fileExplorerTree.IsSearching() {
+		t.Error("escape should cancel search")
+	}
+	// File explorer should still be active (not exit)
+	if !m.fileExplorerActive {
+		t.Error("file explorer should remain active after search cancel")
+	}
+}
+
+// TestFileExplorerSearchEnterConfirms verifies enter confirms search.
+func TestFileExplorerSearchEnterConfirms(t *testing.T) {
+	m := newFileExplorerTestModel(t.TempDir())
+	setupFileExplorerTree(m)
+
+	m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("/")})
+	m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("m")})
+	m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("a")})
+	m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("i")})
+	m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("n")})
+
+	// Enter should confirm
+	m.handleKey(tea.KeyMsg{Type: tea.KeyEnter})
+
+	if m.fileExplorerTree.IsSearching() {
+		t.Error("enter should confirm search")
+	}
+
+	// Cursor should be on main.go
+	sel := m.fileExplorerTree.SelectedNode()
+	if sel == nil || sel.Name != "main.go" {
+		var got string
+		if sel != nil {
+			got = sel.Name
+		}
+		t.Errorf("cursor should be on main.go after confirm, got %s", got)
+	}
+}
+
+// TestFileExplorerSearchRefreshDeferred verifies refresh is deferred during search.
+func TestFileExplorerSearchRefreshDeferred(t *testing.T) {
+	m := newFileExplorerTestModel(t.TempDir())
+	setupFileExplorerTree(m)
+
+	m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("/")})
+	m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("t")})
+
+	// Record the current tree state
+	oldRoots := m.fileExplorerTree.Roots()
+
+	// Simulate a refresh message arriving during search
+	newRoots := []*FileNode{
+		{Name: "newfile.go", Path: "newfile.go"},
+	}
+	m.Update(fileExplorerRefreshMsg{roots: newRoots, porcelainOutput: ""})
+
+	// The tree should NOT have been updated (still old roots)
+	if len(m.fileExplorerTree.Roots()) != len(oldRoots) {
+		t.Error("tree should not be updated during search (refresh deferred)")
+	}
+}
+
+// TestFileExplorerSearchPreviewUpdates verifies preview resets on confirm.
+func TestFileExplorerSearchPreviewUpdates(t *testing.T) {
+	m := newFileExplorerTestModel(t.TempDir())
+	setupFileExplorerTree(m)
+	m.filePreviewScroll = 20
+	m.filePreviewHScroll = 10
+
+	m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("/")})
+	m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("m")})
+	m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("a")})
+	m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("i")})
+	m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("n")})
+	m.handleKey(tea.KeyMsg{Type: tea.KeyEnter})
+
+	if m.filePreviewScroll != 0 {
+		t.Errorf("preview scroll should reset on search confirm, got %d", m.filePreviewScroll)
+	}
+	if m.filePreviewHScroll != 0 {
+		t.Errorf("preview hscroll should reset on search confirm, got %d", m.filePreviewHScroll)
+	}
+}

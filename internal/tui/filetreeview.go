@@ -6,6 +6,7 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/loxstomper/skinner/internal/theme"
+	"github.com/sahilm/fuzzy"
 )
 
 // FileTreeView is the left pane component that displays a navigable file tree.
@@ -15,6 +16,27 @@ type FileTreeView struct {
 	Scroll int
 	roots  []*FileNode
 	rows   []FlatRow // cached flattened visible rows
+
+	// Fuzzy search state
+	searching      bool
+	searchQuery    string
+	searchResults  []searchResult // ranked matches
+	searchCursor   int
+	preSearchState fileTreeState // snapshot for cancel
+}
+
+// searchResult holds a fuzzy match result with its matched node.
+type searchResult struct {
+	Node         *FileNode
+	Path         string
+	MatchedIndex []int // character indices that matched
+}
+
+// fileTreeState captures tree state for search cancel restore.
+type fileTreeState struct {
+	cursor        int
+	scroll        int
+	expandedPaths map[string]bool
 }
 
 // FileTreeViewProps contains the data needed to render the file tree.
@@ -204,8 +226,13 @@ func (ftv *FileTreeView) handleRight() bool {
 }
 
 // View renders the file tree with the visible slice based on scroll offset.
+// When in search mode, it renders the search results with an input bar at the bottom.
 func (ftv *FileTreeView) View(props FileTreeViewProps) string {
 	style := lipgloss.NewStyle().Width(props.Width).Height(props.Height)
+
+	if ftv.searching {
+		return ftv.viewSearch(props, style)
+	}
 
 	if len(ftv.rows) == 0 {
 		emptyStyle := lipgloss.NewStyle().
@@ -247,6 +274,65 @@ func (ftv *FileTreeView) View(props FileTreeViewProps) string {
 	}
 
 	visible := allLines[start:end]
+	content := strings.Join(visible, "\n")
+	return style.Render(content)
+}
+
+// viewSearch renders the search mode: ranked result list + input bar at bottom.
+func (ftv *FileTreeView) viewSearch(props FileTreeViewProps, style lipgloss.Style) string {
+	nameStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(props.Theme.Foreground))
+	highlight := lipgloss.NewStyle().Background(lipgloss.Color(props.Theme.Highlight))
+
+	// Reserve 1 line for the search input bar at the bottom
+	listHeight := props.Height - 1
+	if listHeight < 0 {
+		listHeight = 0
+	}
+
+	// Build result lines
+	var resultLines []string
+	for i, sr := range ftv.searchResults {
+		line := "  " + nameStyle.Render(sr.Path)
+		if i == ftv.searchCursor {
+			displayWidth := lipgloss.Width(line)
+			if displayWidth < props.Width {
+				line += strings.Repeat(" ", props.Width-displayWidth)
+			}
+			line = highlight.Render(line)
+		}
+		resultLines = append(resultLines, line)
+	}
+
+	// If no results and there's a query, show a message
+	if len(resultLines) == 0 && ftv.searchQuery != "" {
+		dimStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(props.Theme.ForegroundDim))
+		resultLines = append(resultLines, "  "+dimStyle.Render("No matches"))
+	}
+
+	// Scroll results to keep cursor visible
+	start := 0
+	if ftv.searchCursor >= listHeight {
+		start = ftv.searchCursor - listHeight + 1
+	}
+	end := start + listHeight
+	if end > len(resultLines) {
+		end = len(resultLines)
+	}
+	if start > len(resultLines) {
+		start = len(resultLines)
+	}
+
+	visible := resultLines[start:end]
+
+	// Pad to fill the list area
+	for len(visible) < listHeight {
+		visible = append(visible, "")
+	}
+
+	// Search input bar at the bottom
+	inputBar := nameStyle.Render("/ " + ftv.searchQuery + "█")
+	visible = append(visible, inputBar)
+
 	content := strings.Join(visible, "\n")
 	return style.Render(content)
 }
@@ -317,6 +403,198 @@ func (ftv *FileTreeView) renderRow(row FlatRow, width int, nameStyle, dimStyle, 
 		gap = 1
 	}
 	return leftPart + strings.Repeat(" ", gap) + styledStatus
+}
+
+// IsSearching returns whether the tree view is in fuzzy search mode.
+func (ftv *FileTreeView) IsSearching() bool {
+	return ftv.searching
+}
+
+// SearchQuery returns the current search query.
+func (ftv *FileTreeView) SearchQuery() string {
+	return ftv.searchQuery
+}
+
+// EnterSearch activates fuzzy search mode, saving the current state.
+func (ftv *FileTreeView) EnterSearch() {
+	ftv.searching = true
+	ftv.searchQuery = ""
+	ftv.searchResults = nil
+	ftv.searchCursor = 0
+	ftv.preSearchState = fileTreeState{
+		cursor:        ftv.Cursor,
+		scroll:        ftv.Scroll,
+		expandedPaths: collectExpandedPaths(ftv.roots),
+	}
+}
+
+// CancelSearch exits search mode and restores the pre-search state.
+func (ftv *FileTreeView) CancelSearch() {
+	ftv.searching = false
+	ftv.searchQuery = ""
+	ftv.searchResults = nil
+	ftv.searchCursor = 0
+
+	// Restore pre-search cursor and scroll
+	ftv.Cursor = ftv.preSearchState.cursor
+	ftv.Scroll = ftv.preSearchState.scroll
+
+	// Restore expand state: collapse all, then re-expand saved paths
+	collapseAll(ftv.roots)
+	restoreExpandedPaths(ftv.roots, ftv.preSearchState.expandedPaths)
+	ftv.rebuildRows()
+	ftv.clampCursor()
+}
+
+// ConfirmSearch exits search mode and navigates to the selected result.
+// Returns the selected node (for preview update), or nil.
+func (ftv *FileTreeView) ConfirmSearch() *FileNode {
+	if !ftv.searching || len(ftv.searchResults) == 0 {
+		ftv.CancelSearch()
+		return nil
+	}
+
+	selected := ftv.searchResults[ftv.searchCursor]
+	ftv.searching = false
+	ftv.searchQuery = ""
+	ftv.searchResults = nil
+	ftv.searchCursor = 0
+
+	// Expand all parent directories of the selected file
+	expandPathToNode(ftv.roots, selected.Path)
+	ftv.rebuildRows()
+
+	// Move cursor to the selected file
+	for i, row := range ftv.rows {
+		if row.Node.Path == selected.Path {
+			ftv.Cursor = i
+			break
+		}
+	}
+	ftv.ensureCursorVisible(0)
+
+	return selected.Node
+}
+
+// HandleSearchKey processes a key press during fuzzy search.
+// Returns: "confirm" if enter was pressed, "cancel" if escape, "" otherwise.
+func (ftv *FileTreeView) HandleSearchKey(key string) string {
+	switch key {
+	case "enter":
+		return "confirm"
+	case "esc":
+		return "cancel"
+	case "backspace":
+		if len(ftv.searchQuery) > 0 {
+			ftv.searchQuery = ftv.searchQuery[:len(ftv.searchQuery)-1]
+			ftv.updateSearchResults()
+		}
+	case "up", "ctrl+p":
+		if ftv.searchCursor > 0 {
+			ftv.searchCursor--
+		}
+	case "down", "ctrl+n":
+		if ftv.searchCursor < len(ftv.searchResults)-1 {
+			ftv.searchCursor++
+		}
+	default:
+		// Only accept printable single characters
+		if len(key) == 1 && key[0] >= ' ' && key[0] <= '~' {
+			ftv.searchQuery += key
+			ftv.updateSearchResults()
+		}
+	}
+	return ""
+}
+
+// SearchSelectedNode returns the currently highlighted search result node.
+func (ftv *FileTreeView) SearchSelectedNode() *FileNode {
+	if !ftv.searching || len(ftv.searchResults) == 0 {
+		return nil
+	}
+	if ftv.searchCursor < 0 || ftv.searchCursor >= len(ftv.searchResults) {
+		return nil
+	}
+	return ftv.searchResults[ftv.searchCursor].Node
+}
+
+// updateSearchResults runs fuzzy matching against all file paths.
+func (ftv *FileTreeView) updateSearchResults() {
+	ftv.searchResults = nil
+	ftv.searchCursor = 0
+
+	if ftv.searchQuery == "" {
+		return
+	}
+
+	// Collect all file paths
+	var allFiles []fileEntry
+	collectAllFiles(ftv.roots, &allFiles)
+
+	// Build string slice for fuzzy matching
+	paths := make([]string, len(allFiles))
+	for i, f := range allFiles {
+		paths[i] = f.path
+	}
+
+	// Run fuzzy match
+	matches := fuzzy.Find(ftv.searchQuery, paths)
+
+	for _, m := range matches {
+		ftv.searchResults = append(ftv.searchResults, searchResult{
+			Node:         allFiles[m.Index].node,
+			Path:         allFiles[m.Index].path,
+			MatchedIndex: m.MatchedIndexes,
+		})
+	}
+}
+
+// fileEntry pairs a file path with its node for fuzzy matching.
+type fileEntry struct {
+	path string
+	node *FileNode
+}
+
+// collectAllFiles recursively collects all file (non-dir) paths from the tree.
+func collectAllFiles(nodes []*FileNode, out *[]fileEntry) {
+	for _, n := range nodes {
+		if n.IsDir {
+			collectAllFiles(n.Children, out)
+		} else {
+			*out = append(*out, fileEntry{path: n.Path, node: n})
+		}
+	}
+}
+
+// expandPathToNode expands all parent directories along the path to a file.
+func expandPathToNode(roots []*FileNode, targetPath string) {
+	parts := strings.Split(targetPath, "/")
+	if len(parts) <= 1 {
+		return // root-level file, no parents to expand
+	}
+
+	// Build each parent path and expand it
+	nodes := roots
+	for i := 0; i < len(parts)-1; i++ {
+		prefix := strings.Join(parts[:i+1], "/")
+		for _, n := range nodes {
+			if n.Path == prefix && n.IsDir {
+				n.Expanded = true
+				nodes = n.Children
+				break
+			}
+		}
+	}
+}
+
+// collapseAll collapses all directories in the tree.
+func collapseAll(nodes []*FileNode) {
+	for _, n := range nodes {
+		if n.IsDir {
+			n.Expanded = false
+			collapseAll(n.Children)
+		}
+	}
 }
 
 // ScrollBy adjusts the scroll offset by delta lines for mouse scrolling.
