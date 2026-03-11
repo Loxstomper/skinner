@@ -571,3 +571,174 @@ func splitLines(s string) []string {
 	lines = append(lines, s[start:])
 	return lines
 }
+
+// --- Live commit list update tests ---
+
+func TestMergeGitCommitsAutoFollow(t *testing.T) {
+	m := newGitTestModel()
+	setupGitView(m)
+	m.gitAutoFollow = true
+
+	// Prepend a new commit
+	newCommits := []git.Commit{
+		{Hash: "new0001", Subject: "Brand new commit", Additions: 1, Deletions: 0},
+		{Hash: "abc1234", Subject: "Fix parser bug", Additions: 10, Deletions: 3},
+		{Hash: "def5678", Subject: "Add new feature", Additions: 42, Deletions: 7},
+		{Hash: "ghi9012", Subject: "Initial commit", Additions: 100, Deletions: 0},
+	}
+
+	m.mergeGitCommits(newCommits)
+
+	if m.gitSelectedCommit != 0 {
+		t.Errorf("auto-follow: expected selection 0, got %d", m.gitSelectedCommit)
+	}
+	if len(m.gitCommits) != 4 {
+		t.Errorf("expected 4 commits, got %d", len(m.gitCommits))
+	}
+	if m.gitCommits[0].Hash != "new0001" {
+		t.Errorf("expected new commit at top, got %s", m.gitCommits[0].Hash)
+	}
+}
+
+func TestMergeGitCommitsManualScrollPreservesSelection(t *testing.T) {
+	m := newGitTestModel()
+	setupGitView(m)
+	m.gitAutoFollow = false
+	m.gitSelectedCommit = 1 // user selected "def5678"
+
+	// New commit appears at top
+	newCommits := []git.Commit{
+		{Hash: "new0001", Subject: "Brand new commit", Additions: 1, Deletions: 0},
+		{Hash: "abc1234", Subject: "Fix parser bug", Additions: 10, Deletions: 3},
+		{Hash: "def5678", Subject: "Add new feature", Additions: 42, Deletions: 7},
+		{Hash: "ghi9012", Subject: "Initial commit", Additions: 100, Deletions: 0},
+	}
+
+	m.mergeGitCommits(newCommits)
+
+	// Selection should track "def5678" which moved from index 1 to 2
+	if m.gitSelectedCommit != 2 {
+		t.Errorf("expected selection at 2 (tracked hash), got %d", m.gitSelectedCommit)
+	}
+}
+
+func TestMergeGitCommitsHashGone(t *testing.T) {
+	m := newGitTestModel()
+	setupGitView(m)
+	m.gitAutoFollow = false
+	m.gitSelectedCommit = 2 // user selected "ghi9012"
+
+	// After rebase, old commits are gone
+	newCommits := []git.Commit{
+		{Hash: "zzz0001", Subject: "Rebased commit 1", Additions: 5, Deletions: 2},
+		{Hash: "zzz0002", Subject: "Rebased commit 2", Additions: 3, Deletions: 1},
+	}
+
+	m.mergeGitCommits(newCommits)
+
+	// Selection was 2 which is >= len(2), should clamp to 1
+	if m.gitSelectedCommit != 1 {
+		t.Errorf("expected clamped selection at 1, got %d", m.gitSelectedCommit)
+	}
+}
+
+func TestMergeGitCommitsEmpty(t *testing.T) {
+	m := newGitTestModel()
+	setupGitView(m)
+	originalLen := len(m.gitCommits)
+
+	m.mergeGitCommits(nil)
+
+	if len(m.gitCommits) != originalLen {
+		t.Errorf("nil merge should not change commits, got %d", len(m.gitCommits))
+	}
+
+	m.mergeGitCommits([]git.Commit{})
+
+	if len(m.gitCommits) != originalLen {
+		t.Errorf("empty merge should not change commits, got %d", len(m.gitCommits))
+	}
+}
+
+func TestAutoFollowDisabledOnMoveDown(t *testing.T) {
+	m := newGitTestModel()
+	setupGitView(m)
+	m.gitAutoFollow = true
+
+	m.gitViewMoveDown()
+
+	if m.gitAutoFollow {
+		t.Error("auto-follow should be disabled after move down")
+	}
+}
+
+func TestAutoFollowDisabledOnMoveUp(t *testing.T) {
+	m := newGitTestModel()
+	setupGitView(m)
+	m.gitAutoFollow = true
+	m.gitSelectedCommit = 1
+
+	m.gitViewMoveUp()
+
+	if m.gitAutoFollow {
+		t.Error("auto-follow should be disabled after move up")
+	}
+}
+
+func TestAutoFollowReenabledOnJumpTop(t *testing.T) {
+	m := newGitTestModel()
+	setupGitView(m)
+	m.gitAutoFollow = false
+	m.gitSelectedCommit = 2
+
+	m.gitViewJumpTop()
+
+	if !m.gitAutoFollow {
+		t.Error("auto-follow should be re-enabled after jump to top")
+	}
+	if m.gitSelectedCommit != 0 {
+		t.Errorf("expected selection at 0 after jump top, got %d", m.gitSelectedCommit)
+	}
+}
+
+func TestGitTickMsgIgnoredWhenInactive(t *testing.T) {
+	m := newGitTestModel()
+	m.gitViewActive = false
+
+	result, cmd := m.Update(gitTickMsg{})
+	_ = result
+	if cmd != nil {
+		t.Error("gitTickMsg should return nil cmd when git view is inactive")
+	}
+}
+
+func TestGitRefreshMsgIgnoredWhenInactive(t *testing.T) {
+	m := newGitTestModel()
+	m.gitViewActive = false
+
+	commits := []git.Commit{{Hash: "aaa", Subject: "test"}}
+	result, cmd := m.Update(gitRefreshMsg{commits: commits})
+	_ = result
+	if cmd != nil {
+		t.Error("gitRefreshMsg should return nil cmd when git view is inactive")
+	}
+}
+
+func TestGitRefreshMsgSchedulesNextTick(t *testing.T) {
+	m := newGitTestModel()
+	setupGitView(m)
+	m.gitAutoFollow = true
+
+	newCommits := []git.Commit{
+		{Hash: "new0001", Subject: "New"},
+		{Hash: "abc1234", Subject: "Fix parser bug"},
+	}
+
+	_, cmd := m.Update(gitRefreshMsg{commits: newCommits})
+	if cmd == nil {
+		t.Error("gitRefreshMsg should schedule next git tick")
+	}
+	if len(m.gitCommits) != 2 {
+		t.Errorf("expected 2 commits after refresh, got %d", len(m.gitCommits))
+	}
+}

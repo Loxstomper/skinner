@@ -29,6 +29,8 @@ type tickMsg time.Time
 type promptEditorDoneMsg struct{ err error }
 type planEditorDoneMsg struct{ err error }
 type planModeDoneMsg struct{ err error }
+type gitTickMsg struct{}
+type gitRefreshMsg struct{ commits []git.Commit }
 
 // Pane focus
 
@@ -127,6 +129,7 @@ type Model struct {
 	gitParsedDiff     []Hunk
 	gitCommitSummary  string // cached output from ShowCommit
 	gitDiffContent    string // cached raw diff for selected file
+	gitAutoFollow     bool   // auto-scroll to top on new commits (paused by manual scroll)
 
 	// Quit state
 	quitting bool
@@ -201,6 +204,21 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.promptList.ScanFiles(m.workDir)
 		m.planList.ScanFiles(m.workDir)
 		return m, tickCmd()
+
+	case gitTickMsg:
+		if !m.gitViewActive {
+			return m, nil
+		}
+		return m, gitRefreshCmd()
+
+	case gitRefreshMsg:
+		if !m.gitViewActive {
+			return m, nil
+		}
+		if msg.commits != nil {
+			m.mergeGitCommits(msg.commits)
+		}
+		return m, gitTickCmd()
 
 	case assistantBatchMsg:
 		m.controller.ProcessAssistantBatch(msg.Events)
@@ -484,8 +502,7 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 
 	case config.ActionGitView:
-		m.enterGitView()
-		return m, nil
+		return m, m.enterGitView()
 
 	case config.ActionPlanMode:
 		// p key: launch interactive plan mode CLI (disabled while running)
@@ -1442,4 +1459,20 @@ func tickCmd() tea.Cmd {
 	return tea.Tick(time.Second, func(t time.Time) tea.Msg {
 		return tickMsg(t)
 	})
+}
+
+func gitTickCmd() tea.Cmd {
+	return tea.Tick(5*time.Second, func(t time.Time) tea.Msg {
+		return gitTickMsg{}
+	})
+}
+
+func gitRefreshCmd() tea.Cmd {
+	return func() tea.Msg {
+		commits, err := git.LogCommits(200)
+		if err != nil {
+			return gitRefreshMsg{commits: nil}
+		}
+		return gitRefreshMsg{commits: commits}
+	}
 }

@@ -7,11 +7,12 @@ import (
 )
 
 // enterGitView activates the git view, loading the commit list.
-func (m *Model) enterGitView() {
+// Returns a tea.Cmd to start the 5-second polling loop.
+func (m *Model) enterGitView() tea.Cmd {
 	commits, err := git.LogCommits(200)
 	if err != nil {
 		m.statusFlash = "git log failed: " + err.Error()
-		return
+		return nil
 	}
 	m.gitViewActive = true
 	m.gitViewDepth = 0
@@ -26,11 +27,14 @@ func (m *Model) enterGitView() {
 	m.gitParsedDiff = nil
 	m.gitCommitSummary = ""
 	m.gitDiffContent = ""
+	m.gitAutoFollow = true
 
 	// Load commit summary for the first commit
 	if len(commits) > 0 {
 		m.loadCommitSummary()
 	}
+
+	return gitTickCmd()
 }
 
 // exitGitView deactivates the git view, restoring the previous view state.
@@ -147,9 +151,10 @@ func (m *Model) handleGitViewKey(action string) (tea.Model, tea.Cmd) {
 func (m *Model) gitViewMoveDown() {
 	switch m.gitViewDepth {
 	case 0:
-		// Scroll commit list
+		// Scroll commit list — manual scroll pauses auto-follow
 		if m.gitSelectedCommit < len(m.gitCommits)-1 {
 			m.gitSelectedCommit++
+			m.gitAutoFollow = false
 			m.loadCommitSummary()
 		}
 	case 1:
@@ -172,6 +177,7 @@ func (m *Model) gitViewMoveUp() {
 	case 0:
 		if m.gitSelectedCommit > 0 {
 			m.gitSelectedCommit--
+			m.gitAutoFollow = false
 			m.loadCommitSummary()
 		}
 	case 1:
@@ -194,6 +200,7 @@ func (m *Model) gitViewJumpTop() {
 	case 0:
 		m.gitSelectedCommit = 0
 		m.gitCommitScroll = 0
+		m.gitAutoFollow = true // re-enable auto-follow when jumping to top
 		m.loadCommitSummary()
 	case 1:
 		m.gitSelectedFile = 0
@@ -278,4 +285,47 @@ func (m *Model) loadFileDiff() {
 	}
 	m.gitDiffContent = diff
 	m.gitParsedDiff = ParseUnifiedDiff(diff)
+}
+
+// mergeGitCommits replaces the commit list with fresh data from git log.
+// When auto-follow is active, the selection stays at index 0 (latest commit).
+// When the user has manually scrolled, the selection tracks the previously
+// selected commit by hash so it doesn't jump around.
+func (m *Model) mergeGitCommits(newCommits []git.Commit) {
+	if len(newCommits) == 0 {
+		return
+	}
+
+	// Remember selected hash to maintain position
+	var selectedHash string
+	if m.gitSelectedCommit < len(m.gitCommits) {
+		selectedHash = m.gitCommits[m.gitSelectedCommit].Hash
+	}
+
+	m.gitCommits = newCommits
+
+	if m.gitAutoFollow {
+		// Stay at top, refresh summary if at depth 0
+		m.gitSelectedCommit = 0
+		m.gitCommitScroll = 0
+		if m.gitViewDepth == 0 {
+			m.loadCommitSummary()
+		}
+		return
+	}
+
+	// Find the previously selected commit in the new list
+	if selectedHash != "" {
+		for i, c := range newCommits {
+			if c.Hash == selectedHash {
+				m.gitSelectedCommit = i
+				return
+			}
+		}
+	}
+
+	// Hash not found (e.g., after rebase), clamp selection
+	if m.gitSelectedCommit >= len(newCommits) {
+		m.gitSelectedCommit = len(newCommits) - 1
+	}
 }

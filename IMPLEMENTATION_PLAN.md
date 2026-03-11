@@ -60,11 +60,9 @@ In `handleKey()` (`internal/tui/root.go`), when `gitViewActive`:
 
 **Tests**: Test key sequences for depth transitions, scroll state changes, h/l horizontal scroll, esc at each depth.
 
-### 10. Live commit list updates
+### 10. Live commit list updates ✅
 
-Add a `tea.Tick` command (5-second interval) that re-runs `LogCommits()` when git view is active. Merge new commits into the list. Auto-follow (scroll to top) unless user has manually scrolled.
-
-**Tests**: Test that new commits appear at top, auto-follow behavior, manual scroll pauses auto-follow.
+Implemented 5-second polling via `gitTickCmd()` → `gitRefreshCmd()` → `gitRefreshMsg` async pipeline. `enterGitView()` now returns `gitTickCmd()` to start the polling loop. `mergeGitCommits()` replaces the commit list, tracking selection by hash when user has manually scrolled (`gitAutoFollow=false`). Auto-follow (stay at index 0) re-enables on `gg`/Home jump-to-top. Polling stops automatically when git view exits (`gitTickMsg` returns nil when inactive). 10 tests covering auto-follow, manual scroll preservation, hash-gone clamping, empty merge, move up/down disabling auto-follow, jump-top re-enabling, and tick/refresh message routing.
 
 ### 11. Keybinding and config updates
 
