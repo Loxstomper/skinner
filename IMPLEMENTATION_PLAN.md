@@ -14,9 +14,9 @@
 
 ### Phase 1: Foundation
 
-1. **Add `sahilm/fuzzy` dependency** — `go get github.com/sahilm/fuzzy` for in-process fuzzy matching.
+1. ~~**Add `sahilm/fuzzy` dependency**~~ — Deferred to Phase 6 (task 13) when fuzzy search is implemented.
 
-2. **Add `ActionFileExplorer` keybinding** — Define `ActionFileExplorer = "file_explorer"` in `internal/config/keymap.go`, default binding `f`. Add to `AllActions()` for help modal. Update `specs/keybindings.md` (already done). Tests: verify default binding resolves, verify help modal includes the new action.
+2. ~~**Add `ActionFileExplorer` keybinding**~~ ✅ `ActionFileExplorer = "file_explorer"` in `internal/config/keymap.go`, default binding `f`, added to `AllActions()`, help modal "Actions" section, and `actionDisplayName()`. Tests pass.
 
 3. ~~**File tree data model**~~ ✅ Implemented in `internal/tui/filetree.go`: `FileNode`, `BuildFileTree`, `FlattenVisible`, `IsBinary`, `FindParent`. 17 tests covering sort order, .git skip, symlinks, expand/collapse, binary detection.
 
@@ -24,24 +24,9 @@
 
 ### Phase 2: Left Pane — File Tree Rendering
 
-5. **File tree component** — Create `internal/tui/filetreeview.go`:
-   - `FileTreeView` struct: Cursor, Scroll, tree root, search state
-   - `FileTreeViewProps`: Width, Height, Focused, Theme
-   - `HandleAction()` for navigation: move_down, move_up, jump_top, jump_bottom, page_down, page_up
-   - `View()` renders visible rows: indent (2×depth), `▶`/`▼` for dirs, `🔗` for symlinks, git status right-aligned
-   - Colors: `Foreground` for names, `ForegroundDim` for `M`/symlinks, `DiffAdded` for `A`/`?`, `DiffRemoved` for `D`, `Highlight` for selected row
-   - Scroll-to-cursor behavior (same as iterlist)
-   - Tests: render output contains expected tree structure, cursor movement, scroll clamping.
+5. ~~**File tree component**~~ ✅ Implemented in `internal/tui/filetreeview.go`: `FileTreeView` struct (Cursor, Scroll, roots, cached rows), `FileTreeViewProps` (Width, Height, Focused, Theme), `HandleAction()` for navigation (move_down/up, jump_top/bottom, page_down/up), `View()` renders tree with indent (2×depth), `▶`/`▼` icons, `🔗` symlinks, right-aligned git status. Colors per spec. Scroll-to-cursor, ScrollBy, ClickRow. 30 tests.
 
-6. **Tree-specific `h`/`l` navigation** — In `FileTreeView.HandleAction()`:
-   - `h` on file → collapse parent dir, cursor to parent
-   - `h` on expanded dir → collapse it
-   - `h` on collapsed dir → collapse parent
-   - `l` on collapsed dir → expand it
-   - `l` on expanded dir → cursor to first child
-   - `l` on file → signal enter depth 2
-   - `enter` on dir → toggle expand/collapse; `enter` on file → signal enter depth 2
-   - Tests: verify each h/l/enter case with constructed trees.
+6. ~~**Tree-specific `h`/`l` navigation**~~ ✅ Implemented in `FileTreeView.HandleAction()` via focus_left/focus_right/expand actions: h on file → collapse parent + cursor to parent, h on expanded dir → collapse, h on collapsed dir → collapse parent, l on collapsed dir → expand, l on expanded dir → cursor to first child, l on file → signal depth 2, enter on dir → toggle, enter on file → signal depth 2. 11 dedicated tests.
 
 ### Phase 3: Right Pane — File Preview
 
@@ -122,4 +107,4 @@
 
 ## Status
 
-All prior specs fully implemented. `make check` passes (vet, lint, tests). No TODOs/FIXMEs in codebase. File explorer Phase 1 tasks 3-4 complete; tasks 1-2 and Phase 2+ pending.
+All prior specs fully implemented. `make check` passes (vet, lint, tests). No TODOs/FIXMEs in codebase. File explorer Phase 1 (tasks 1-4) and Phase 2 (tasks 5-6) complete; Phase 3+ pending.

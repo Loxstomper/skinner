@@ -92,6 +92,8 @@ func actionDisplayName(action string) string {
 		return "Edit plan file"
 	case config.ActionGitView:
 		return "Git view"
+	case config.ActionFileExplorer:
+		return "File explorer"
 	case config.ActionEscape:
 		return "Escape"
 	default:
@@ -158,6 +160,7 @@ func buildHelpSections(km *config.KeyMap) []helpSection {
 				entryFor(config.ActionPlanMode),
 				entryFor(config.ActionEditPlan),
 				entryFor(config.ActionGitView),
+				entryFor(config.ActionFileExplorer),
 				entryFor(config.ActionToggleView),
 				entryFor(config.ActionToggleLineNumbers),
 				entryFor(config.ActionToggleLeftPane),
