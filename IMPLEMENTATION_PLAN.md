@@ -30,15 +30,7 @@
 
 ### Phase 3: Right Pane — File Preview
 
-7. **File preview renderer** — Create `internal/tui/filepreview.go`:
-   - `RenderFilePreview(path, width, height, scroll, hscroll, showLineNumbers string, theme)` — pure render function
-   - Markdown (`.md`): glamour with `auto` style and word wrap (reuse `renderMarkdown` from planview.go; no line numbers)
-   - Source code: chroma syntax highlighting (reuse `getLexer`/`getChromaStyle` from diffview.go)
-   - Binary: "Binary file — preview not available" in `ForegroundDim`
-   - File not found: "File not found" in `ForegroundDim`
-   - Line numbers in gutter (`ForegroundDim`), toggled by `#`
-   - Title bar: relative path centered, bold
-   - Tests: verify markdown renders via glamour, source code has chroma tokens, binary message, not-found message, line number toggle.
+7. ~~**File preview renderer**~~ ✅ Implemented in `internal/tui/filepreview.go`: `RenderFilePreview()` pure render function with `FilePreviewProps` and `FilePreviewResult`. Markdown via glamour (reuses `renderMarkdown`), source code via chroma (reuses `getLexer`/`getChromaStyle`/`tokenizeLine`), binary detection, file-not-found handling, line number gutter in `ForegroundDim`, horizontal scroll, title bar centered+bold. `ClampFilePreviewScroll` for scroll bounds. 16 tests.
 
 ### Phase 4: Root Model Integration
 
@@ -107,4 +99,4 @@
 
 ## Status
 
-All prior specs fully implemented. `make check` passes (vet, lint, tests). No TODOs/FIXMEs in codebase. File explorer Phase 1 (tasks 1-4) and Phase 2 (tasks 5-6) complete; Phase 3+ pending.
+All prior specs fully implemented. `make check` passes (vet, lint, tests). No TODOs/FIXMEs in codebase. File explorer Phases 1-3 (tasks 1-7) complete; Phase 4 (root model integration) pending.
