@@ -26,6 +26,22 @@ func TestLookupTheme(t *testing.T) {
 			if th.StatusError == "" {
 				t.Errorf("theme %q has empty StatusError", name)
 			}
+			// Every theme must have non-empty diff colors
+			diffFields := map[string]string{
+				"DiffAdded":           th.DiffAdded,
+				"DiffRemoved":         th.DiffRemoved,
+				"DiffAddedBg":         th.DiffAddedBg,
+				"DiffRemovedBg":       th.DiffRemovedBg,
+				"DiffAddedEmphasis":   th.DiffAddedEmphasis,
+				"DiffRemovedEmphasis": th.DiffRemovedEmphasis,
+				"DiffLineNumber":      th.DiffLineNumber,
+				"DiffSessionCommit":   th.DiffSessionCommit,
+			}
+			for field, value := range diffFields {
+				if value == "" {
+					t.Errorf("theme %q has empty %s", name, field)
+				}
+			}
 		}
 	})
 

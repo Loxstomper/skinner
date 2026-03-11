@@ -27,6 +27,15 @@ type Theme struct {
 	IterError   string
 
 	TextBlock string
+
+	DiffAdded           string
+	DiffRemoved         string
+	DiffAddedBg         string
+	DiffRemovedBg       string
+	DiffAddedEmphasis   string
+	DiffRemovedEmphasis string
+	DiffLineNumber      string
+	DiffSessionCommit   string
 }
 
 var themes = map[string]Theme{
@@ -48,6 +57,15 @@ var themes = map[string]Theme{
 		IterSuccess:     "#839496",
 		IterError:       "#dc322f",
 		TextBlock:       "#839496",
+
+		DiffAdded:           "#859900",
+		DiffRemoved:         "#dc322f",
+		DiffAddedBg:         "#1a3a1a",
+		DiffRemovedBg:       "#3a1a1a",
+		DiffAddedEmphasis:   "#2d5a2d",
+		DiffRemovedEmphasis: "#5a2d2d",
+		DiffLineNumber:      "#586e75",
+		DiffSessionCommit:   "#268bd2",
 	},
 	"solarized-light": {
 		Foreground:      "#657b83",
@@ -67,6 +85,15 @@ var themes = map[string]Theme{
 		IterSuccess:     "#657b83",
 		IterError:       "#dc322f",
 		TextBlock:       "#657b83",
+
+		DiffAdded:           "#859900",
+		DiffRemoved:         "#dc322f",
+		DiffAddedBg:         "#e6f2e6",
+		DiffRemovedBg:       "#f2e6e6",
+		DiffAddedEmphasis:   "#c8e6c8",
+		DiffRemovedEmphasis: "#e6c8c8",
+		DiffLineNumber:      "#93a1a1",
+		DiffSessionCommit:   "#268bd2",
 	},
 	"monokai": {
 		Foreground:      "#f8f8f2",
@@ -86,6 +113,15 @@ var themes = map[string]Theme{
 		IterSuccess:     "#f8f8f2",
 		IterError:       "#f92672",
 		TextBlock:       "#f8f8f2",
+
+		DiffAdded:           "#a6e22e",
+		DiffRemoved:         "#f92672",
+		DiffAddedBg:         "#2a3a1a",
+		DiffRemovedBg:       "#3a1a2a",
+		DiffAddedEmphasis:   "#3d5a2d",
+		DiffRemovedEmphasis: "#5a2d3d",
+		DiffLineNumber:      "#75715e",
+		DiffSessionCommit:   "#66d9ef",
 	},
 	"nord": {
 		Foreground:      "#d8dee9",
@@ -105,6 +141,15 @@ var themes = map[string]Theme{
 		IterSuccess:     "#d8dee9",
 		IterError:       "#bf616a",
 		TextBlock:       "#d8dee9",
+
+		DiffAdded:           "#a3be8c",
+		DiffRemoved:         "#bf616a",
+		DiffAddedBg:         "#2e3440",
+		DiffRemovedBg:       "#3b2c2f",
+		DiffAddedEmphasis:   "#3a4a3a",
+		DiffRemovedEmphasis: "#4a3a3a",
+		DiffLineNumber:      "#4c566a",
+		DiffSessionCommit:   "#88c0d0",
 	},
 }
 
