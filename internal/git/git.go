@@ -178,6 +178,27 @@ func ShowCommit(sha string) (string, error) {
 	return string(out), nil
 }
 
+// FormatStatNumber formats a number with K/M suffixes for compact display.
+//   - < 1,000: raw number (e.g. "42")
+//   - 1,000–9,999: one decimal K (e.g. "1.2K")
+//   - 10,000–999,999: whole K (e.g. "15K")
+//   - 1,000,000–9,999,999: one decimal M (e.g. "1.2M")
+//   - 10,000,000+: whole M (e.g. "15M")
+func FormatStatNumber(n int) string {
+	switch {
+	case n < 1000:
+		return strconv.Itoa(n)
+	case n < 10000:
+		return fmt.Sprintf("%.1fK", float64(n)/1000)
+	case n < 1000000:
+		return fmt.Sprintf("%dK", n/1000)
+	case n < 10000000:
+		return fmt.Sprintf("%.1fM", float64(n)/1000000)
+	default:
+		return fmt.Sprintf("%dM", n/1000000)
+	}
+}
+
 // FileDiff returns the unified diff for a single file in a commit.
 func FileDiff(sha, path string) (string, error) {
 	cmd := exec.Command("git", "diff", "--diff-algorithm=histogram",

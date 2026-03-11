@@ -1,6 +1,7 @@
 package git
 
 import (
+	"fmt"
 	"testing"
 	"time"
 )
@@ -250,6 +251,39 @@ func TestSumNumstat(t *testing.T) {
 			}
 			if gotD != tt.wantDeletions {
 				t.Errorf("sumNumstat() deletions = %d, want %d", gotD, tt.wantDeletions)
+			}
+		})
+	}
+}
+
+func TestFormatStatNumber(t *testing.T) {
+	tests := []struct {
+		input int
+		want  string
+	}{
+		{0, "0"},
+		{1, "1"},
+		{42, "42"},
+		{999, "999"},
+		{1000, "1.0K"},
+		{1200, "1.2K"},
+		{9999, "10.0K"},
+		{10000, "10K"},
+		{15000, "15K"},
+		{999999, "999K"},
+		{1000000, "1.0M"},
+		{1200000, "1.2M"},
+		{9999999, "10.0M"},
+		{10000000, "10M"},
+		{15000000, "15M"},
+		{100000000, "100M"},
+	}
+
+	for _, tt := range tests {
+		t.Run(fmt.Sprintf("%d", tt.input), func(t *testing.T) {
+			got := FormatStatNumber(tt.input)
+			if got != tt.want {
+				t.Errorf("FormatStatNumber(%d) = %q, want %q", tt.input, got, tt.want)
 			}
 		})
 	}
