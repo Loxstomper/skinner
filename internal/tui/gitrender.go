@@ -95,13 +95,16 @@ func (m *Model) renderGitView() string {
 		switch m.gitViewDepth {
 		case 0:
 			left = RenderGitCommitList(GitCommitListProps{
-				Commits:      m.gitCommits,
-				Selected:     m.gitSelectedCommit,
-				Scroll:       m.gitCommitScroll,
-				Width:        leftWidth,
-				Height:       paneHeight,
-				SessionStart: m.gitSessionStart,
-				Theme:        m.theme,
+				Commits:          m.gitCommits,
+				Selected:         m.gitSelectedCommit,
+				Scroll:           m.gitCommitScroll,
+				Width:            leftWidth,
+				Height:           paneHeight,
+				SessionStart:     m.gitSessionStart,
+				Theme:            m.theme,
+				TotalAdditions:   m.gitTotalAdditions,
+				TotalDeletions:   m.gitTotalDeletions,
+				TotalStatsLoaded: m.gitTotalStatsLoaded,
 			})
 		case 1, 2:
 			left = RenderGitFileList(GitFileListProps{
@@ -147,13 +150,16 @@ func (m *Model) renderGitBottomBar(width int) string {
 	case 0:
 		label = "Commits"
 		content = RenderGitCommitList(GitCommitListProps{
-			Commits:      m.gitCommits,
-			Selected:     m.gitSelectedCommit,
-			Scroll:       m.gitCommitScroll,
-			Width:        width,
-			Height:       bottomBarSectionHeight,
-			SessionStart: m.gitSessionStart,
-			Theme:        th,
+			Commits:          m.gitCommits,
+			Selected:         m.gitSelectedCommit,
+			Scroll:           m.gitCommitScroll,
+			Width:            width,
+			Height:           bottomBarSectionHeight,
+			SessionStart:     m.gitSessionStart,
+			Theme:            th,
+			TotalAdditions:   m.gitTotalAdditions,
+			TotalDeletions:   m.gitTotalDeletions,
+			TotalStatsLoaded: m.gitTotalStatsLoaded,
 		})
 	case 1, 2:
 		label = "Files"
@@ -173,13 +179,16 @@ func (m *Model) renderGitBottomBar(width int) string {
 
 // GitCommitListProps are the props for rendering the commit list.
 type GitCommitListProps struct {
-	Commits      []git.Commit
-	Selected     int
-	Scroll       int
-	Width        int
-	Height       int
-	SessionStart time.Time
-	Theme        theme.Theme
+	Commits          []git.Commit
+	Selected         int
+	Scroll           int
+	Width            int
+	Height           int
+	SessionStart     time.Time
+	Theme            theme.Theme
+	TotalAdditions   int
+	TotalDeletions   int
+	TotalStatsLoaded bool
 }
 
 // RenderGitCommitList renders the commit list for the left pane.
@@ -197,26 +206,37 @@ func RenderGitCommitList(props GitCommitListProps) string {
 	removedStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(th.DiffRemoved))
 
 	var lines []string
+
+	// Header line with total stats
+	headerLine := renderCommitListHeader(props.Width, props.TotalStatsLoaded, props.TotalAdditions, props.TotalDeletions, dimStyle, addedStyle, removedStyle)
+	lines = append(lines, headerLine)
+
+	// Reduce available height by 1 for the header line
+	commitHeight := props.Height - 1
+	if commitHeight < 0 {
+		commitHeight = 0
+	}
+
 	visible := props.Commits
 	scroll := props.Scroll
 
 	// Auto-scroll to keep selected item visible
-	if props.Height > 0 && props.Selected >= scroll+props.Height {
-		scroll = props.Selected - props.Height + 1
+	if commitHeight > 0 && props.Selected >= scroll+commitHeight {
+		scroll = props.Selected - commitHeight + 1
 	}
 	if props.Selected < scroll {
 		scroll = props.Selected
 	}
 
 	// Clamp scroll
-	if scroll > len(visible)-props.Height {
-		scroll = len(visible) - props.Height
+	if scroll > len(visible)-commitHeight {
+		scroll = len(visible) - commitHeight
 	}
 	if scroll < 0 {
 		scroll = 0
 	}
 
-	end := scroll + props.Height
+	end := scroll + commitHeight
 	if end > len(visible) {
 		end = len(visible)
 	}
@@ -226,54 +246,91 @@ func RenderGitCommitList(props GitCommitListProps) string {
 		isSelected := i == props.Selected
 		isSessionCommit := !props.SessionStart.IsZero() && c.AuthorDate.After(props.SessionStart)
 
-		hash := dimStyle.Render(truncate(c.Hash, 7))
-		relTime := dimStyle.Render(relativeTime(c.AuthorDate))
-
-		subject := c.Subject
-		maxSubject := props.Width - 7 - 1 - len(relTime) - 6 // hash + space + time + stats
-		if maxSubject < 5 {
-			maxSubject = 5
-		}
-		subject = truncate(subject, maxSubject)
-
-		var subjectRendered string
-		if isSessionCommit {
-			subjectRendered = sessionStyle.Render(subject)
-		} else {
-			subjectRendered = normalStyle.Render(subject)
+		hash := c.Hash
+		if len(hash) > 3 {
+			hash = hash[:3]
 		}
 
-		stats := ""
-		if c.Additions > 0 {
-			stats += addedStyle.Render(fmt.Sprintf("+%d", c.Additions))
-		}
-		if c.Deletions > 0 {
-			if stats != "" {
-				stats += " "
-			}
-			stats += removedStyle.Render(fmt.Sprintf("-%d", c.Deletions))
-		}
-
-		var row string
 		if isSelected {
-			row = highlightStyle.Render(fmt.Sprintf("%s %s %s %s",
-				dimStyle.Render(truncate(c.Hash, 7)),
-				func() string {
-					if isSessionCommit {
-						return sessionStyle.Render(subject)
-					}
-					return normalStyle.Render(subject)
-				}(),
-				relTime, stats))
-		} else {
-			row = fmt.Sprintf("%s %s %s %s", hash, subjectRendered, relTime, stats)
-		}
+			// Selected row: hash subject +N -N (stats replace relTime)
+			addStr := addedStyle.Render("+" + git.FormatStatNumber(c.Additions))
+			delStr := removedStyle.Render("-" + git.FormatStatNumber(c.Deletions))
+			statsText := addStr + " " + delStr
+			statsPlain := "+" + git.FormatStatNumber(c.Additions) + " -" + git.FormatStatNumber(c.Deletions)
 
-		lines = append(lines, truncateWidth(row, props.Width))
+			subject := c.Subject
+			// 3 hash + 1 space + 1 space + statsPlainLen
+			maxSubject := props.Width - 3 - 1 - 1 - len(statsPlain)
+			if maxSubject < 5 {
+				maxSubject = 5
+			}
+			subject = truncate(subject, maxSubject)
+
+			var subjectRendered string
+			if isSessionCommit {
+				subjectRendered = sessionStyle.Render(subject)
+			} else {
+				subjectRendered = normalStyle.Render(subject)
+			}
+
+			row := highlightStyle.Render(fmt.Sprintf("%s %s %s",
+				dimStyle.Render(hash), subjectRendered, statsText))
+			lines = append(lines, truncateWidth(row, props.Width))
+		} else {
+			// Unselected row: hash subject relTime (no stats)
+			relTime := relativeTime(c.AuthorDate)
+
+			subject := c.Subject
+			// 3 hash + 1 space + 1 space + relTimeLen
+			maxSubject := props.Width - 3 - 1 - 1 - len(relTime)
+			if maxSubject < 5 {
+				maxSubject = 5
+			}
+			subject = truncate(subject, maxSubject)
+
+			var subjectRendered string
+			if isSessionCommit {
+				subjectRendered = sessionStyle.Render(subject)
+			} else {
+				subjectRendered = normalStyle.Render(subject)
+			}
+
+			row := fmt.Sprintf("%s %s %s", dimStyle.Render(hash), subjectRendered, dimStyle.Render(relTime))
+			lines = append(lines, truncateWidth(row, props.Width))
+		}
 	}
 
 	result := strings.Join(lines, "\n")
 	return padToHeight(result, props.Width, props.Height)
+}
+
+// renderCommitListHeader renders the centered stats divider header line.
+func renderCommitListHeader(width int, loaded bool, additions, deletions int, dimStyle, addedStyle, removedStyle lipgloss.Style) string {
+	var statsStr string
+	if !loaded {
+		statsStr = " ... "
+	} else {
+		addStr := addedStyle.Render("+" + git.FormatStatNumber(additions))
+		delStr := removedStyle.Render("-" + git.FormatStatNumber(deletions))
+		statsStr = " " + addStr + " " + delStr + " "
+	}
+
+	// Calculate plain text width for centering
+	var statsPlainLen int
+	if !loaded {
+		statsPlainLen = 5 // " ... "
+	} else {
+		statsPlainLen = 1 + 1 + len(git.FormatStatNumber(additions)) + 1 + 1 + len(git.FormatStatNumber(deletions)) + 1
+	}
+
+	remaining := width - statsPlainLen
+	if remaining < 0 {
+		remaining = 0
+	}
+	leftDashes := remaining / 2
+	rightDashes := remaining - leftDashes
+
+	return dimStyle.Render(strings.Repeat("─", leftDashes)) + statsStr + dimStyle.Render(strings.Repeat("─", rightDashes))
 }
 
 // GitFileListProps are the props for rendering the file list.

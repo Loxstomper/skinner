@@ -1247,3 +1247,178 @@ func TestGitViewSideLayoutUnchanged(t *testing.T) {
 		t.Error("side layout should not render bottom bar")
 	}
 }
+
+// TestCommitListHeaderLoading verifies the header shows "..." while stats load.
+func TestCommitListHeaderLoading(t *testing.T) {
+	result := RenderGitCommitList(GitCommitListProps{
+		Commits:          []git.Commit{{Hash: "abc1234", Subject: "Test"}},
+		Width:            40,
+		Height:           5,
+		Theme:            testTheme(),
+		TotalStatsLoaded: false,
+	})
+	plain := stripAnsi(result)
+	lines := strings.Split(plain, "\n")
+	if !strings.Contains(lines[0], "...") {
+		t.Errorf("expected header to contain '...' while loading, got %q", lines[0])
+	}
+	if !strings.Contains(lines[0], "─") {
+		t.Errorf("expected header to contain divider chars, got %q", lines[0])
+	}
+}
+
+// TestCommitListHeaderLoaded verifies the header shows formatted stats when loaded.
+func TestCommitListHeaderLoaded(t *testing.T) {
+	result := RenderGitCommitList(GitCommitListProps{
+		Commits:          []git.Commit{{Hash: "abc1234", Subject: "Test"}},
+		Width:            40,
+		Height:           5,
+		Theme:            testTheme(),
+		TotalAdditions:   1230,
+		TotalDeletions:   4200,
+		TotalStatsLoaded: true,
+	})
+	plain := stripAnsi(result)
+	lines := strings.Split(plain, "\n")
+	if !strings.Contains(lines[0], "+1.2K") {
+		t.Errorf("expected header to contain '+1.2K', got %q", lines[0])
+	}
+	if !strings.Contains(lines[0], "-4.2K") {
+		t.Errorf("expected header to contain '-4.2K', got %q", lines[0])
+	}
+}
+
+// TestCommitListThreeCharHash verifies hashes are truncated to 3 characters.
+func TestCommitListThreeCharHash(t *testing.T) {
+	result := RenderGitCommitList(GitCommitListProps{
+		Commits: []git.Commit{{Hash: "abc1234", Subject: "Test commit"}},
+		Width:   40,
+		Height:  5,
+		Theme:   testTheme(),
+	})
+	plain := stripAnsi(result)
+	lines := strings.Split(plain, "\n")
+	// Line 0 is header, line 1 is the commit row
+	if len(lines) < 2 {
+		t.Fatalf("expected at least 2 lines, got %d", len(lines))
+	}
+	commitLine := lines[1]
+	// Hash should be 3 chars, not 7
+	if strings.Contains(commitLine, "abc1234") {
+		t.Error("hash should be truncated to 3 chars, found full 7-char hash")
+	}
+	if !strings.HasPrefix(strings.TrimSpace(commitLine), "abc") {
+		t.Errorf("expected commit line to start with 3-char hash 'abc', got %q", commitLine)
+	}
+}
+
+// TestCommitListUnselectedNoStats verifies unselected rows show no addition/deletion stats.
+func TestCommitListUnselectedNoStats(t *testing.T) {
+	result := RenderGitCommitList(GitCommitListProps{
+		Commits: []git.Commit{
+			{Hash: "abc1234", Subject: "First", Additions: 10, Deletions: 3},
+			{Hash: "def5678", Subject: "Second", Additions: 42, Deletions: 7},
+		},
+		Selected: 0,
+		Width:    60,
+		Height:   5,
+		Theme:    testTheme(),
+	})
+	plain := stripAnsi(result)
+	lines := strings.Split(plain, "\n")
+	// Line 0 is header, line 2 is the unselected second commit
+	if len(lines) < 3 {
+		t.Fatalf("expected at least 3 lines, got %d", len(lines))
+	}
+	unselectedLine := lines[2]
+	if strings.Contains(unselectedLine, "+42") {
+		t.Errorf("unselected row should not show stats, got %q", unselectedLine)
+	}
+}
+
+// TestCommitListSelectedRowShowsStats verifies the selected row shows +N -N instead of time.
+func TestCommitListSelectedRowShowsStats(t *testing.T) {
+	result := RenderGitCommitList(GitCommitListProps{
+		Commits: []git.Commit{
+			{Hash: "abc1234", Subject: "Fix bug", Additions: 10, Deletions: 3},
+		},
+		Selected: 0,
+		Width:    60,
+		Height:   5,
+		Theme:    testTheme(),
+	})
+	plain := stripAnsi(result)
+	lines := strings.Split(plain, "\n")
+	// Line 0 is header, line 1 is the selected commit
+	if len(lines) < 2 {
+		t.Fatalf("expected at least 2 lines, got %d", len(lines))
+	}
+	selectedLine := lines[1]
+	if !strings.Contains(selectedLine, "+10") {
+		t.Errorf("selected row should show additions, got %q", selectedLine)
+	}
+	if !strings.Contains(selectedLine, "-3") {
+		t.Errorf("selected row should show deletions, got %q", selectedLine)
+	}
+}
+
+// TestCommitListSelectedRowZeroStats verifies +0 -0 is shown for zero-stat commits.
+func TestCommitListSelectedRowZeroStats(t *testing.T) {
+	result := RenderGitCommitList(GitCommitListProps{
+		Commits: []git.Commit{
+			{Hash: "abc1234", Subject: "Merge commit", Additions: 0, Deletions: 0},
+		},
+		Selected: 0,
+		Width:    60,
+		Height:   5,
+		Theme:    testTheme(),
+	})
+	plain := stripAnsi(result)
+	lines := strings.Split(plain, "\n")
+	selectedLine := lines[1]
+	if !strings.Contains(selectedLine, "+0") {
+		t.Errorf("selected row should show +0 for zero additions, got %q", selectedLine)
+	}
+	if !strings.Contains(selectedLine, "-0") {
+		t.Errorf("selected row should show -0 for zero deletions, got %q", selectedLine)
+	}
+}
+
+// TestGitTotalStatsMsgStoresValues verifies gitTotalStatsMsg updates model state.
+func TestGitTotalStatsMsgStoresValues(t *testing.T) {
+	m := newGitTestModel()
+	setupGitView(m)
+
+	_, _ = m.Update(gitTotalStatsMsg{Additions: 5000, Deletions: 2000})
+
+	if m.gitTotalAdditions != 5000 {
+		t.Errorf("expected additions=5000, got %d", m.gitTotalAdditions)
+	}
+	if m.gitTotalDeletions != 2000 {
+		t.Errorf("expected deletions=2000, got %d", m.gitTotalDeletions)
+	}
+	if !m.gitTotalStatsLoaded {
+		t.Error("expected TotalStatsLoaded=true after receiving stats msg")
+	}
+}
+
+// TestGitTotalStatsResetOnExit verifies stats are cleared when exiting git view.
+func TestGitTotalStatsResetOnExit(t *testing.T) {
+	m := newGitTestModel()
+	setupGitView(m)
+	m.gitTotalAdditions = 5000
+	m.gitTotalDeletions = 2000
+	m.gitTotalStatsLoaded = true
+
+	m.exitGitView()
+
+	if m.gitTotalAdditions != 0 {
+		t.Errorf("expected additions reset to 0, got %d", m.gitTotalAdditions)
+	}
+	if m.gitTotalDeletions != 0 {
+		t.Errorf("expected deletions reset to 0, got %d", m.gitTotalDeletions)
+	}
+	if m.gitTotalStatsLoaded {
+		t.Error("expected TotalStatsLoaded=false after exit")
+	}
+}
