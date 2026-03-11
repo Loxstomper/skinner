@@ -54,5 +54,6 @@ In the **timeline pane**, cursor movement highlights individual items (text bloc
 | `q`              | Show quit confirmation modal                |
 | `ctrl+c`         | Show quit confirmation modal (double within 500ms to force quit) |
 | `?`              | Show help modal (all keybindings)           |
+| `ctrl+g`         | Enter git view (read-only commit history and diffs) |
 
 See [quit-confirmation.md](quit-confirmation.md) for quit behavior and [help-modal.md](help-modal.md) for the help overlay.

@@ -19,14 +19,9 @@ Added 8 new fields to `Theme` struct: `DiffAdded`, `DiffRemoved`, `DiffAddedBg`,
 
 Implemented `internal/git` package with 4 public functions (`LogCommits`, `DiffTreeFiles`, `ShowCommit`, `FileDiff`) that shell out to git CLI, plus exported parse functions (`ParseLogOutput`, `ParseDiffTreeOutput`) for testability. `DiffTreeFiles` runs two git commands (`--numstat` and `--name-status`) merged by index position (tree order). Handles binary files (numstat `-\t-`), renames (`R100` normalized to `R`), and merge commits (no numstat). Tests use canned output — 17 test cases covering all parsers.
 
-### 3. Diff parser: unified diff to structured hunks
+### 3. Diff parser: unified diff to structured hunks ✅
 
-New file `internal/tui/diffparse.go`:
-- Parse unified diff string into `[]Hunk` where each hunk has `[]DiffLine{Type, OldNum, NewNum, Content}`
-- Pair lines for side-by-side: context lines on both sides, removed+added blocks paired row-by-row, unequal blocks padded with blank lines
-- Types: `DiffLineContext`, `DiffLineAdded`, `DiffLineRemoved`
-
-**Tests**: `internal/tui/diffparse_test.go` — table-driven tests: parse a unified diff string, verify hunk structure, line pairing, and padding for unequal add/remove blocks.
+Implemented `internal/tui/diffparse.go` with types `DiffLineType`, `DiffLine`, `Hunk`, `SideBySideLine`. Two main functions: `ParseUnifiedDiff` parses unified diff strings into `[]Hunk` with `@@ ` header extraction and line number tracking; `PairLines` converts hunks into `[]SideBySideLine` for side-by-side rendering with context on both sides, removed+added blocks paired row-by-row, and nil padding for unequal blocks. Handles `\ No newline at end of file` markers, missing count in hunk headers, and multi-hunk diffs. 15 tests covering parsing, line numbering, pairing, padding, and edge cases.
 
 ### 4. Intra-line highlighting
 
