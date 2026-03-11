@@ -31,40 +31,23 @@ Implemented `internal/tui/diffhighlight.go` with `CharRange` type and `IntraLine
 
 Implemented `internal/tui/diffview.go` with `RenderDiff(props DiffViewProps) string` function. Side-by-side rendering at width >= 80, unified at < 80. Features: line number gutters (non-scrolling), horizontally scrollable code content, diff line backgrounds (`DiffAddedBg`/`DiffRemovedBg`), intra-line emphasis overlays (`DiffAddedEmphasis`/`DiffRemovedEmphasis`), and chroma syntax highlighting with theme-mapped styles (solarized-dark/light, monokai, nord). Character-level rendering pipeline: chroma tokenization → foreground colors → diff background → emphasis overlay → horizontal scroll clipping. Added chroma/v2 as direct dependency. 12 tests covering side-by-side vs unified switching, line numbers, horizontal scroll, empty input, prefixes, padding, syntax highlighting, and intra-line emphasis.
 
-### 6. Git view model state
+### 6. Git view model state ✅
 
-Add to `Model` in `internal/tui/root.go`:
-- `gitViewActive bool` — whether git view is showing
-- `gitViewDepth int` — 0=commit list, 1=file list, 2=sub-scroll
-- `gitCommits []git.Commit` — cached commit list
-- `gitSelectedCommit int` — cursor in commit list
-- `gitFiles []git.FileChange` — file list for selected commit
-- `gitSelectedFile int` — cursor in file list
-- `gitCommitScroll int`, `gitFileScroll int`, `gitDiffScroll int`, `gitDiffHScroll int` — scroll positions
-- `gitSessionStart time.Time` — set at launch for session commit highlighting
-- `gitParsedDiff []Hunk` — cached parsed diff for selected file
-- Preserved run view state (existing fields already remain untouched)
+Added git view state fields to `Model` in `internal/tui/root.go`: `gitViewActive`, `gitViewDepth` (0=commit list, 1=file list, 2=sub-scroll), `gitCommits`, `gitSelectedCommit`, `gitFiles`, `gitSelectedFile`, scroll positions (`gitCommitScroll`, `gitFileScroll`, `gitDiffScroll`, `gitDiffHScroll`), `gitSessionStart` (set at `NewModel`), `gitParsedDiff`, `gitCommitSummary`, `gitDiffContent`.
 
-Wire `ctrl+g` in keymap (`internal/config/keymap.go`) to a new `"git_view"` action. Wire `esc` to pop back through depths.
+Wired `ctrl+g` to `ActionGitView` in keymap. New files: `internal/tui/gitview.go` (state machine: `enterGitView`, `exitGitView`, `handleGitViewKey`, navigation methods, data loading), `internal/tui/gitrender.go` (rendering: `RenderGitCommitList`, `RenderGitFileList`, `renderGitCommitSummary`, helpers). `View()` in `root.go` renders git view overlay when active. Navigation: `esc` pops depth (0→exit, 1→0, 2→1), `enter` drills down (0→1→2), `j/k` scroll lists/diff, `h/l` horizontal scroll at depth 1/2, `gg`/`G` jump. 25 tests in `gitview_test.go` covering state transitions, clamping, scroll, rendering.
 
-**Tests**: Verify `ctrl+g` toggles `gitViewActive`, `esc` at depth 0 exits git view, `enter`/`esc` navigates depths correctly.
+### 7. Git view rendering: left pane (partially done in task 6)
 
-### 7. Git view rendering: left pane
+`RenderGitCommitList` and `RenderGitFileList` are implemented in `internal/tui/gitrender.go` (done in task 6). Remaining:
+- `ViewBottom()` variants for bottom layout rendering
+- More detailed rendering tests (session highlight verification, exact format checks, scroll/cursor edge cases)
 
-New file `internal/tui/gitlist.go`:
-- `RenderGitCommitList(props) string` — renders commit rows: hash, subject, relative time, +/- counts. Session commits use `DiffSessionCommit` color.
-- `RenderGitFileList(props) string` — renders file change rows: status, filename, +/- counts.
-- Both support cursor highlighting with `Highlight` background, scroll offset, and `ViewBottom()` for bottom layout.
+### 8. Git view rendering: right pane (partially done in task 6)
 
-**Tests**: `internal/tui/gitlist_test.go` — test commit list rendering (session highlight, format), file list rendering (status letters, colors), scroll/cursor positioning.
-
-### 8. Git view rendering: right pane
-
-Wire into `View()` in `internal/tui/root.go`:
-- When `gitViewActive` and depth 0: right pane calls `RenderCommitSummary()` (commit message + stats from `ShowCommit`)
-- When `gitViewActive` and depth 1/2: right pane calls `RenderDiff()` from task 5
-
-**Tests**: Integration tests in `internal/tui/gitview_test.go` — test full view output at each depth, verify correct content appears in left/right panes.
+Commit summary and diff rendering are wired in `renderGitView()` in `gitrender.go` (done in task 6). Remaining:
+- Stat line coloring in commit summary (currently basic +/- coloring)
+- Integration tests verifying correct content at each depth with realistic data
 
 ### 9. Git view navigation and scrolling
 

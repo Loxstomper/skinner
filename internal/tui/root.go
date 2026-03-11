@@ -12,6 +12,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/loxstomper/skinner/internal/config"
 	"github.com/loxstomper/skinner/internal/executor"
+	"github.com/loxstomper/skinner/internal/git"
 	"github.com/loxstomper/skinner/internal/model"
 	"github.com/loxstomper/skinner/internal/session"
 	"github.com/loxstomper/skinner/internal/theme"
@@ -111,6 +112,22 @@ type Model struct {
 	// Status flash message (transient, clears on next keypress)
 	statusFlash string
 
+	// Git view state
+	gitViewActive     bool
+	gitViewDepth      int // 0=commit list, 1=file list, 2=sub-scroll
+	gitCommits        []git.Commit
+	gitSelectedCommit int
+	gitFiles          []git.FileChange
+	gitSelectedFile   int
+	gitCommitScroll   int
+	gitFileScroll     int
+	gitDiffScroll     int
+	gitDiffHScroll    int
+	gitSessionStart   time.Time
+	gitParsedDiff     []Hunk
+	gitCommitSummary  string // cached output from ShowCommit
+	gitDiffContent    string // cached raw diff for selected file
+
 	// Quit state
 	quitting bool
 }
@@ -141,6 +158,7 @@ func NewModel(sess model.Session, cfg config.Config, promptContent string, th th
 		timeline:            NewTimeline(),
 		workDir:             workDir,
 		planScrollPositions: make(map[string]int),
+		gitSessionStart:     time.Now(),
 	}
 }
 
@@ -338,6 +356,11 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	// except for move_down/move_up which consume it.
 	clearCount := true
 
+	// When git view is active, route keys to the git view handler.
+	if m.gitViewActive {
+		return m.handleGitViewKey(action)
+	}
+
 	// When in sub-scroll mode, only allow specific actions.
 	if m.timeline.InSubScroll() {
 		m.timeline.ClearCount()
@@ -459,6 +482,10 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				m.openRunModal(f)
 			}
 		}
+
+	case config.ActionGitView:
+		m.enterGitView()
+		return m, nil
 
 	case config.ActionPlanMode:
 		// p key: launch interactive plan mode CLI (disabled while running)
@@ -967,6 +994,21 @@ func (m *Model) View() string {
 	}
 
 	header := RenderHeader(m.headerProps())
+
+	// Git view: render the git view overlay when active
+	if m.gitViewActive {
+		gitView := m.renderGitView()
+		view := header + "\n" + gitView
+
+		// Modal overlay if active
+		switch m.activeModal {
+		case modalQuitConfirm:
+			view = RenderQuitConfirmModal(m.width, m.height, m.theme)
+		case modalHelp:
+			view = RenderHelpModal(m.width, m.height, m.theme, &m.config.KeyMap)
+		}
+		return view
+	}
 
 	paneHeight := m.height - 1 // subtract 1 for the header line
 	leftWidth := m.leftPaneWidth()
