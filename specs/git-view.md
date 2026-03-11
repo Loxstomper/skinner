@@ -75,11 +75,11 @@ Three depth levels, all within the same two-pane area:
 When a commit is selected but not drilled into, the right pane shows:
 
 ```
+Fix parser edge case for nested JSON
+────────────────────────────────────────
 commit a3f2c1b
 Author: Claude <noreply@anthropic.com>
 Date:   3 minutes ago
-
-    Fix parser edge case for nested JSON
 
     The stream parser was not handling nested braces correctly
     when tool call arguments contained JSON strings.
@@ -89,7 +89,9 @@ Date:   3 minutes ago
  2 files changed, 10 insertions(+), 10 deletions(-)
 ```
 
-- Full commit message from `git show --stat`
+- **Subject line header**: the first line of the commit message, displayed bold above a horizontal rule. Uses `DiffSessionCommit` color for commits made during the session, `Foreground` otherwise (matching the left pane commit list styling). The subject is not repeated in the indented message body below.
+- **Horizontal rule**: `─` character repeated to pane width, in `ForegroundDim`
+- Full commit details from `git show --stat` below the rule
 - Stat summary at the bottom with `DiffAdded`/`DiffRemoved` colors for `+`/`-`
 
 ## File List (Left Pane, Depth 2)

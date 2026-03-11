@@ -41,7 +41,12 @@ func (m *Model) renderGitView() string {
 	var right string
 	switch m.gitViewDepth {
 	case 0:
-		right = renderGitCommitSummary(m.gitCommitSummary, rightWidth, rightHeight, m.theme)
+		isSessionCommit := false
+		if m.gitSelectedCommit < len(m.gitCommits) {
+			c := m.gitCommits[m.gitSelectedCommit]
+			isSessionCommit = !m.gitSessionStart.IsZero() && c.AuthorDate.After(m.gitSessionStart)
+		}
+		right = renderGitCommitSummary(m.gitCommitSummary, rightWidth, rightHeight, m.theme, isSessionCommit)
 	case 1, 2:
 		switch {
 		case len(m.gitParsedDiff) > 0:
@@ -350,23 +355,58 @@ func RenderGitFileList(props GitFileListProps) string {
 }
 
 // renderGitCommitSummary renders the commit summary for the right pane at depth 0.
-func renderGitCommitSummary(summary string, width, height int, th theme.Theme) string {
+// It extracts the subject line from the git show output and renders it as a bold header
+// above a horizontal rule, followed by the rest of the commit details.
+func renderGitCommitSummary(summary string, width, height int, th theme.Theme, isSessionCommit bool) string {
 	if summary == "" {
 		return padToHeight("No commit selected", width, height)
 	}
 
-	// Apply basic coloring to stat lines (+/-)
 	lines := strings.Split(summary, "\n")
 	addedStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(th.DiffAdded))
 	removedStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(th.DiffRemoved))
 
+	// Extract subject line: first non-blank line after the "Date:" line
+	subject := ""
+	subjectIdx := -1
+	pastDate := false
+	for i, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "Date:") {
+			pastDate = true
+			continue
+		}
+		if pastDate && trimmed != "" {
+			subject = trimmed
+			subjectIdx = i
+			break
+		}
+	}
+
 	var result []string
-	for _, line := range lines {
+
+	// Render subject header if found
+	if subject != "" {
+		subjectColor := lipgloss.Color(th.Foreground)
+		if isSessionCommit {
+			subjectColor = lipgloss.Color(th.DiffSessionCommit)
+		}
+		subjectStyle := lipgloss.NewStyle().Bold(true).Foreground(subjectColor)
+		result = append(result, subjectStyle.Render(subject))
+
+		// Horizontal rule
+		ruleStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(th.ForegroundDim))
+		result = append(result, ruleStyle.Render(strings.Repeat("─", width)))
+	}
+
+	// Append remaining lines, skipping the subject line to avoid repetition
+	for i, line := range lines {
+		if i == subjectIdx {
+			continue
+		}
 		// Color the +/- in stat summary lines
 		if strings.Contains(line, "insertion") || strings.Contains(line, "deletion") || strings.Contains(line, "file") {
-			// This is a stat summary line — color the + and - counts
-			colored := colorizeStatLine(line, addedStyle, removedStyle)
-			result = append(result, colored)
+			result = append(result, colorizeStatLine(line, addedStyle, removedStyle))
 		} else {
 			result = append(result, line)
 		}

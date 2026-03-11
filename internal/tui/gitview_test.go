@@ -41,7 +41,7 @@ func setupGitView(m *Model) {
 		{Hash: "ghi9012", Subject: "Initial commit", AuthorDate: time.Now().Add(-24 * time.Hour), Additions: 100, Deletions: 0},
 	}
 	m.gitSelectedCommit = 0
-	m.gitCommitSummary = "commit abc1234\nFix parser bug\n"
+	m.gitCommitSummary = "commit abc1234\nAuthor: Test <test@example.com>\nDate:   5 minutes ago\n\n    Fix parser bug\n\n main.go | 10 +++\n 1 file changed, 10 insertions(+)\n"
 }
 
 // setupGitViewWithFiles puts the model into git view at depth 1 with file data.
@@ -1150,6 +1150,85 @@ func TestGitViewFileListAutoScrollToSelection(t *testing.T) {
 
 	if !strings.Contains(stripAnsi(result), "file7.go") {
 		t.Error("expected selected file to be visible in auto-scrolled output")
+	}
+}
+
+// TestGitViewCommitSummarySubjectHeader verifies the commit summary renders
+// with a bold subject header followed by a horizontal rule.
+func TestGitViewCommitSummarySubjectHeader(t *testing.T) {
+	th := testTheme()
+	summary := "commit abc1234\nAuthor: Test <test@example.com>\nDate:   5 minutes ago\n\n    Fix parser bug\n\n main.go | 10 +++\n 1 file changed, 10 insertions(+)\n"
+
+	result := renderGitCommitSummary(summary, 40, 20, th, false)
+	plain := stripAnsi(result)
+
+	// Subject should appear as the first line
+	lines := strings.Split(plain, "\n")
+	if len(lines) == 0 {
+		t.Fatal("expected non-empty output")
+	}
+	if !strings.Contains(lines[0], "Fix parser bug") {
+		t.Errorf("expected first line to contain subject, got %q", lines[0])
+	}
+
+	// Second line should be the horizontal rule
+	if !strings.Contains(lines[1], "─") {
+		t.Errorf("expected horizontal rule on second line, got %q", lines[1])
+	}
+
+	// Subject should NOT appear again in the body (no duplication)
+	subjectCount := 0
+	for _, line := range lines {
+		if strings.Contains(line, "Fix parser bug") {
+			subjectCount++
+		}
+	}
+	if subjectCount != 1 {
+		t.Errorf("expected subject to appear exactly once, appeared %d times", subjectCount)
+	}
+}
+
+// TestGitViewCommitSummarySessionCommitStyle verifies that the isSessionCommit
+// parameter is accepted and both code paths produce valid output with the subject header.
+func TestGitViewCommitSummarySessionCommitStyle(t *testing.T) {
+	th := testTheme()
+	summary := "commit abc1234\nAuthor: Test <test@example.com>\nDate:   5 minutes ago\n\n    Add new feature\n\n main.go | 5 +++++\n 1 file changed, 5 insertions(+)\n"
+
+	// Both session and non-session commits should render the subject header
+	resultNormal := renderGitCommitSummary(summary, 40, 20, th, false)
+	resultSession := renderGitCommitSummary(summary, 40, 20, th, true)
+
+	plainNormal := stripAnsi(resultNormal)
+	plainSession := stripAnsi(resultSession)
+
+	if !strings.Contains(plainNormal, "Add new feature") {
+		t.Error("normal commit should contain subject")
+	}
+	if !strings.Contains(plainSession, "Add new feature") {
+		t.Error("session commit should contain subject")
+	}
+
+	// Both should have the horizontal rule
+	if !strings.Contains(plainNormal, "─") {
+		t.Error("normal commit should contain horizontal rule")
+	}
+	if !strings.Contains(plainSession, "─") {
+		t.Error("session commit should contain horizontal rule")
+	}
+}
+
+// TestGitViewCommitSummaryNoDate verifies graceful handling when
+// the git show output has no Date: line (subject extraction falls back).
+func TestGitViewCommitSummaryNoDate(t *testing.T) {
+	th := testTheme()
+	summary := "commit abc1234\nJust a plain message\n"
+
+	result := renderGitCommitSummary(summary, 40, 20, th, false)
+	plain := stripAnsi(result)
+
+	// Should still render without crashing, showing the raw output
+	if !strings.Contains(plain, "commit abc1234") {
+		t.Error("expected raw output when no Date: line found")
 	}
 }
 
