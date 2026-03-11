@@ -683,3 +683,89 @@ func TestBottomLayout_MouseClickPlanResetsPlanScroll(t *testing.T) {
 		t.Errorf("expected planViewScroll reset to 0 after selecting different plan, got %d", m.planViewScroll)
 	}
 }
+
+func TestBottomLayout_LastFocusedBottomPane_DefaultsToIterations(t *testing.T) {
+	m := newTestModelWithLayout("bottom", 60)
+	m.bottomBarVisible = true
+	m.focusedPane = rightPane
+
+	// h from main area should focus iterations (default)
+	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'h'}})
+	if m.focusedPane != iterationsPane {
+		t.Errorf("focusedPane = %d, want iterationsPane(%d)", m.focusedPane, iterationsPane)
+	}
+}
+
+func TestBottomLayout_LastFocusedBottomPane_RemembersPrompts(t *testing.T) {
+	m := newTestModelWithLayout("bottom", 60)
+	m.bottomBarVisible = true
+
+	// Navigate to prompts pane via tab: right→plans→iters→prompts
+	m.focusedPane = rightPane
+	m.Update(tea.KeyMsg{Type: tea.KeyTab}) // → plans
+	m.Update(tea.KeyMsg{Type: tea.KeyTab}) // → iterations
+	m.Update(tea.KeyMsg{Type: tea.KeyTab}) // → prompts
+
+	if m.focusedPane != promptsPane {
+		t.Fatalf("expected promptsPane, got %d", m.focusedPane)
+	}
+
+	// l to go back to main area (tracks prompts as last)
+	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'l'}})
+	if m.focusedPane != rightPane {
+		t.Fatalf("expected rightPane, got %d", m.focusedPane)
+	}
+
+	// h should return to prompts (last focused)
+	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'h'}})
+	if m.focusedPane != promptsPane {
+		t.Errorf("focusedPane = %d, want promptsPane(%d)", m.focusedPane, promptsPane)
+	}
+}
+
+func TestBottomLayout_LastFocusedBottomPane_RemembersPlans(t *testing.T) {
+	m := newTestModelWithLayout("bottom", 60)
+	m.bottomBarVisible = true
+
+	// Navigate to plans pane via tab: right→plans
+	m.focusedPane = rightPane
+	m.Update(tea.KeyMsg{Type: tea.KeyTab}) // → plans
+
+	if m.focusedPane != plansPane {
+		t.Fatalf("expected plansPane, got %d", m.focusedPane)
+	}
+
+	// l to go back to main area (tracks plans as last)
+	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'l'}})
+	if m.focusedPane != rightPane {
+		t.Fatalf("expected rightPane, got %d", m.focusedPane)
+	}
+
+	// h should return to plans (last focused)
+	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'h'}})
+	if m.focusedPane != plansPane {
+		t.Errorf("focusedPane = %d, want plansPane(%d)", m.focusedPane, plansPane)
+	}
+}
+
+func TestBottomLayout_LastFocusedBottomPane_TabCycleTracksCorrectly(t *testing.T) {
+	m := newTestModelWithLayout("bottom", 60)
+	m.bottomBarVisible = true
+	m.focusedPane = rightPane
+
+	// Tab through: right→plans→iters→prompts→right
+	m.Update(tea.KeyMsg{Type: tea.KeyTab}) // → plans
+	m.Update(tea.KeyMsg{Type: tea.KeyTab}) // → iterations (tracks plans)
+	m.Update(tea.KeyMsg{Type: tea.KeyTab}) // → prompts (tracks iterations)
+	m.Update(tea.KeyMsg{Type: tea.KeyTab}) // → right (tracks prompts)
+
+	// Last focused should be prompts (last bottom pane before returning to right)
+	if m.focusedPane != rightPane {
+		t.Fatalf("expected rightPane, got %d", m.focusedPane)
+	}
+
+	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'h'}})
+	if m.focusedPane != promptsPane {
+		t.Errorf("focusedPane = %d, want promptsPane(%d)", m.focusedPane, promptsPane)
+	}
+}

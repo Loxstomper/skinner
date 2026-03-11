@@ -81,12 +81,13 @@ type Model struct {
 	workDir string
 
 	// UI state
-	width, height    int
-	focusedPane      paneID
-	compactView      bool
-	leftPaneVisible  bool
-	bottomBarVisible bool
-	lineNumbers      bool
+	width, height         int
+	focusedPane           paneID
+	lastFocusedBottomPane paneID // remembers last-focused bottom bar section for h/← recall
+	compactView           bool
+	leftPaneVisible       bool
+	bottomBarVisible      bool
+	lineNumbers           bool
 
 	// KeyMap-driven sequence state machine (replaces hardcoded gPending)
 	pendingAction string
@@ -150,25 +151,26 @@ func NewModel(sess model.Session, cfg config.Config, promptContent string, th th
 	workDir, _ := os.Getwd()
 
 	return Model{
-		controller:          ctrl,
-		exec:                exec,
-		config:              cfg,
-		promptContent:       promptContent,
-		theme:               th,
-		compactView:         compactView,
-		leftPaneVisible:     true,
-		bottomBarVisible:    true,
-		lineNumbers:         cfg.LineNumbers,
-		exitOnComplete:      exitOnComplete,
-		eventCh:             make(chan tea.Msg, 100),
-		focusedPane:         iterationsPane,
-		iterList:            NewIterList(),
-		promptList:          NewPromptList(workDir),
-		planList:            NewPlanList(workDir),
-		timeline:            NewTimeline(),
-		workDir:             workDir,
-		planScrollPositions: make(map[string]int),
-		gitSessionStart:     time.Now(),
+		controller:            ctrl,
+		exec:                  exec,
+		config:                cfg,
+		promptContent:         promptContent,
+		theme:                 th,
+		compactView:           compactView,
+		leftPaneVisible:       true,
+		bottomBarVisible:      true,
+		lineNumbers:           cfg.LineNumbers,
+		exitOnComplete:        exitOnComplete,
+		eventCh:               make(chan tea.Msg, 100),
+		focusedPane:           iterationsPane,
+		lastFocusedBottomPane: iterationsPane,
+		iterList:              NewIterList(),
+		promptList:            NewPromptList(workDir),
+		planList:              NewPlanList(workDir),
+		timeline:              NewTimeline(),
+		workDir:               workDir,
+		planScrollPositions:   make(map[string]int),
+		gitSessionStart:       time.Now(),
 	}
 }
 
@@ -449,11 +451,14 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				m.focusedPane = plansPane
 				m.rightPaneMode = planMode
 			case plansPane:
+				m.lastFocusedBottomPane = plansPane
 				m.focusedPane = iterationsPane
 				m.rightPaneMode = timelineMode
 			case iterationsPane:
+				m.lastFocusedBottomPane = iterationsPane
 				m.focusedPane = promptsPane
 			case promptsPane:
+				m.lastFocusedBottomPane = promptsPane
 				m.focusedPane = rightPane
 			}
 		} else {
@@ -479,8 +484,7 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if m.effectiveLayout() == "bottom" {
 			// In bottom layout, h/← from main area focuses last-focused bottom bar section
 			if m.focusedPane == rightPane && m.bottomBarVisible {
-				// Default to iterations if no bottom section was previously focused
-				m.focusedPane = iterationsPane
+				m.focusedPane = m.lastFocusedBottomPane
 			}
 		} else if m.leftPaneVisible {
 			if m.focusedPane == rightPane {
@@ -497,6 +501,7 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if m.effectiveLayout() == "bottom" {
 			// In bottom layout, l/→ from bottom bar → main area
 			if isLeftPane(m.focusedPane) {
+				m.lastFocusedBottomPane = m.focusedPane
 				m.focusedPane = rightPane
 			}
 		} else {
@@ -912,6 +917,9 @@ func (m *Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 	switch {
 	case msg.Button == tea.MouseButtonWheelUp:
 		m.focusedPane = targetPane
+		if inBottomBar && isLeftPane(targetPane) {
+			m.lastFocusedBottomPane = targetPane
+		}
 		m.updateRightPaneModeForFocus(targetPane)
 		switch targetPane {
 		case plansPane:
@@ -937,6 +945,9 @@ func (m *Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 
 	case msg.Button == tea.MouseButtonWheelDown:
 		m.focusedPane = targetPane
+		if inBottomBar && isLeftPane(targetPane) {
+			m.lastFocusedBottomPane = targetPane
+		}
 		m.updateRightPaneModeForFocus(targetPane)
 		switch targetPane {
 		case plansPane:
@@ -961,6 +972,9 @@ func (m *Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 
 	case msg.Button == tea.MouseButtonLeft && msg.Action == tea.MouseActionPress:
 		m.focusedPane = targetPane
+		if inBottomBar && isLeftPane(targetPane) {
+			m.lastFocusedBottomPane = targetPane
+		}
 		m.updateRightPaneModeForFocus(targetPane)
 		if inBottomBar {
 			m.handleBottomBarClick(targetPane, bottomContentRow)
