@@ -49,16 +49,18 @@ Commit summary and diff rendering are wired in `renderGitView()` in `gitrender.g
 - Stat line coloring in commit summary (currently basic +/- coloring)
 - Integration tests verifying correct content at each depth with realistic data
 
-### 9. Git view navigation and scrolling
+### 9. Git view navigation and scrolling ✅
 
-In `handleKey()` (`internal/tui/root.go`), when `gitViewActive`:
-- `j`/`k`/mouse: scroll commit list (depth 0) or file list (depth 1, left pane) or diff (depth 1/2, right pane)
-- `h`/`l`: horizontal scroll diff content (depth 1/2 only, right pane focused)
-- `enter`: drill into commit → file list; enter sub-scroll on diff
+All navigation implemented in `internal/tui/gitview.go` and `internal/tui/root.go`:
+- `j`/`k`/arrows: scroll commit list (depth 0), file list (depth 1), diff (depth 2)
+- `h`/`l`: horizontal scroll diff content (depth 1/2 only)
+- `enter`: drill into commit → file list → sub-scroll
 - `esc`: pop depth; at depth 0, exit git view
-- `gg`/`G`/`pgup`/`pgdn`: jump navigation
+- `gg`/`G`/`Home`/`End`: jump navigation
+- `pgup`/`pgdn`: page-sized scrolling at all depths via `gitViewPageUp()`/`gitViewPageDown()`
+- Mouse wheel: 3-line scrolling at all depths via `gitViewScrollBy()`, routed from `handleMouse()` when `gitViewActive`
 
-**Tests**: Test key sequences for depth transitions, scroll state changes, h/l horizontal scroll, esc at each depth.
+40 tests in `gitview_test.go` covering all key/mouse navigation, depth transitions, clamping, page scrolling, mouse routing, and auto-follow behavior.
 
 ### 10. Live commit list updates ✅
 

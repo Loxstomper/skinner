@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"fmt"
 	"testing"
 	"time"
 
@@ -698,6 +699,252 @@ func TestAutoFollowReenabledOnJumpTop(t *testing.T) {
 	}
 	if m.gitSelectedCommit != 0 {
 		t.Errorf("expected selection at 0 after jump top, got %d", m.gitSelectedCommit)
+	}
+}
+
+// --- Page up/page down tests ---
+
+func TestGitViewPageDownCommitList(t *testing.T) {
+	m := newGitTestModel()
+	setupGitView(m)
+	// Add many commits for paging
+	commits := make([]git.Commit, 50)
+	for i := range commits {
+		commits[i] = git.Commit{Hash: fmt.Sprintf("hash%03d", i), Subject: fmt.Sprintf("Commit %d", i)}
+	}
+	m.gitCommits = commits
+	m.gitSelectedCommit = 0
+
+	m.gitViewPageDown()
+
+	pageSize := m.rightPaneHeight() - 1
+	if m.gitSelectedCommit != pageSize {
+		t.Errorf("expected selection at %d after page down, got %d", pageSize, m.gitSelectedCommit)
+	}
+	if m.gitAutoFollow {
+		t.Error("auto-follow should be disabled after page down")
+	}
+}
+
+func TestGitViewPageUpCommitList(t *testing.T) {
+	m := newGitTestModel()
+	setupGitView(m)
+	commits := make([]git.Commit, 50)
+	for i := range commits {
+		commits[i] = git.Commit{Hash: fmt.Sprintf("hash%03d", i), Subject: fmt.Sprintf("Commit %d", i)}
+	}
+	m.gitCommits = commits
+	m.gitSelectedCommit = 40
+
+	m.gitViewPageUp()
+
+	pageSize := m.rightPaneHeight() - 1
+	expected := 40 - pageSize
+	if m.gitSelectedCommit != expected {
+		t.Errorf("expected selection at %d after page up, got %d", expected, m.gitSelectedCommit)
+	}
+}
+
+func TestGitViewPageDownClamped(t *testing.T) {
+	m := newGitTestModel()
+	setupGitView(m)
+	m.gitSelectedCommit = len(m.gitCommits) - 1
+
+	m.gitViewPageDown()
+
+	if m.gitSelectedCommit != len(m.gitCommits)-1 {
+		t.Errorf("page down should clamp to last commit, got %d", m.gitSelectedCommit)
+	}
+}
+
+func TestGitViewPageUpClamped(t *testing.T) {
+	m := newGitTestModel()
+	setupGitView(m)
+	m.gitSelectedCommit = 0
+
+	m.gitViewPageUp()
+
+	if m.gitSelectedCommit != 0 {
+		t.Errorf("page up should clamp to 0, got %d", m.gitSelectedCommit)
+	}
+}
+
+func TestGitViewPageDownFileList(t *testing.T) {
+	m := newGitTestModel()
+	setupGitViewWithFiles(m)
+	// Add more files
+	files := make([]git.FileChange, 50)
+	for i := range files {
+		files[i] = git.FileChange{Status: "M", Path: fmt.Sprintf("file%d.go", i), Additions: 1}
+	}
+	m.gitFiles = files
+	m.gitSelectedFile = 0
+
+	m.gitViewPageDown()
+
+	pageSize := m.rightPaneHeight() - 1
+	if m.gitSelectedFile != pageSize {
+		t.Errorf("expected file selection at %d after page down, got %d", pageSize, m.gitSelectedFile)
+	}
+}
+
+func TestGitViewPageDownDiffScroll(t *testing.T) {
+	m := newGitTestModel()
+	setupGitViewWithFiles(m)
+	m.gitViewDepth = 2
+	m.gitDiffScroll = 0
+
+	m.gitViewPageDown()
+
+	pageSize := m.rightPaneHeight() - 1
+	if m.gitDiffScroll != pageSize {
+		t.Errorf("expected diff scroll at %d after page down, got %d", pageSize, m.gitDiffScroll)
+	}
+}
+
+func TestGitViewPageUpDiffScroll(t *testing.T) {
+	m := newGitTestModel()
+	setupGitViewWithFiles(m)
+	m.gitViewDepth = 2
+	m.gitDiffScroll = 50
+
+	m.gitViewPageUp()
+
+	pageSize := m.rightPaneHeight() - 1
+	expected := 50 - pageSize
+	if m.gitDiffScroll != expected {
+		t.Errorf("expected diff scroll at %d after page up, got %d", expected, m.gitDiffScroll)
+	}
+}
+
+func TestGitViewPageUpDiffScrollClamped(t *testing.T) {
+	m := newGitTestModel()
+	setupGitViewWithFiles(m)
+	m.gitViewDepth = 2
+	m.gitDiffScroll = 2
+
+	m.gitViewPageUp()
+
+	if m.gitDiffScroll != 0 {
+		t.Errorf("expected diff scroll clamped to 0, got %d", m.gitDiffScroll)
+	}
+}
+
+// --- Mouse wheel tests ---
+
+func TestGitViewMouseWheelDownCommitList(t *testing.T) {
+	m := newGitTestModel()
+	setupGitView(m)
+	m.gitSelectedCommit = 0
+
+	m.gitViewScrollBy(mouseScrollLines)
+
+	// 3 commits total, scrolling by 3 should clamp to 2 (last index)
+	if m.gitSelectedCommit != 2 {
+		t.Errorf("expected selection at 2 after mouse wheel down, got %d", m.gitSelectedCommit)
+	}
+	if m.gitAutoFollow {
+		t.Error("auto-follow should be disabled after mouse scroll")
+	}
+}
+
+func TestGitViewMouseWheelUpCommitList(t *testing.T) {
+	m := newGitTestModel()
+	setupGitView(m)
+	m.gitSelectedCommit = 2
+
+	m.gitViewScrollBy(-mouseScrollLines)
+
+	if m.gitSelectedCommit != 0 {
+		t.Errorf("expected selection at 0 after mouse wheel up, got %d", m.gitSelectedCommit)
+	}
+}
+
+func TestGitViewMouseWheelDiffScroll(t *testing.T) {
+	m := newGitTestModel()
+	setupGitViewWithFiles(m)
+	m.gitViewDepth = 2
+	m.gitDiffScroll = 10
+
+	m.gitViewScrollBy(-mouseScrollLines)
+
+	if m.gitDiffScroll != 7 {
+		t.Errorf("expected diff scroll at 7 after mouse wheel up, got %d", m.gitDiffScroll)
+	}
+
+	m.gitViewScrollBy(mouseScrollLines)
+
+	if m.gitDiffScroll != 10 {
+		t.Errorf("expected diff scroll at 10 after mouse wheel down, got %d", m.gitDiffScroll)
+	}
+}
+
+func TestGitViewMouseWheelDiffScrollClampedAtZero(t *testing.T) {
+	m := newGitTestModel()
+	setupGitViewWithFiles(m)
+	m.gitViewDepth = 2
+	m.gitDiffScroll = 1
+
+	m.gitViewScrollBy(-mouseScrollLines)
+
+	if m.gitDiffScroll != 0 {
+		t.Errorf("expected diff scroll clamped to 0, got %d", m.gitDiffScroll)
+	}
+}
+
+func TestGitViewMouseHandlerRoutesToGitView(t *testing.T) {
+	m := newGitTestModel()
+	setupGitView(m)
+	m.gitSelectedCommit = 0
+
+	// Simulate mouse wheel down event
+	msg := tea.MouseMsg{
+		Button: tea.MouseButtonWheelDown,
+		X:      50,
+		Y:      5,
+	}
+	m.handleMouse(msg)
+
+	// Should have scrolled down by mouseScrollLines (3), clamped to 2
+	if m.gitSelectedCommit != 2 {
+		t.Errorf("expected selection at 2 after mouse wheel, got %d", m.gitSelectedCommit)
+	}
+}
+
+func TestGitViewMouseWheelUpHandler(t *testing.T) {
+	m := newGitTestModel()
+	setupGitView(m)
+	m.gitSelectedCommit = 2
+
+	msg := tea.MouseMsg{
+		Button: tea.MouseButtonWheelUp,
+		X:      50,
+		Y:      5,
+	}
+	m.handleMouse(msg)
+
+	if m.gitSelectedCommit != 0 {
+		t.Errorf("expected selection at 0 after mouse wheel up, got %d", m.gitSelectedCommit)
+	}
+}
+
+// --- Page key routing tests ---
+
+func TestGitViewPageKeysRoutedToHandler(t *testing.T) {
+	m := newGitTestModel()
+	setupGitView(m)
+	commits := make([]git.Commit, 50)
+	for i := range commits {
+		commits[i] = git.Commit{Hash: fmt.Sprintf("hash%03d", i), Subject: fmt.Sprintf("Commit %d", i)}
+	}
+	m.gitCommits = commits
+	m.gitSelectedCommit = 0
+
+	// Simulate pgdown key via handleKey
+	sendSpecialKey(m, tea.KeyPgDown)
+
+	if m.gitSelectedCommit == 0 {
+		t.Error("pgdown should have moved selection in git view")
 	}
 }
 

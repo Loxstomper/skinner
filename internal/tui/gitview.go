@@ -134,6 +134,14 @@ func (m *Model) handleGitViewKey(action string) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
+	case "page_down":
+		m.gitViewPageDown()
+		return m, nil
+
+	case "page_up":
+		m.gitViewPageUp()
+		return m, nil
+
 	case config.ActionToggleLeftPane:
 		// [ key still works in git view for hiding/showing left pane
 		if m.effectiveLayout() == "bottom" {
@@ -190,6 +198,107 @@ func (m *Model) gitViewMoveUp() {
 	case 2:
 		if m.gitDiffScroll > 0 {
 			m.gitDiffScroll--
+		}
+	}
+}
+
+// gitViewPageDown handles pgdn in git view.
+func (m *Model) gitViewPageDown() {
+	pageSize := m.rightPaneHeight() - 1
+	if pageSize < 1 {
+		pageSize = 1
+	}
+	switch m.gitViewDepth {
+	case 0:
+		max := len(m.gitCommits) - 1
+		m.gitSelectedCommit += pageSize
+		if m.gitSelectedCommit > max {
+			m.gitSelectedCommit = max
+		}
+		if m.gitSelectedCommit < 0 {
+			m.gitSelectedCommit = 0
+		}
+		m.gitAutoFollow = false
+		m.loadCommitSummary()
+	case 1:
+		max := len(m.gitFiles) - 1
+		m.gitSelectedFile += pageSize
+		if m.gitSelectedFile > max {
+			m.gitSelectedFile = max
+		}
+		if m.gitSelectedFile < 0 {
+			m.gitSelectedFile = 0
+		}
+		m.gitDiffScroll = 0
+		m.gitDiffHScroll = 0
+		m.loadFileDiff()
+	case 2:
+		m.gitDiffScroll += pageSize
+	}
+}
+
+// gitViewPageUp handles pgup in git view.
+func (m *Model) gitViewPageUp() {
+	pageSize := m.rightPaneHeight() - 1
+	if pageSize < 1 {
+		pageSize = 1
+	}
+	switch m.gitViewDepth {
+	case 0:
+		m.gitSelectedCommit -= pageSize
+		if m.gitSelectedCommit < 0 {
+			m.gitSelectedCommit = 0
+		}
+		m.gitAutoFollow = false
+		m.loadCommitSummary()
+	case 1:
+		m.gitSelectedFile -= pageSize
+		if m.gitSelectedFile < 0 {
+			m.gitSelectedFile = 0
+		}
+		m.gitDiffScroll = 0
+		m.gitDiffHScroll = 0
+		m.loadFileDiff()
+	case 2:
+		m.gitDiffScroll -= pageSize
+		if m.gitDiffScroll < 0 {
+			m.gitDiffScroll = 0
+		}
+	}
+}
+
+// gitViewScrollBy scrolls the git view by delta lines (for mouse wheel).
+func (m *Model) gitViewScrollBy(delta int) {
+	switch m.gitViewDepth {
+	case 0:
+		max := len(m.gitCommits) - 1
+		m.gitSelectedCommit += delta
+		if m.gitSelectedCommit > max {
+			m.gitSelectedCommit = max
+		}
+		if m.gitSelectedCommit < 0 {
+			m.gitSelectedCommit = 0
+		}
+		if delta != 0 {
+			m.gitAutoFollow = false
+		}
+		m.loadCommitSummary()
+	case 1:
+		max := len(m.gitFiles) - 1
+		m.gitSelectedFile += delta
+		if m.gitSelectedFile > max {
+			m.gitSelectedFile = max
+		}
+		if m.gitSelectedFile < 0 {
+			m.gitSelectedFile = 0
+		}
+		m.gitDiffScroll = 0
+		m.gitDiffHScroll = 0
+		m.loadFileDiff()
+	case 2:
+		m.gitDiffScroll += delta
+		if m.gitDiffScroll < 0 {
+			m.gitDiffScroll = 0
 		}
 	}
 }

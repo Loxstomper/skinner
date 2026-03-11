@@ -833,6 +833,17 @@ func (m *Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
+	// When git view is active, handle mouse wheel for scrolling
+	if m.gitViewActive {
+		switch msg.Button {
+		case tea.MouseButtonWheelUp:
+			m.gitViewScrollBy(-mouseScrollLines)
+		case tea.MouseButtonWheelDown:
+			m.gitViewScrollBy(mouseScrollLines)
+		}
+		return m, nil
+	}
+
 	// Determine target pane and whether the event is in the bottom bar
 	targetPane := rightPane
 	inBottomBar := false
