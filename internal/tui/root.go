@@ -31,6 +31,7 @@ type planEditorDoneMsg struct{ err error }
 type planModeDoneMsg struct{ err error }
 type gitTickMsg struct{}
 type gitRefreshMsg struct{ commits []git.Commit }
+type gitTotalStatsMsg struct{ Additions, Deletions int }
 
 // Pane focus
 
@@ -131,6 +132,12 @@ type Model struct {
 	gitDiffContent    string // cached raw diff for selected file
 	gitAutoFollow     bool   // auto-scroll to top on new commits (paused by manual scroll)
 
+	// Async total stats
+	gitTotalAdditions   int
+	gitTotalDeletions   int
+	gitTotalStatsLoaded bool
+	gitTotalStatsCancel context.CancelFunc
+
 	// Quit state
 	quitting bool
 }
@@ -219,6 +226,15 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.mergeGitCommits(msg.commits)
 		}
 		return m, gitTickCmd()
+
+	case gitTotalStatsMsg:
+		if !m.gitViewActive {
+			return m, nil
+		}
+		m.gitTotalAdditions = msg.Additions
+		m.gitTotalDeletions = msg.Deletions
+		m.gitTotalStatsLoaded = true
+		return m, nil
 
 	case assistantBatchMsg:
 		m.controller.ProcessAssistantBatch(msg.Events)
@@ -1485,5 +1501,15 @@ func gitRefreshCmd() tea.Cmd {
 			return gitRefreshMsg{commits: nil}
 		}
 		return gitRefreshMsg{commits: commits}
+	}
+}
+
+func gitTotalStatsCmd(ctx context.Context) tea.Cmd {
+	return func() tea.Msg {
+		additions, deletions, err := git.TotalStats(ctx)
+		if err != nil {
+			return gitTotalStatsMsg{Additions: 0, Deletions: 0}
+		}
+		return gitTotalStatsMsg{Additions: additions, Deletions: deletions}
 	}
 }

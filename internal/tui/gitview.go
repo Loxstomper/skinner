@@ -1,6 +1,8 @@
 package tui
 
 import (
+	"context"
+
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/loxstomper/skinner/internal/config"
 	"github.com/loxstomper/skinner/internal/git"
@@ -28,13 +30,20 @@ func (m *Model) enterGitView() tea.Cmd {
 	m.gitCommitSummary = ""
 	m.gitDiffContent = ""
 	m.gitAutoFollow = true
+	m.gitTotalStatsLoaded = false
+	m.gitTotalAdditions = 0
+	m.gitTotalDeletions = 0
+
+	// Start async total stats computation
+	ctx, cancel := context.WithCancel(context.Background())
+	m.gitTotalStatsCancel = cancel
 
 	// Load commit summary for the first commit
 	if len(commits) > 0 {
 		m.loadCommitSummary()
 	}
 
-	return gitTickCmd()
+	return tea.Batch(gitTickCmd(), gitTotalStatsCmd(ctx))
 }
 
 // exitGitView deactivates the git view, restoring the previous view state.
@@ -46,6 +55,15 @@ func (m *Model) exitGitView() {
 	m.gitParsedDiff = nil
 	m.gitCommitSummary = ""
 	m.gitDiffContent = ""
+
+	// Cancel async stats computation
+	if m.gitTotalStatsCancel != nil {
+		m.gitTotalStatsCancel()
+		m.gitTotalStatsCancel = nil
+	}
+	m.gitTotalStatsLoaded = false
+	m.gitTotalAdditions = 0
+	m.gitTotalDeletions = 0
 }
 
 // handleGitViewKey routes key actions when the git view is active.

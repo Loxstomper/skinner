@@ -21,15 +21,15 @@ Remove per-commit addition/deletion stats from unselected rows in the git view c
 - [x] Add tests in `internal/git/git_test.go` for parsing various shortstat formats (insertions only, deletions only, both, binary-only commits)
 
 ### 4. Add Bubble Tea message types for async stats
-- Add `gitTotalStatsMsg struct{ Additions, Deletions int }` to `internal/tui/root.go`
-- Add `gitTotalStatsCmd` that calls `git.TotalStats()` in a goroutine
-- Add state fields to Model: `gitTotalAdditions int`, `gitTotalDeletions int`, `gitTotalStatsLoaded bool`, `gitTotalStatsCancel context.CancelFunc`
-- Handle `gitTotalStatsMsg` in the Update switch — store totals and set loaded flag
+- [x] Add `gitTotalStatsMsg struct{ Additions, Deletions int }` to `internal/tui/root.go`
+- [x] Add `gitTotalStatsCmd` that calls `git.TotalStats()` in a goroutine
+- [x] Add state fields to Model: `gitTotalAdditions int`, `gitTotalDeletions int`, `gitTotalStatsLoaded bool`, `gitTotalStatsCancel context.CancelFunc`
+- [x] Handle `gitTotalStatsMsg` in the Update switch — store totals and set loaded flag
 
 ### 5. Wire up async stats lifecycle
-- In `enterGitView()`: create a context, store cancel func, fire `gitTotalStatsCmd`
-- When exiting git view (esc at depth 0): call cancel func, reset stats state
-- No caching — re-entering git view re-runs the command
+- [x] In `enterGitView()`: create a context, store cancel func, fire `gitTotalStatsCmd`
+- [x] When exiting git view (esc at depth 0): call cancel func, reset stats state
+- [x] No caching — re-entering git view re-runs the command
 
 ### 6. Update `GitCommitListProps` and `RenderGitCommitList`
 - Add fields to `GitCommitListProps`: `TotalAdditions int`, `TotalDeletions int`, `TotalStatsLoaded bool`
