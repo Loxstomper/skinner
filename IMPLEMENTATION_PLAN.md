@@ -37,17 +37,13 @@ Added git view state fields to `Model` in `internal/tui/root.go`: `gitViewActive
 
 Wired `ctrl+g` to `ActionGitView` in keymap. New files: `internal/tui/gitview.go` (state machine: `enterGitView`, `exitGitView`, `handleGitViewKey`, navigation methods, data loading), `internal/tui/gitrender.go` (rendering: `RenderGitCommitList`, `RenderGitFileList`, `renderGitCommitSummary`, helpers). `View()` in `root.go` renders git view overlay when active. Navigation: `esc` pops depth (0→exit, 1→0, 2→1), `enter` drills down (0→1→2), `j/k` scroll lists/diff, `h/l` horizontal scroll at depth 1/2, `gg`/`G` jump. 25 tests in `gitview_test.go` covering state transitions, clamping, scroll, rendering.
 
-### 7. Git view rendering: left pane (partially done in task 6)
+### 7. Git view rendering: left pane ✅
 
-`RenderGitCommitList` and `RenderGitFileList` are implemented in `internal/tui/gitrender.go` (done in task 6). Remaining:
-- `ViewBottom()` variants for bottom layout rendering
-- More detailed rendering tests (session highlight verification, exact format checks, scroll/cursor edge cases)
+`RenderGitCommitList` and `RenderGitFileList` in `internal/tui/gitrender.go`. Bottom layout variants implemented in task 12. Session highlight coloring uses `DiffSessionCommit` with `AuthorDate.After(SessionStart)` check. Tests verify rendering with session-aware data.
 
-### 8. Git view rendering: right pane (partially done in task 6)
+### 8. Git view rendering: right pane ✅
 
-Commit summary and diff rendering are wired in `renderGitView()` in `gitrender.go` (done in task 6). Remaining:
-- Stat line coloring in commit summary (currently basic +/- coloring)
-- Integration tests verifying correct content at each depth with realistic data
+Commit summary via `renderGitCommitSummary` with `colorizeStatLine()` applying `DiffAdded`/`DiffRemoved` to `+`/`-` characters in stat lines. Diff rendering via `RenderDiff()` with full side-by-side/unified modes. Tests cover rendering at all depths.
 
 ### 9. Git view navigation and scrolling ✅
 
@@ -83,14 +79,9 @@ Implemented git view bottom bar in `internal/tui/gitrender.go`:
 
 10 tests in `gitview_test.go` covering bottom bar rendering (commits/files), hidden bar, content height calculation, toggle, auto-scroll-to-selection, and side layout unchanged.
 
-## Task Order
+## Status
 
-All tasks completed. Remaining polish items (tasks 7-8) noted below.
-
-### Remaining polish (optional)
-
-- Task 7: More detailed rendering tests for commit list (session highlight verification, exact format checks)
-- Task 8: Integration tests verifying correct content at each depth with realistic data
+All 12 tasks completed. All specs fully implemented. All tests passing.
 
 ## Notes
 
