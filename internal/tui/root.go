@@ -1178,7 +1178,7 @@ func (m *Model) View() string {
 		})
 		m.planViewTotalLines = totalLines
 	} else {
-		right = m.timeline.View(TimelineProps{
+		tlProps := TimelineProps{
 			Items:       m.selectedItems(),
 			Width:       rightWidth,
 			Height:      rightHeight,
@@ -1187,7 +1187,9 @@ func (m *Model) View() string {
 			LineNumbers: m.lineNumbers,
 			Theme:       m.theme,
 			WorkDir:     m.workDir,
-		})
+		}
+		m.populateThinkingState(&tlProps)
+		right = m.timeline.View(tlProps)
 	}
 
 	var panes string
@@ -1383,7 +1385,7 @@ func (m *Model) currentTimelineProps() TimelineProps {
 
 // timelineProps builds TimelineProps for a given set of items.
 func (m *Model) timelineProps(items []model.TimelineItem) TimelineProps {
-	return TimelineProps{
+	props := TimelineProps{
 		Items:       items,
 		Width:       m.rightPaneWidth(),
 		Height:      m.rightPaneHeight(),
@@ -1392,6 +1394,22 @@ func (m *Model) timelineProps(items []model.TimelineItem) TimelineProps {
 		LineNumbers: m.lineNumbers,
 		Theme:       m.theme,
 		WorkDir:     m.workDir,
+	}
+	m.populateThinkingState(&props)
+	return props
+}
+
+// populateThinkingState sets the thinking fields on TimelineProps if the
+// selected iteration is the running one and is currently thinking.
+func (m *Model) populateThinkingState(props *TimelineProps) {
+	runIdx := m.controller.RunningIterationIdx()
+	if runIdx < 0 || m.iterList.SelectedIndex() != runIdx {
+		return
+	}
+	iter := &m.controller.Session.Iterations[runIdx]
+	if iter.IsThinking() {
+		props.IsThinking = true
+		props.ThinkingStartTime = iter.ThinkingStartTime
 	}
 }
 

@@ -2413,3 +2413,50 @@ func TestTimeline_View_PathTrimming_InGroup(t *testing.T) {
 		t.Error("full path should be trimmed in group children")
 	}
 }
+
+func TestTimeline_ThinkingRowShown(t *testing.T) {
+	lipgloss.SetColorProfile(termenv.Ascii)
+	tl := NewTimeline()
+	items := makeTimelineItems()
+	props := timelineProps(items)
+	props.IsThinking = true
+	props.ThinkingStartTime = time.Now().Add(-3 * time.Second)
+
+	result := tl.View(props)
+	if !strings.Contains(result, "🧠") {
+		t.Error("expected brain emoji in thinking row")
+	}
+	if !strings.Contains(result, "Thinking...") {
+		t.Error("expected 'Thinking...' text in thinking row")
+	}
+}
+
+func TestTimeline_ThinkingRowHidden(t *testing.T) {
+	lipgloss.SetColorProfile(termenv.Ascii)
+	tl := NewTimeline()
+	items := makeTimelineItems()
+	props := timelineProps(items)
+	props.IsThinking = false
+
+	result := tl.View(props)
+	if strings.Contains(result, "🧠") {
+		t.Error("thinking row should not appear when IsThinking is false")
+	}
+	if strings.Contains(result, "Thinking...") {
+		t.Error("thinking text should not appear when IsThinking is false")
+	}
+}
+
+func TestTimeline_ThinkingRowDoesNotAffectCursorCount(t *testing.T) {
+	items := makeTimelineItems()
+	props := timelineProps(items)
+	countWithout := FlatCursorCount(props.Items)
+
+	props.IsThinking = true
+	props.ThinkingStartTime = time.Now()
+	countWith := FlatCursorCount(props.Items)
+
+	if countWith != countWithout {
+		t.Errorf("thinking row should not affect cursor count: got %d, want %d", countWith, countWithout)
+	}
+}

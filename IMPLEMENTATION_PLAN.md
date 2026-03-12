@@ -20,39 +20,23 @@ Added `Iteration.HasRunningToolCall() bool` and `Iteration.IsThinking() bool` me
 
 Full test coverage in `model_test.go` (HasRunningToolCall, IsThinking) and `session_test.go` (7 thinking state lifecycle tests).
 
-## Remaining Tasks
+### ~~3. Pass thinking state to TimelineProps~~ ✅
 
-### 3. Pass thinking state to TimelineProps
+Added `IsThinking bool` and `ThinkingStartTime time.Time` fields to `TimelineProps`. Populated via `populateThinkingState()` helper in root.go — only sets thinking state when the selected iteration is the running one and `iter.IsThinking()` returns true. Both `timelineProps()` and the inline `TimelineProps{}` in `View()` call this helper.
 
-**Files:** `internal/tui/root.go`, `internal/tui/timeline.go`
+### ~~4. Render thinking row in Timeline.View()~~ ✅
 
-Add two fields to `TimelineProps`:
-- `ThinkingStartTime time.Time` — zero value means not thinking.
-- `IsThinking bool` — convenience flag.
+After all real items in `View()`, if `props.IsThinking`, appends a line: `🧠 Thinking... (duration)` with "Thinking..." in `ForegroundDim` and duration in `DurationRunning` color. The row uses `flatIdx: -1` so it's not a cursor target.
 
-In `Model.timelineProps()` and the inline `TimelineProps{}` in `View()`, populate these from the selected iteration (only if the selected iteration is the running one).
+### ~~5. Auto-follow keeps thinking row visible~~ ✅
 
-### 4. Render thinking row in Timeline.View()
+`effectiveTotalLines()` adds 1 when `props.IsThinking`, so `scrollToBottom()` accounts for the thinking row. Auto-follow naturally keeps it in viewport.
 
-**Files:** `internal/tui/timeline.go`
+### ~~7. Unit tests for thinking row rendering~~ ✅
 
-At the end of the rendered timeline content (after all real items), if `props.IsThinking`:
+Three test cases in `timeline_test.go`:
+- `TestTimeline_ThinkingRowShown`: IsThinking=true → output contains "🧠" and "Thinking...".
+- `TestTimeline_ThinkingRowHidden`: IsThinking=false → no thinking row.
+- `TestTimeline_ThinkingRowDoesNotAffectCursorCount`: cursor count unchanged by thinking state.
 
-- Render a line: `🧠 Thinking... (duration)` where duration is `time.Since(props.ThinkingStartTime)` formatted with `FormatDurationValue()`.
-- Style: "Thinking..." in `ForegroundDim`, duration in `DurationRunning` color.
-- This row does NOT count toward the item list — it is appended after all cursor-targetable items, outside the cursor/scroll system.
-
-### 5. Auto-follow keeps thinking row visible
-
-**Files:** `internal/tui/timeline.go`
-
-When auto-follow is active and the thinking row is rendered, ensure the scroll offset accounts for the extra line so the thinking row is within the viewport. This should work naturally if the thinking row is appended after the last item and the auto-follow logic scrolls to show the bottom of content.
-
-### 7. Unit tests for thinking row rendering
-
-**Files:** `internal/tui/timeline_test.go`
-
-Test cases:
-- `IsThinking=true` with a `ThinkingStartTime` → output contains "🧠" and "Thinking...".
-- `IsThinking=false` → no thinking row in output.
-- Thinking row does not affect cursor item count (cursor count matches `len(Items)`).
+## All tasks complete ✅

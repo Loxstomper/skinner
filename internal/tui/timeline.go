@@ -3,6 +3,7 @@ package tui
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/loxstomper/skinner/internal/model"
@@ -38,14 +39,16 @@ func NewTimeline() Timeline {
 
 // TimelineProps contains the data needed to render the timeline.
 type TimelineProps struct {
-	Items       []model.TimelineItem
-	Width       int
-	Height      int
-	Focused     bool
-	CompactView bool
-	LineNumbers bool
-	Theme       theme.Theme
-	WorkDir     string // CWD for path trimming in tool call summaries
+	Items             []model.TimelineItem
+	Width             int
+	Height            int
+	Focused           bool
+	CompactView       bool
+	LineNumbers       bool
+	Theme             theme.Theme
+	WorkDir           string    // CWD for path trimming in tool call summaries
+	IsThinking        bool      // true when the iteration is thinking (no visible activity)
+	ThinkingStartTime time.Time // when the thinking state began; zero means not thinking
 }
 
 // renderedLine pairs a rendered text line with its flat cursor index.
@@ -398,6 +401,16 @@ func (tl *Timeline) View(props TimelineProps) string {
 		}
 	}
 
+	// Append thinking indicator row if the iteration is thinking.
+	if props.IsThinking {
+		elapsed := time.Since(props.ThinkingStartTime)
+		durStr := FormatDurationValue(elapsed)
+		dimStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(props.Theme.ForegroundDim))
+		durStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(props.Theme.DurationRunning))
+		thinkingLine := "  🧠 " + dimStyle.Render("Thinking...") + " " + durStyle.Render("("+durStr+")")
+		lines = append(lines, renderedLine{text: thinkingLine, flatIdx: -1})
+	}
+
 	return tl.renderWithLines(lines, props)
 }
 
@@ -634,12 +647,18 @@ func (tl *Timeline) scrollToBottom(props TimelineProps) {
 }
 
 // effectiveTotalLines returns total rendered lines, accounting for sub-scroll
-// viewport capping on the active sub-scroll item.
+// viewport capping on the active sub-scroll item and the thinking indicator row.
 func (tl *Timeline) effectiveTotalLines(props TimelineProps) int {
+	var total int
 	if !tl.InSubScroll() {
-		return TotalLines(props.Items, props.CompactView)
+		total = TotalLines(props.Items, props.CompactView)
+	} else {
+		total = tl.totalLinesWithCap(props)
 	}
-	return tl.totalLinesWithCap(props)
+	if props.IsThinking {
+		total++
+	}
+	return total
 }
 
 // effectiveLineRange returns the line range for the cursor item, accounting
