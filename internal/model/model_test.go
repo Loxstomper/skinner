@@ -227,6 +227,121 @@ func TestToolCallGroupToolCallCount(t *testing.T) {
 	}
 }
 
+func TestIterationHasRunningToolCall(t *testing.T) {
+	tests := []struct {
+		name  string
+		items []TimelineItem
+		want  bool
+	}{
+		{"empty iteration", nil, false},
+		{"no running calls", []TimelineItem{
+			&ToolCall{Status: ToolCallDone},
+		}, false},
+		{"standalone running", []TimelineItem{
+			&ToolCall{Status: ToolCallRunning},
+		}, true},
+		{"group with running child", []TimelineItem{
+			&ToolCallGroup{Children: []*ToolCall{
+				{Status: ToolCallDone},
+				{Status: ToolCallRunning},
+			}},
+		}, true},
+		{"group all done", []TimelineItem{
+			&ToolCallGroup{Children: []*ToolCall{
+				{Status: ToolCallDone},
+				{Status: ToolCallDone},
+			}},
+		}, false},
+		{"mixed standalone and group all done", []TimelineItem{
+			&ToolCall{Status: ToolCallDone},
+			&ToolCallGroup{Children: []*ToolCall{
+				{Status: ToolCallDone},
+			}},
+		}, false},
+		{"text blocks ignored", []TimelineItem{
+			&TextBlock{Text: "hello"},
+			&ToolCall{Status: ToolCallDone},
+		}, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			iter := &Iteration{Items: tt.items}
+			if got := iter.HasRunningToolCall(); got != tt.want {
+				t.Errorf("HasRunningToolCall() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestIterationIsThinking(t *testing.T) {
+	now := time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)
+
+	tests := []struct {
+		name string
+		iter Iteration
+		want bool
+	}{
+		{
+			name: "running with thinking time and no tool calls",
+			iter: Iteration{
+				Status:            IterationRunning,
+				ThinkingStartTime: now,
+			},
+			want: true,
+		},
+		{
+			name: "running with thinking time but running tool call",
+			iter: Iteration{
+				Status:            IterationRunning,
+				ThinkingStartTime: now,
+				Items:             []TimelineItem{&ToolCall{Status: ToolCallRunning}},
+			},
+			want: false,
+		},
+		{
+			name: "running but no thinking time set",
+			iter: Iteration{
+				Status: IterationRunning,
+			},
+			want: false,
+		},
+		{
+			name: "completed with thinking time",
+			iter: Iteration{
+				Status:            IterationCompleted,
+				ThinkingStartTime: now,
+			},
+			want: false,
+		},
+		{
+			name: "failed with thinking time",
+			iter: Iteration{
+				Status:            IterationFailed,
+				ThinkingStartTime: now,
+			},
+			want: false,
+		},
+		{
+			name: "running with thinking time and all tools done",
+			iter: Iteration{
+				Status:            IterationRunning,
+				ThinkingStartTime: now,
+				Items:             []TimelineItem{&ToolCall{Status: ToolCallDone}},
+			},
+			want: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := tt.iter.IsThinking(); got != tt.want {
+				t.Errorf("IsThinking() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestSessionPhaseConstants(t *testing.T) {
 	// Verify phase constants have distinct values
 	phases := []SessionPhase{PhaseIdle, PhaseRunning, PhaseFinished}

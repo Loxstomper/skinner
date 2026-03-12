@@ -253,3 +253,7 @@ The right pane has a visible cursor that highlights the current item (text block
 When showing the **currently running iteration**: auto-scroll follows new messages as they arrive (cursor stays at bottom). If the user manually scrolls up, auto-follow pauses. Moving the cursor back to the bottom (including via `G` / `End`) re-enables it.
 
 When showing a **completed iteration**: cursor starts at the top, no auto-scroll.
+
+### Thinking Indicator
+
+When an iteration is running but no output is visible (waiting for Claude's API response), a transient `🧠 Thinking...` row with a timer is shown at the bottom of the timeline. It is not a cursor target and disappears when new content arrives. See [thinking-indicator.md](thinking-indicator.md) for full details.

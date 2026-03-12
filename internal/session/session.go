@@ -57,6 +57,9 @@ func (c *Controller) ProcessAssistantBatch(events []Event) {
 	}
 	iter := &c.Session.Iterations[idx]
 
+	// A new assistant batch means Claude has responded — thinking is over.
+	iter.ThinkingStartTime = time.Time{}
+
 	// Collect runs of consecutive same-name ToolUseEvents into groups.
 	var pending []interface{} // *model.TextBlock or *toolRun
 	var currentRun *toolRun
@@ -157,21 +160,31 @@ func (c *Controller) ProcessToolResult(result ToolResultEvent) *model.ToolCallGr
 	}
 	iter := &c.Session.Iterations[idx]
 
+	var foundGroup *model.ToolCallGroup
 	for _, item := range iter.Items {
 		if tc, ok := item.(*model.ToolCall); ok && tc.ID == result.ToolUseID {
 			c.applyToolResult(tc, result)
-			return nil
+			foundGroup = nil
+			goto checkThinking
 		}
 		if group, ok := item.(*model.ToolCallGroup); ok {
 			for _, child := range group.Children {
 				if child.ID == result.ToolUseID {
 					c.applyToolResult(child, result)
-					return group
+					foundGroup = group
+					goto checkThinking
 				}
 			}
 		}
 	}
 	return nil
+
+checkThinking:
+	// If all tool calls are now complete, Claude will be processing results.
+	if !iter.HasRunningToolCall() {
+		iter.ThinkingStartTime = c.Clock()
+	}
+	return foundGroup
 }
 
 // applyToolResult updates a single ToolCall with result data.
@@ -218,10 +231,12 @@ func (c *Controller) ProcessUsage(usage UsageEvent) {
 
 // StartIteration creates a new running iteration and appends it to the session.
 func (c *Controller) StartIteration() {
+	now := c.Clock()
 	iter := model.Iteration{
-		Index:     len(c.Session.Iterations),
-		Status:    model.IterationRunning,
-		StartTime: c.Clock(),
+		Index:             len(c.Session.Iterations),
+		Status:            model.IterationRunning,
+		StartTime:         now,
+		ThinkingStartTime: now,
 	}
 	c.Session.Iterations = append(c.Session.Iterations, iter)
 }
@@ -236,6 +251,7 @@ func (c *Controller) CompleteIteration(err error) {
 	}
 	iter := &c.Session.Iterations[idx]
 	iter.Duration = c.Clock().Sub(iter.StartTime)
+	iter.ThinkingStartTime = time.Time{} // no more thinking
 	if err != nil {
 		iter.Status = model.IterationFailed
 	} else {

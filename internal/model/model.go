@@ -125,11 +125,35 @@ const (
 )
 
 type Iteration struct {
-	Index     int
-	Status    IterationStatus
-	Items     []TimelineItem
-	StartTime time.Time
-	Duration  time.Duration
+	Index             int
+	Status            IterationStatus
+	Items             []TimelineItem
+	StartTime         time.Time
+	Duration          time.Duration
+	ThinkingStartTime time.Time // zero value = not thinking
+}
+
+// HasRunningToolCall returns true if any tool call in the iteration is still running.
+func (iter *Iteration) HasRunningToolCall() bool {
+	for _, item := range iter.Items {
+		switch it := item.(type) {
+		case *ToolCall:
+			if it.Status == ToolCallRunning {
+				return true
+			}
+		case *ToolCallGroup:
+			if it.Status() == ToolCallRunning {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// IsThinking returns true when the iteration is running, has a thinking start
+// time set, and no tool calls are currently in progress.
+func (iter *Iteration) IsThinking() bool {
+	return iter.Status == IterationRunning && !iter.ThinkingStartTime.IsZero() && !iter.HasRunningToolCall()
 }
 
 func (iter *Iteration) ToolCallCount() int {

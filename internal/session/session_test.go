@@ -1173,6 +1173,172 @@ func TestAccumulatedDuration_PauseResume(t *testing.T) {
 	}
 }
 
+func TestThinkingState_IterationStart(t *testing.T) {
+	now := time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)
+	sess := &model.Session{}
+	ctrl := NewController(sess, defaultTestConfig(), fakeClock(&now))
+
+	ctrl.StartIteration()
+
+	iter := &sess.Iterations[0]
+	if !iter.IsThinking() {
+		t.Error("expected IsThinking() true after StartIteration")
+	}
+	if !iter.ThinkingStartTime.Equal(now) {
+		t.Errorf("expected ThinkingStartTime %v, got %v", now, iter.ThinkingStartTime)
+	}
+}
+
+func TestThinkingState_ClearedByAssistantBatch(t *testing.T) {
+	now := time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)
+	sess := &model.Session{}
+	ctrl := NewController(sess, defaultTestConfig(), fakeClock(&now))
+
+	ctrl.StartIteration()
+
+	// Assistant batch arrives — thinking should stop
+	ctrl.ProcessAssistantBatch([]Event{
+		ToolUseEvent{ID: "t1", Name: "Read", Summary: "a.go"},
+	})
+
+	iter := &sess.Iterations[0]
+	if iter.IsThinking() {
+		t.Error("expected IsThinking() false after ProcessAssistantBatch")
+	}
+	if !iter.ThinkingStartTime.IsZero() {
+		t.Error("expected ThinkingStartTime to be zero after ProcessAssistantBatch")
+	}
+}
+
+func TestThinkingState_ResumesAfterAllToolsComplete(t *testing.T) {
+	now := time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)
+	sess := &model.Session{}
+	ctrl := NewController(sess, defaultTestConfig(), fakeClock(&now))
+
+	ctrl.StartIteration()
+	ctrl.ProcessAssistantBatch([]Event{
+		ToolUseEvent{ID: "t1", Name: "Read", Summary: "a.go"},
+		ToolUseEvent{ID: "t2", Name: "Write", Summary: "b.go"},
+	})
+
+	iter := &sess.Iterations[0]
+
+	// Complete first tool — still one running
+	now = now.Add(100 * time.Millisecond)
+	ctrl.ProcessToolResult(ToolResultEvent{ToolUseID: "t1"})
+	if iter.IsThinking() {
+		t.Error("expected IsThinking() false while tool t2 still running")
+	}
+
+	// Complete second tool — all done, thinking resumes
+	now = now.Add(100 * time.Millisecond)
+	ctrl.ProcessToolResult(ToolResultEvent{ToolUseID: "t2"})
+	if !iter.IsThinking() {
+		t.Error("expected IsThinking() true after all tools complete")
+	}
+	if !iter.ThinkingStartTime.Equal(now) {
+		t.Errorf("expected ThinkingStartTime %v, got %v", now, iter.ThinkingStartTime)
+	}
+}
+
+func TestThinkingState_ClearedByNextAssistantBatch(t *testing.T) {
+	now := time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)
+	sess := &model.Session{}
+	ctrl := NewController(sess, defaultTestConfig(), fakeClock(&now))
+
+	ctrl.StartIteration()
+
+	// First batch
+	ctrl.ProcessAssistantBatch([]Event{
+		ToolUseEvent{ID: "t1", Name: "Read", Summary: "a.go"},
+	})
+
+	// Complete tool — thinking resumes
+	now = now.Add(100 * time.Millisecond)
+	ctrl.ProcessToolResult(ToolResultEvent{ToolUseID: "t1"})
+
+	iter := &sess.Iterations[0]
+	if !iter.IsThinking() {
+		t.Fatal("expected IsThinking() true before second batch")
+	}
+
+	// Second batch arrives — thinking stops again
+	ctrl.ProcessAssistantBatch([]Event{
+		ToolUseEvent{ID: "t2", Name: "Write", Summary: "b.go"},
+	})
+
+	if iter.IsThinking() {
+		t.Error("expected IsThinking() false after second ProcessAssistantBatch")
+	}
+}
+
+func TestThinkingState_ClearedByCompleteIteration(t *testing.T) {
+	now := time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)
+	sess := &model.Session{}
+	ctrl := NewController(sess, defaultTestConfig(), fakeClock(&now))
+
+	ctrl.StartIteration()
+
+	iter := &sess.Iterations[0]
+	if !iter.IsThinking() {
+		t.Fatal("expected IsThinking() true after start")
+	}
+
+	now = now.Add(time.Second)
+	ctrl.CompleteIteration(nil)
+
+	if iter.IsThinking() {
+		t.Error("expected IsThinking() false after CompleteIteration")
+	}
+	if !iter.ThinkingStartTime.IsZero() {
+		t.Error("expected ThinkingStartTime to be zero after CompleteIteration")
+	}
+}
+
+func TestThinkingState_FalseWithRunningToolCall(t *testing.T) {
+	now := time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)
+	sess := &model.Session{}
+	ctrl := NewController(sess, defaultTestConfig(), fakeClock(&now))
+
+	ctrl.StartIteration()
+	ctrl.ProcessAssistantBatch([]Event{
+		ToolUseEvent{ID: "t1", Name: "Bash", Summary: "make test"},
+	})
+
+	iter := &sess.Iterations[0]
+	// ThinkingStartTime was cleared by ProcessAssistantBatch, but even if
+	// we manually set it, HasRunningToolCall should make IsThinking false.
+	iter.ThinkingStartTime = now
+	if iter.IsThinking() {
+		t.Error("expected IsThinking() false when a tool call is still running")
+	}
+}
+
+func TestThinkingState_GroupToolCallsAllComplete(t *testing.T) {
+	now := time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)
+	sess := &model.Session{}
+	ctrl := NewController(sess, defaultTestConfig(), fakeClock(&now))
+
+	ctrl.StartIteration()
+	ctrl.ProcessAssistantBatch([]Event{
+		ToolUseEvent{ID: "r1", Name: "Read", Summary: "a.go"},
+		ToolUseEvent{ID: "r2", Name: "Read", Summary: "b.go"},
+		ToolUseEvent{ID: "r3", Name: "Read", Summary: "c.go"},
+	})
+
+	iter := &sess.Iterations[0]
+
+	// Complete all three grouped tool calls
+	for _, id := range []string{"r1", "r2", "r3"} {
+		now = now.Add(50 * time.Millisecond)
+		ctrl.ProcessToolResult(ToolResultEvent{ToolUseID: id})
+	}
+
+	if !iter.IsThinking() {
+		t.Error("expected IsThinking() true after all grouped tools complete")
+	}
+}
+
 // errTest is a sentinel error for testing.
 var errTest = &testError{}
 

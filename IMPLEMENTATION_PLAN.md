@@ -1,77 +1,58 @@
-# Implementation Plan
+# Implementation Plan: Thinking Indicator
 
-## Completed
+Spec: [specs/thinking-indicator.md](specs/thinking-indicator.md)
 
-- **Git View Commit Stats Redesign** (tasks 1–9): 3-char hash, async total stats header, selected-row stats, all tests passing.
-- **Bottom Layout Last-Focused Tracking**: h/← from main area now recalls last-focused bottom bar section instead of always defaulting to iterations.
-- **Help Modal Gaps Resolved**: Scroll support for small terminals (pgdn/pgup scroll modal content), pgdn/pgup entries added to Navigation section, "Edit plan file" driven by ActionEditPlan keybinding, GitView entry added to Actions section.
+## Overview
 
-## Deferred (per spec)
+Add a transient "🧠 Thinking..." row with a live timer to the bottom of the right pane timeline when Claude is processing and no output is visible. The row is not a cursor target — it's ephemeral UI chrome that disappears when the next `assistant` event arrives.
 
-- **Rate Limit Window Display** (`specs/token-usage.md`): Header area reserved with `5h: --  wk: --` placeholder. Data source (Claude CLI `/usage` or API) to be determined. Per-tool-call token attribution is fully implemented.
+## Completed Tasks
 
-## File Explorer (`specs/file-explorer.md`)
+### ~~1. Track thinking state in session Controller~~ ✅
 
-### Phase 1–3: Foundation, Tree Rendering, File Preview ✅
+Added `ThinkingStartTime` field to `model.Iteration`. Controller sets it in `StartIteration()` and `ProcessToolResult()` (when all tools complete), clears it in `ProcessAssistantBatch()` and `CompleteIteration()`.
 
-Tasks 1–7 complete. `FileNode`, `BuildFileTree`, `ApplyGitStatus`, `FileTreeView`, `RenderFilePreview` all implemented with full test coverage.
+### ~~2. Add helper to check for running tool calls~~ ✅
 
-### Phase 4: Root Model Integration ✅
+Added `Iteration.HasRunningToolCall() bool` and `Iteration.IsThinking() bool` methods.
 
-8. ~~**File explorer state in root model**~~ ✅ Implemented in `internal/tui/fileexplorer.go`:
-   - State fields: `fileExplorerActive`, `fileExplorerDepth` (0=tree, 1=scrollable), `fileExplorerTree`, `filePreviewScroll`, `filePreviewHScroll`
-   - `enterFileExplorer()` builds tree from CWD with git status, starts 5s refresh timer
-   - `exitFileExplorer()` clears state, preserves original run view state
-   - 22 tests covering enter/exit, depth transitions, navigation, scroll, merge/refresh
+### ~~6. Unit tests for thinking state tracking~~ ✅
 
-9. ~~**Key routing for file explorer**~~ ✅ Implemented in `handleFileExplorerKey()`:
-   - When `fileExplorerActive`, all keys routed to file explorer before git view or normal handlers
-   - Depth 0: tree navigation (j/k/gg/G/pgdn/pgup), enter/h/l tree actions, e for editor, [ for left pane toggle, # for line numbers
-   - Depth 1: j/k vertical scroll, h/l horizontal scroll, gg/G/pgdn/pgup, # toggle line numbers, e for editor, escape returns to depth 0
-   - q and ctrl+c show quit confirmation; ? shows help
-   - f key toggles file explorer on/off
+Full test coverage in `model_test.go` (HasRunningToolCall, IsThinking) and `session_test.go` (7 thinking state lifecycle tests).
 
-10. ~~**File explorer View() rendering**~~ ✅ Implemented in `renderFileExplorer()`:
-    - Two-pane layout: file tree left, file preview right
-    - Reuses existing layout width/height calculations
-    - [ toggle hides/shows left pane
-    - Preview scroll clamped to actual content bounds
+## Remaining Tasks
 
-11. ~~**5-second refresh timer**~~ ✅ Implemented:
-    - `fileExplorerTickMsg`/`fileExplorerRefreshMsg` message types
-    - `fileExplorerTickCmd()` fires every 5 seconds
-    - `fileExplorerRefreshCmd()` re-walks filesystem + runs `git status --porcelain`
-    - `mergeFileExplorerTree()` preserves expand/collapse and cursor position
+### 3. Pass thinking state to TimelineProps
 
-12. ~~**Editor integration**~~ ✅ Implemented in `launchFileExplorerEditor()`:
-    - `e` on file → `tea.ExecProcess` with `$EDITOR` (fallback `vi`)
-    - `fileExplorerEditorDoneMsg` handled in Update()
+**Files:** `internal/tui/root.go`, `internal/tui/timeline.go`
 
-14. ~~**Mouse events for file explorer**~~ ✅ Implemented in `handleFileExplorerMouse()`:
-    - Left pane clicks: select file/toggle dir, switch to depth 0
-    - Left pane scroll: 3 lines per tick
-    - Right pane scroll: scroll preview, enter depth 1 if not already
+Add two fields to `TimelineProps`:
+- `ThinkingStartTime time.Time` — zero value means not thinking.
+- `IsThinking bool` — convenience flag.
 
-13. ~~**Fuzzy search mode**~~ ✅ Implemented in `FileTreeView`:
-    - `/` activates search at depth 0: input bar at bottom of left pane (`/ query█`)
-    - `sahilm/fuzzy` dependency added, matches against all file paths (flat list)
-    - Tree view replaced by ranked flat result list during search
-    - `j`/`k` (↓/↑) navigate results, `SearchSelectedNode()` updates preview
-    - `enter` confirms: expands parent dirs, cursor on selected file
-    - `escape` cancels: restores pre-search tree state (cursor, scroll, expand state)
-    - Refresh deferred during search to avoid disrupting results
-    - 18 new tests: matching, navigation, cancel/confirm, view rendering, integration
+In `Model.timelineProps()` and the inline `TimelineProps{}` in `View()`, populate these from the selected iteration (only if the selected iteration is the running one).
 
-15. ~~**Update help modal**~~ ✅ Implemented:
-    - New "File Explorer" section added to help modal with: Search files (/), Open in editor (e), Expand/collapse (enter), Back/exit (escape)
-    - `f` — File explorer already present in Actions section
-    - `specs/help-modal.md` updated with the new section
-    - Tests updated and passing (including scroll offset adjustments for increased content height)
+### 4. Render thinking row in Timeline.View()
 
-### Remaining Tasks
+**Files:** `internal/tui/timeline.go`
 
-16. **Final verification** — `make check` passes (vet, lint, tests). Review spec compliance against `specs/file-explorer.md`. No TODOs/FIXMEs.
+At the end of the rendered timeline content (after all real items), if `props.IsThinking`:
 
-## Status
+- Render a line: `🧠 Thinking... (duration)` where duration is `time.Since(props.ThinkingStartTime)` formatted with `FormatDurationValue()`.
+- Style: "Thinking..." in `ForegroundDim`, duration in `DurationRunning` color.
+- This row does NOT count toward the item list — it is appended after all cursor-targetable items, outside the cursor/scroll system.
 
-All prior specs fully implemented. `make check` passes (vet, lint, tests). File explorer tasks 1-15 complete. Remaining: final verification (task 16).
+### 5. Auto-follow keeps thinking row visible
+
+**Files:** `internal/tui/timeline.go`
+
+When auto-follow is active and the thinking row is rendered, ensure the scroll offset accounts for the extra line so the thinking row is within the viewport. This should work naturally if the thinking row is appended after the last item and the auto-follow logic scrolls to show the bottom of content.
+
+### 7. Unit tests for thinking row rendering
+
+**Files:** `internal/tui/timeline_test.go`
+
+Test cases:
+- `IsThinking=true` with a `ThinkingStartTime` → output contains "🧠" and "Thinking...".
+- `IsThinking=false` → no thinking row in output.
+- Thinking row does not affect cursor item count (cursor count matches `len(Items)`).
