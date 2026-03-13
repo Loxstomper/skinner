@@ -405,6 +405,12 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 		}
 		m.lastCtrlCAt = now
+		if m.exitOnComplete {
+			// --exit flag: bypass quit confirmation modal entirely.
+			m.quitting = true
+			_ = m.exec.Kill()
+			return m, tea.Quit
+		}
 		m.activeModal = modalQuitConfirm
 		return m, nil
 	}
@@ -487,6 +493,11 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.timeline.ClearCount()
 		switch action {
 		case config.ActionQuit:
+			if m.exitOnComplete {
+				m.quitting = true
+				_ = m.exec.Kill()
+				return m, tea.Quit
+			}
 			m.activeModal = modalQuitConfirm
 		case config.ActionHelp:
 			m.activeModal = modalHelp
@@ -505,6 +516,11 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch action {
 	case config.ActionQuit:
 		m.timeline.ClearCount()
+		if m.exitOnComplete {
+			m.quitting = true
+			_ = m.exec.Kill()
+			return m, tea.Quit
+		}
 		m.activeModal = modalQuitConfirm
 		return m, nil
 

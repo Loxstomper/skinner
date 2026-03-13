@@ -506,6 +506,70 @@ func TestIntegration_ExitFlagBypassesModal(t *testing.T) {
 	}
 }
 
+func TestIntegration_ExitFlagBypassesQuitKey(t *testing.T) {
+	events := []session.Event{
+		session.SubprocessExitEvent{Err: nil},
+	}
+
+	// Use exitOnComplete=true, but don't drain events — we want to test
+	// quit key behavior directly.
+	fake := &executor.FakeExecutor{Events: events}
+	sess := model.Session{
+		Mode:          "build",
+		PromptFile:    "test-prompt.md",
+		MaxIterations: 1,
+		StartTime:     time.Now(),
+	}
+	cfg := config.DefaultConfig()
+	th := testTheme()
+	m := NewModel(sess, cfg, "test prompt", th, false, true, fake)
+	m.width = 120
+	m.height = 30
+
+	// Press q — should quit immediately without showing modal.
+	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
+	if !m.quitting {
+		t.Error("expected quitting=true after q with --exit flag")
+	}
+	if m.activeModal != modalNone {
+		t.Error("expected no modal after q with --exit flag")
+	}
+	if cmd == nil {
+		t.Error("expected tea.Quit cmd after q with --exit flag")
+	}
+}
+
+func TestIntegration_ExitFlagBypassesCtrlC(t *testing.T) {
+	events := []session.Event{
+		session.SubprocessExitEvent{Err: nil},
+	}
+
+	fake := &executor.FakeExecutor{Events: events}
+	sess := model.Session{
+		Mode:          "build",
+		PromptFile:    "test-prompt.md",
+		MaxIterations: 1,
+		StartTime:     time.Now(),
+	}
+	cfg := config.DefaultConfig()
+	th := testTheme()
+	m := NewModel(sess, cfg, "test prompt", th, false, true, fake)
+	m.width = 120
+	m.height = 30
+
+	// Single ctrl+c — should quit immediately without showing modal.
+	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlC})
+	if !m.quitting {
+		t.Error("expected quitting=true after ctrl+c with --exit flag")
+	}
+	if m.activeModal != modalNone {
+		t.Error("expected no modal after ctrl+c with --exit flag")
+	}
+	if cmd == nil {
+		t.Error("expected tea.Quit cmd after ctrl+c with --exit flag")
+	}
+}
+
 func TestRenderRunModal_ContainsLabel(t *testing.T) {
 	th := testTheme()
 	result := RenderRunModal(80, 24, th, "10", false)

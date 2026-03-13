@@ -1,15 +1,20 @@
-# Implementation Plan: System Stats
+# Implementation Plan
 
-All tasks complete. The system stats feature is fully implemented.
+All spec features are implemented. This file tracks remaining gaps and learnings.
 
-## Summary
+## Completed
 
-- `internal/stats/stats.go` — CPU/memory parsing from `/proc/stat` and `/proc/meminfo`
-- `internal/stats/stats_test.go` — 13 tests for parsing edge cases
-- `internal/model/model.go` — `CPUPercent`, `MemPercent`, `PrevCPUActive`, `PrevCPUTotal` on Session
-- `internal/tui/root.go` — Stats read piggybacked on existing 1-second tick (every 2 ticks = 2s interval)
-- `internal/tui/header.go` — `⚙ N% ◼ N%` rendered far-right with color thresholds; hidden when `/proc` unavailable
-- `internal/tui/header_test.go` — 5 tests: present, nil placeholder, both-nil hidden, color thresholds, idle state
+### --exit flag quit confirmation bypass (2026-03-13)
+- Fixed: `q` and single `ctrl+c` now quit immediately when `--exit` is active, bypassing the quit modal
+- Files changed: `internal/tui/root.go` (3 code paths), `internal/tui/modal_test.go` (2 new tests)
+- Spec refs: quit-confirmation.md §--exit Flag Bypass, iteration-loop.md §--exit behavior
+
+## Deferred (per spec)
+
+### Rate limit window utilization
+- token-usage.md marks this as "Status: Placeholder"
+- Header shows `5h: --` and `wk: --` placeholders
+- TODO in model.go line 204: implement rate limit data fetching
 
 ## Learnings
 
