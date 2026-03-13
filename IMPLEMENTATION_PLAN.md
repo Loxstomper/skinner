@@ -1,42 +1,19 @@
-# Implementation Plan: Thinking Indicator
+# Implementation Plan: System Stats
 
-Spec: [specs/thinking-indicator.md](specs/thinking-indicator.md)
+Add system-wide CPU and memory utilization to the header bar per `specs/system-stats.md`.
 
-## Overview
+## Tasks
 
-Add a transient "🧠 Thinking..." row with a live timer to the bottom of the right pane timeline when Claude is processing and no output is visible. The row is not a cursor target — it's ephemeral UI chrome that disappears when the next `assistant` event arrives.
-
-## Completed Tasks
-
-### ~~1. Track thinking state in session Controller~~ ✅
-
-Added `ThinkingStartTime` field to `model.Iteration`. Controller sets it in `StartIteration()` and `ProcessToolResult()` (when all tools complete), clears it in `ProcessAssistantBatch()` and `CompleteIteration()`.
-
-### ~~2. Add helper to check for running tool calls~~ ✅
-
-Added `Iteration.HasRunningToolCall() bool` and `Iteration.IsThinking() bool` methods.
-
-### ~~6. Unit tests for thinking state tracking~~ ✅
-
-Full test coverage in `model_test.go` (HasRunningToolCall, IsThinking) and `session_test.go` (7 thinking state lifecycle tests).
-
-### ~~3. Pass thinking state to TimelineProps~~ ✅
-
-Added `IsThinking bool` and `ThinkingStartTime time.Time` fields to `TimelineProps`. Populated via `populateThinkingState()` helper in root.go — only sets thinking state when the selected iteration is the running one and `iter.IsThinking()` returns true. Both `timelineProps()` and the inline `TimelineProps{}` in `View()` call this helper.
-
-### ~~4. Render thinking row in Timeline.View()~~ ✅
-
-After all real items in `View()`, if `props.IsThinking`, appends a line: `🧠 Thinking... (duration)` with "Thinking..." in `ForegroundDim` and duration in `DurationRunning` color. The row uses `flatIdx: -1` so it's not a cursor target.
-
-### ~~5. Auto-follow keeps thinking row visible~~ ✅
-
-`effectiveTotalLines()` adds 1 when `props.IsThinking`, so `scrollToBottom()` accounts for the thinking row. Auto-follow naturally keeps it in viewport.
-
-### ~~7. Unit tests for thinking row rendering~~ ✅
-
-Three test cases in `timeline_test.go`:
-- `TestTimeline_ThinkingRowShown`: IsThinking=true → output contains "🧠" and "Thinking...".
-- `TestTimeline_ThinkingRowHidden`: IsThinking=false → no thinking row.
-- `TestTimeline_ThinkingRowDoesNotAffectCursorCount`: cursor count unchanged by thinking state.
-
-## All tasks complete ✅
+1. ~~Create `internal/stats/stats.go`~~ — DONE. Package provides `ParseCPUSample`, `CPUPercent`, `ParseMemPercent`, and file-reading wrappers (`ReadCPUSampleFrom`, `ReadMemPercentFrom`).
+2. ~~Create `internal/stats/stats_test.go`~~ — DONE. 13 tests covering: normal parsing, minimal fields, too-few fields, no cpu line, CPU delta calc, first-sample nil, zero-prev, high utilization, mem normal/high/missing/empty/zero-total.
+3. Add `CPUPercent *int` and `MemPercent *int` fields to the `Session` struct in `internal/model/model.go`. Nil means no data yet.
+4. Add CPU previous-sample fields (`PrevCPUActive int64`, `PrevCPUTotal int64`) to Session for delta calculation.
+5. Define `systemStatsTickMsg` message type and `systemStatsTickCmd()` (2-second interval) in `internal/tui/root.go`.
+6. Handle `systemStatsTickMsg` in `Update()` — call the stats reader, compute percentages, store in Session, return next tick command.
+7. Fire `systemStatsTickCmd()` in `Init()` via `tea.Batch` alongside existing tick commands.
+8. Add `CPUPercent *int` and `MemPercent *int` to `HeaderProps` in `internal/tui/header.go`.
+9. Populate the new `HeaderProps` fields from Session state in `headerProps()` in `internal/tui/root.go`.
+10. Render `⚙ N% ◼ N%` in `RenderHeader()` on the far right, after the iteration indicator, with color thresholds (green <50%, yellow 50-79%, red 80%+). Show `⚙ --% ◼ --%` in `ForegroundDim` when nil.
+11. If `/proc` files are unreadable, hide the stats section entirely (graceful non-Linux degradation).
+12. Add header rendering tests in `internal/tui/header_test.go` covering: stats present, stats nil (placeholder), and color threshold boundaries.
+13. Run `make check` and fix any lint/vet/test issues.
