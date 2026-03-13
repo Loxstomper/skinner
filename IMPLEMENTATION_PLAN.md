@@ -16,11 +16,12 @@ Spec: [specs/viewport-rendering.md](specs/viewport-rendering.md)
    - Updated all tests to pass width parameter (80 for non-Edit tests, matching unified layout)
    - This also fixes a pre-existing bug where Edit tool calls at width >= 120 had mismatched line counts between cursor functions (which always counted unified) and rendering (which used side-by-side)
 
-3. **Implement `visibleRange` function in `timeline.go`**
-   - Walks items forward from index 0, accumulating line counts via `itemLineCount`
-   - Stops once past `scrollOffset + viewportHeight`
-   - Returns `visibleWindow` struct with: start/end item indices, line offsets within partial items, absolute line number of first visible line, cursor item index
-   - Unit test: verify correct window at various scroll positions (top, middle, bottom, partial items)
+3. ~~**Implement `visibleRange` function in `visible_range.go`**~~ ✅ DONE
+   - Implemented `visibleRange(items, scrollOffset, viewportHeight, cursorPos, width, compactView)` returning `visibleWindow` struct
+   - Walks items forward accumulating line counts via `ItemLineCount`, stops once past viewport (early exit)
+   - Returns: StartItem/EndItem (inclusive), StartLineOffset/EndLineOffset for partial items, AbsLineNumber, CursorItemIndex (-1 if off-screen)
+   - Groups: CursorItemIndex maps to group's item index for both header and children
+   - 17 unit tests: empty, zero viewport, all visible, scroll middle/bottom, cursor off-screen (above/below), expanded items, partial items at top, expanded/collapsed groups, cursor on group header/child, text blocks, compact view, width-dependent Edit layout, consistency with TotalLines, early exit at n=1000
 
 4. **Implement `visibleRangeFromBottom` function in `timeline.go`**
    - Walks items backward from the last item, accumulating line counts
