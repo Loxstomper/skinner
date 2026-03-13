@@ -123,6 +123,21 @@ func makeToolCall(rng *rand.Rand, toolName string, idx int) *model.ToolCall {
 	return tc
 }
 
+// makeCollapsedTestItems produces n collapsed tool calls — simulates the
+// feed-watching case where no items are expanded. Used by the scaling benchmark
+// to verify O(visible) rendering independent of total item count.
+func makeCollapsedTestItems(n int) []model.TimelineItem {
+	rng := rand.New(rand.NewSource(42))
+	toolNames := []string{"Bash", "Read", "Edit", "Grep", "Glob"}
+	items := make([]model.TimelineItem, 0, n)
+	for i := 0; i < n; i++ {
+		tc := makeToolCall(rng, toolNames[rng.Intn(len(toolNames))], i)
+		tc.Expanded = false
+		items = append(items, tc)
+	}
+	return items
+}
+
 func lookupTestTheme() theme.Theme {
 	th, _ := theme.LookupTheme("solarized-dark")
 	return th
@@ -244,6 +259,33 @@ func BenchmarkNewItemArrival(b *testing.B) {
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
 				tl.OnNewItems(props)
+				tl.View(props)
+			}
+		})
+	}
+}
+
+// BenchmarkTimelineViewScaling verifies that viewport-only rendering scales with
+// viewport height, not total item count. All items are collapsed with auto-follow
+// active (pinned to bottom). Times should be roughly constant across n values,
+// confirming O(visible) behavior.
+func BenchmarkTimelineViewScaling(b *testing.B) {
+	for _, n := range []int{50, 200, 500, 1000} {
+		b.Run(fmt.Sprintf("n=%d", n), func(b *testing.B) {
+			items := makeCollapsedTestItems(n)
+			tl := NewTimeline()
+			props := TimelineProps{
+				Items:       items,
+				Width:       140,
+				Height:      50,
+				Focused:     true,
+				CompactView: false,
+				LineNumbers: true,
+				Theme:       lookupTestTheme(),
+			}
+			tl.scrollToBottom(props)
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
 				tl.View(props)
 			}
 		})
