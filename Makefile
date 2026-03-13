@@ -2,7 +2,7 @@ BINARY  := skinner
 PKG     := ./cmd/skinner
 GOFLAGS ?=
 
-.PHONY: build clean test fmt lint vet check install run
+.PHONY: build clean test bench bench-cpu fmt lint vet check install run
 
 build:
 	go build $(GOFLAGS) -o $(BINARY) $(PKG)
@@ -12,6 +12,12 @@ clean:
 
 test:
 	go test ./...
+
+bench:
+	go test -bench=. -benchmem -run=^$$ ./...
+
+bench-cpu:
+	go test -bench=. -benchmem -cpuprofile=cpu.prof -run=^$$ ./internal/tui/
 
 fmt:
 	gofmt -w .

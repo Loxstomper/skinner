@@ -438,6 +438,242 @@ func TestToolCallLineCount_ExpandedEdit(t *testing.T) {
 	}
 }
 
+// --- Tests for expandedContentLineCount (zero-allocation line counting) ---
+// These tests verify that expandedContentLineCount returns the same count as
+// len(expandedContentLines(...)) for non-Edit tools, and matches the styled
+// diff line count for Edit tools (which differs between unified and side-by-side).
+
+func TestExpandedContentLineCount_MatchesExpandedContentLines(t *testing.T) {
+	// For non-Edit tools, expandedContentLineCount must match len(expandedContentLines).
+	tests := []struct {
+		name string
+		tc   *model.ToolCall
+	}{
+		{
+			name: "Bash with command and output",
+			tc: &model.ToolCall{
+				Name:          "Bash",
+				Expanded:      true,
+				RawInput:      map[string]interface{}{"command": "go test ./..."},
+				ResultContent: "ok  github.com/foo/bar\nFAIL github.com/foo/baz",
+			},
+		},
+		{
+			name: "Bash command only",
+			tc: &model.ToolCall{
+				Name:     "Bash",
+				Expanded: true,
+				RawInput: map[string]interface{}{"command": "mkdir -p /tmp/test"},
+			},
+		},
+		{
+			name: "Bash no command",
+			tc: &model.ToolCall{
+				Name:          "Bash",
+				Expanded:      true,
+				RawInput:      map[string]interface{}{},
+				ResultContent: "output only",
+			},
+		},
+		{
+			name: "Read",
+			tc: &model.ToolCall{
+				Name:          "Read",
+				Expanded:      true,
+				ResultContent: "line1\nline2\nline3",
+			},
+		},
+		{
+			name: "Grep",
+			tc: &model.ToolCall{
+				Name:          "Grep",
+				Expanded:      true,
+				ResultContent: "file1.go:10:match\nfile2.go:20:match",
+			},
+		},
+		{
+			name: "Glob",
+			tc: &model.ToolCall{
+				Name:          "Glob",
+				Expanded:      true,
+				ResultContent: "src/main.go\nsrc/util.go",
+			},
+		},
+		{
+			name: "Task",
+			tc: &model.ToolCall{
+				Name:          "Task",
+				Expanded:      true,
+				ResultContent: "task output here",
+			},
+		},
+		{
+			name: "Write",
+			tc: &model.ToolCall{
+				Name:     "Write",
+				Expanded: true,
+				RawInput: map[string]interface{}{
+					"content": "package main\n\nfunc main() {\n\tfmt.Println(\"hello\")\n}",
+				},
+			},
+		},
+		{
+			name: "Unknown tool",
+			tc: &model.ToolCall{
+				Name:          "CustomTool",
+				Expanded:      true,
+				ResultContent: "some output\nmore output",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := expandedContentLineCount(tt.tc, 100)
+			want := len(expandedContentLines(tt.tc))
+			if got != want {
+				t.Errorf("expandedContentLineCount = %d, len(expandedContentLines) = %d", got, want)
+			}
+		})
+	}
+}
+
+func TestExpandedContentLineCount_NotExpanded(t *testing.T) {
+	tc := &model.ToolCall{
+		Name:          "Bash",
+		Expanded:      false,
+		RawInput:      map[string]interface{}{"command": "echo hi"},
+		ResultContent: "hi",
+	}
+	if got := expandedContentLineCount(tc, 100); got != 0 {
+		t.Errorf("expected 0 for collapsed tool call, got %d", got)
+	}
+}
+
+func TestExpandedContentLineCount_NoContent(t *testing.T) {
+	tc := &model.ToolCall{
+		Name:     "Read",
+		Expanded: true,
+	}
+	if got := expandedContentLineCount(tc, 100); got != 0 {
+		t.Errorf("expected 0 for empty content, got %d", got)
+	}
+}
+
+func TestExpandedContentLineCount_EditUnified(t *testing.T) {
+	tc := &model.ToolCall{
+		Name:     "Edit",
+		Expanded: true,
+		RawInput: map[string]interface{}{
+			"old_string": "line1\nline2",
+			"new_string": "new1\nnew2\nnew3",
+		},
+	}
+
+	// Unified (width < 120): old (2) + new (3) = 5 lines
+	got := expandedContentLineCount(tc, 80)
+	want := 5
+	if got != want {
+		t.Errorf("Edit unified: got %d, want %d", got, want)
+	}
+
+	// Verify matches len(renderEditDiff) which is always unified
+	diffLines := renderEditDiff(tc.RawInput)
+	if got != len(diffLines) {
+		t.Errorf("Edit unified: expandedContentLineCount=%d != len(renderEditDiff)=%d", got, len(diffLines))
+	}
+}
+
+func TestExpandedContentLineCount_EditSideBySide(t *testing.T) {
+	tc := &model.ToolCall{
+		Name:     "Edit",
+		Expanded: true,
+		RawInput: map[string]interface{}{
+			"old_string": "line1\nline2",
+			"new_string": "new1\nnew2\nnew3",
+		},
+	}
+
+	// Side-by-side (width >= 120): max(2, 3) = 3 lines
+	got := expandedContentLineCount(tc, 140)
+	want := 3
+	if got != want {
+		t.Errorf("Edit side-by-side: got %d, want %d", got, want)
+	}
+
+	// Verify matches len(renderSideBySideDiff)
+	th, _ := theme.LookupTheme("solarized-dark")
+	styledLines := renderEditDiffStyled(tc.RawInput, 140, th)
+	if got != len(styledLines) {
+		t.Errorf("Edit side-by-side: expandedContentLineCount=%d != len(renderEditDiffStyled)=%d", got, len(styledLines))
+	}
+}
+
+func TestExpandedContentLineCount_EditOnlyOld(t *testing.T) {
+	tc := &model.ToolCall{
+		Name:     "Edit",
+		Expanded: true,
+		RawInput: map[string]interface{}{
+			"old_string": "removed\nlines",
+			"new_string": "",
+		},
+	}
+
+	// Unified: 2 old + 0 new = 2
+	if got := expandedContentLineCount(tc, 80); got != 2 {
+		t.Errorf("Edit unified only-old: got %d, want 2", got)
+	}
+	// Side-by-side: max(2, 0) = 2
+	if got := expandedContentLineCount(tc, 140); got != 2 {
+		t.Errorf("Edit side-by-side only-old: got %d, want 2", got)
+	}
+}
+
+func TestExpandedContentLineCount_EditNilInput(t *testing.T) {
+	tc := &model.ToolCall{
+		Name:     "Edit",
+		Expanded: true,
+	}
+	if got := expandedContentLineCount(tc, 80); got != 0 {
+		t.Errorf("Edit nil input: got %d, want 0", got)
+	}
+}
+
+func TestExpandedContentLineCount_EditBothEmpty(t *testing.T) {
+	tc := &model.ToolCall{
+		Name:     "Edit",
+		Expanded: true,
+		RawInput: map[string]interface{}{
+			"old_string": "",
+			"new_string": "",
+		},
+	}
+	if got := expandedContentLineCount(tc, 80); got != 0 {
+		t.Errorf("Edit both empty: got %d, want 0", got)
+	}
+}
+
+func TestExpandedContentLineCount_LargeContent(t *testing.T) {
+	var contentParts []string
+	for i := 1; i <= 100; i++ {
+		contentParts = append(contentParts, fmt.Sprintf("line %d", i))
+	}
+	tc := &model.ToolCall{
+		Name:          "Read",
+		Expanded:      true,
+		ResultContent: strings.Join(contentParts, "\n"),
+	}
+
+	got := expandedContentLineCount(tc, 100)
+	want := len(expandedContentLines(tc))
+	if got != want {
+		t.Errorf("large content: got %d, want %d", got, want)
+	}
+	if got != 100 {
+		t.Errorf("large content: expected 100 lines, got %d", got)
+	}
+}
+
 func TestRenderExpandedContentLine_DimColor(t *testing.T) {
 	th, _ := theme.LookupTheme("solarized-dark")
 	line := renderExpandedContentLine("some content", "Read", 80, th)

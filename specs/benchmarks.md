@@ -153,6 +153,35 @@ func BenchmarkNewItemArrival(b *testing.B) {
 }
 ```
 
+### `BenchmarkTimelineViewScaling`
+
+Verifies that viewport-only rendering (see [viewport-rendering.md](viewport-rendering.md)) scales with viewport height, not total item count. Runs `View()` at n=50, 200, 500, 1000 with all items collapsed and auto-follow active (pinned to bottom). Times should be roughly constant across all n values.
+
+```go
+func BenchmarkTimelineViewScaling(b *testing.B) {
+    for _, n := range []int{50, 200, 500, 1000} {
+        b.Run(fmt.Sprintf("n=%d", n), func(b *testing.B) {
+            items := makeCollapsedTestItems(n)
+            tl := NewTimeline()
+            props := TimelineProps{
+                Items:       items,
+                Width:       140,
+                Height:      50,
+                Focused:     true,
+                CompactView: false,
+                LineNumbers: true,
+                Theme:       theme.DefaultTheme(),
+            }
+            tl.scrollToBottom(props)
+            b.ResetTimer()
+            for i := 0; i < b.N; i++ {
+                tl.View(props)
+            }
+        })
+    }
+}
+```
+
 ## Running
 
 ```bash

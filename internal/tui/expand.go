@@ -267,6 +267,92 @@ func padToWidth(s string, w int) string {
 	return s + strings.Repeat(" ", w-len(s))
 }
 
+// expandedContentLineCount returns the number of content lines an expanded tool
+// call would produce, without allocating string slices or applying styling.
+// Returns 0 if the tool call is not expanded or has no content. The width
+// parameter determines the diff layout for Edit tool calls (side-by-side when
+// width >= 120, unified otherwise). For non-Edit tools, width is unused.
+func expandedContentLineCount(tc *model.ToolCall, width int) int {
+	if !tc.Expanded {
+		return 0
+	}
+
+	switch tc.Name {
+	case "Bash":
+		return bashContentLineCount(tc)
+	case "Edit":
+		return editContentLineCount(tc.RawInput, width)
+	case "Write":
+		return writeContentLineCount(tc)
+	default: // Read, Grep, Glob, Task, etc.
+		return resultContentLineCount(tc)
+	}
+}
+
+// bashContentLineCount counts lines for a Bash tool call: optional "$ command"
+// header plus output lines. Zero allocation — just scans for newlines.
+func bashContentLineCount(tc *model.ToolCall) int {
+	count := 0
+	if tc.RawInput != nil {
+		if cmd, ok := tc.RawInput["command"].(string); ok && cmd != "" {
+			count++ // "$ command" header
+		}
+	}
+	if tc.ResultContent != "" {
+		count += strings.Count(tc.ResultContent, "\n") + 1
+	}
+	return count
+}
+
+// editContentLineCount counts diff lines for an Edit tool call. For unified
+// layout (width < 120), returns oldLines + newLines. For side-by-side
+// (width >= 120), returns max(oldLines, newLines).
+func editContentLineCount(rawInput map[string]interface{}, width int) int {
+	if rawInput == nil {
+		return 0
+	}
+	oldStr, _ := rawInput["old_string"].(string)
+	newStr, _ := rawInput["new_string"].(string)
+	if oldStr == "" && newStr == "" {
+		return 0
+	}
+
+	oldCount := 0
+	if oldStr != "" {
+		oldCount = strings.Count(oldStr, "\n") + 1
+	}
+	newCount := 0
+	if newStr != "" {
+		newCount = strings.Count(newStr, "\n") + 1
+	}
+
+	if width >= sideBySideMinWidth {
+		if oldCount > newCount {
+			return oldCount
+		}
+		return newCount
+	}
+	return oldCount + newCount
+}
+
+// writeContentLineCount counts lines for a Write tool call's content input.
+func writeContentLineCount(tc *model.ToolCall) int {
+	if tc.RawInput != nil {
+		if content, ok := tc.RawInput["content"].(string); ok && content != "" {
+			return strings.Count(content, "\n") + 1
+		}
+	}
+	return 0
+}
+
+// resultContentLineCount counts lines in a tool call's result content.
+func resultContentLineCount(tc *model.ToolCall) int {
+	if tc.ResultContent == "" {
+		return 0
+	}
+	return strings.Count(tc.ResultContent, "\n") + 1
+}
+
 // toolCallLineCount returns the number of display lines a tool call occupies.
 // Returns 1 if collapsed, or 1 + number of content lines if expanded.
 // This returns the full (uncapped) count; see toolCallLineCountCapped for

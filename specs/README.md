@@ -32,4 +32,5 @@ Skinner is a Go TUI that runs Claude CLI in a loop and displays tool call activi
 | [thinking-indicator.md](thinking-indicator.md) | Transient thinking row with timer when waiting for Claude's API response |
 | [file-explorer.md](file-explorer.md) | File tree browser with syntax-highlighted preview, fuzzy search, git status |
 | [system-stats.md](system-stats.md) | System-wide CPU and memory utilization in header bar |
+| [viewport-rendering.md](viewport-rendering.md) | Viewport-only rendering to eliminate O(n) styling costs |
 | [benchmarks.md](benchmarks.md) | Performance benchmarks for rendering and cursor hot paths |
