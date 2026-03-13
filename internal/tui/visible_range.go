@@ -14,6 +14,85 @@ type visibleWindow struct {
 	CursorItemIndex int // index of item containing cursor, or -1 if cursor is off-screen
 }
 
+// visibleRangeFromBottom computes the visible window when pinned to the
+// bottom of the timeline (auto-follow mode). It walks items backward from the
+// last item, accumulating line counts via ItemLineCount, and stops once
+// viewportHeight lines are covered — making the backward walk O(visible)
+// rather than O(n). This is the fast path for the common auto-follow case
+// where the user is watching a live feed and all items are collapsed.
+func visibleRangeFromBottom(items []model.TimelineItem, viewportHeight, cursorPos, width int, compactView bool) visibleWindow {
+	w := visibleWindow{
+		StartItem:       -1,
+		CursorItemIndex: -1,
+	}
+
+	n := len(items)
+	if n == 0 || viewportHeight <= 0 {
+		return w
+	}
+
+	// Walk backwards from the last item, accumulating line counts.
+	linesAccum := 0
+	startIdx := 0
+
+	for i := n - 1; i >= 0; i-- {
+		lc := ItemLineCount(items[i], compactView, width)
+		linesAccum += lc
+		if linesAccum >= viewportHeight {
+			startIdx = i
+			w.StartLineOffset = linesAccum - viewportHeight
+			break
+		}
+	}
+	// If loop completed without break, all items fit: startIdx=0, StartLineOffset=0.
+
+	w.StartItem = startIdx
+	w.EndItem = n - 1
+	w.EndLineOffset = ItemLineCount(items[n-1], compactView, width)
+
+	// Compute AbsLineNumber and starting flatPos in one forward pass up to startIdx.
+	linesBefore := 0
+	flatPos := 0
+	for i := 0; i < startIdx; i++ {
+		linesBefore += ItemLineCount(items[i], compactView, width)
+		if g, ok := items[i].(*model.ToolCallGroup); ok {
+			flatPos++
+			if g.Expanded {
+				flatPos += len(g.Children)
+			}
+		} else {
+			flatPos++
+		}
+	}
+	w.AbsLineNumber = linesBefore + w.StartLineOffset
+
+	// Walk visible items to find cursor ownership.
+	for i := startIdx; i <= w.EndItem; i++ {
+		switch it := items[i].(type) {
+		case *model.ToolCallGroup:
+			if flatPos == cursorPos {
+				w.CursorItemIndex = i
+			}
+			flatPos++
+			if it.Expanded {
+				for range it.Children {
+					if flatPos == cursorPos {
+						w.CursorItemIndex = i
+					}
+					flatPos++
+				}
+			}
+		default:
+			if flatPos == cursorPos {
+				w.CursorItemIndex = i
+			}
+			flatPos++
+		}
+	}
+
+	return w
+}
+
 // visibleRange computes which items overlap the viewport defined by
 // [scrollOffset, scrollOffset+viewportHeight). It walks items forward from
 // index 0, accumulating line counts via ItemLineCount, and stops once past

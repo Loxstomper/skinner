@@ -349,10 +349,33 @@ func (tl *Timeline) View(props TimelineProps) string {
 		}
 	}
 
+	// Determine visible item range.
+	// When in sub-scroll mode, render all items (slicing handled by renderWithLines).
+	// Otherwise, use two-phase rendering: phase 1 computes the visible window cheaply,
+	// phase 2 renders only visible items.
+	var startIdx, endIdx, startFlatPos, startLineOffset int
+	fullRender := tl.InSubScroll()
+	if fullRender {
+		startIdx = 0
+		endIdx = len(props.Items) - 1
+		startFlatPos = 0
+		startLineOffset = 0
+	} else {
+		vw := visibleRange(props.Items, tl.Scroll, props.Height, tl.Cursor, props.Width, props.CompactView)
+		if vw.StartItem == -1 {
+			return style.Render("")
+		}
+		startIdx = vw.StartItem
+		endIdx = vw.EndItem
+		startFlatPos = ItemToFlat(props.Items, vw.StartItem)
+		startLineOffset = vw.StartLineOffset
+	}
+
+	// Phase 2: Render items in the visible range.
 	var lines []renderedLine
-	flatPos := 0
-	for _, item := range props.Items {
-		// Determine if this flat position is the highlighted cursor row.
+	flatPos := startFlatPos
+	for i := startIdx; i <= endIdx; i++ {
+		item := props.Items[i]
 		hlBg := ""
 		isCursor := props.Focused && flatPos == tl.Cursor
 		if isCursor {
@@ -401,8 +424,9 @@ func (tl *Timeline) View(props TimelineProps) string {
 		}
 	}
 
-	// Append thinking indicator row if the iteration is thinking.
-	if props.IsThinking {
+	// Append thinking indicator row if the iteration is thinking and
+	// the bottom of the timeline is within the visible range.
+	if props.IsThinking && (fullRender || endIdx >= len(props.Items)-1) {
 		elapsed := time.Since(props.ThinkingStartTime)
 		durStr := FormatDurationValue(elapsed)
 		dimStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(props.Theme.ForegroundDim))
@@ -411,7 +435,19 @@ func (tl *Timeline) View(props TimelineProps) string {
 		lines = append(lines, renderedLine{text: thinkingLine, flatIdx: -1})
 	}
 
-	return tl.renderWithLines(lines, props)
+	if fullRender {
+		return tl.renderWithLines(lines, props)
+	}
+
+	// Trim for partial visibility at top and bottom of viewport.
+	if startLineOffset > 0 && startLineOffset < len(lines) {
+		lines = lines[startLineOffset:]
+	}
+	if len(lines) > props.Height {
+		lines = lines[:props.Height]
+	}
+
+	return tl.renderVisibleLines(lines, props)
 }
 
 // appendExpandedLines adds expanded content lines for a tool call, applying
@@ -559,6 +595,79 @@ func (tl *Timeline) renderWithLines(lines []renderedLine, props TimelineProps) s
 
 		// For highlighted rows, the background is already baked into each
 		// segment. We just need to pad to full width with the same background.
+		if line.highlighted {
+			displayWidth := lipgloss.Width(text)
+			if displayWidth < props.Width {
+				text += hlBgStyle.Render(strings.Repeat(" ", props.Width-displayWidth))
+			}
+		}
+		rendered = append(rendered, text)
+	}
+
+	// Overlay pending count buffer in bottom-right corner.
+	if tl.CountBuffer != "" && len(rendered) > 0 {
+		lastIdx := len(rendered) - 1
+		countStr := dimStyle.Render(tl.CountBuffer)
+		countWidth := lipgloss.Width(countStr)
+		lastLine := rendered[lastIdx]
+		lastLineWidth := lipgloss.Width(lastLine)
+		padding := props.Width - lastLineWidth - countWidth
+		if padding > 0 {
+			rendered[lastIdx] = lastLine + strings.Repeat(" ", padding) + countStr
+		} else {
+			// Overwrite the end of the last line with the count indicator.
+			rendered[lastIdx] = lastLine + " " + countStr
+		}
+	}
+
+	content := strings.Join(rendered, "\n")
+	return style.Render(content)
+}
+
+// renderVisibleLines applies cursor highlighting, optional line number gutter,
+// and count buffer overlay to pre-sliced visible lines. Unlike renderWithLines,
+// it does not perform scroll-based slicing — the caller provides only the lines
+// that should be displayed.
+func (tl *Timeline) renderVisibleLines(lines []renderedLine, props TimelineProps) string {
+	style := lipgloss.NewStyle().Width(props.Width).Height(props.Height)
+
+	hlBgStyle := lipgloss.NewStyle().Background(lipgloss.Color(props.Theme.Highlight))
+	highlightStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(props.Theme.Highlight))
+	dimStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(props.Theme.ForegroundDim))
+
+	var rendered []string
+	for _, line := range lines {
+		text := line.text
+
+		// Prepend gutter with relative line numbers when enabled.
+		if props.LineNumbers {
+			var gutter string
+			if line.flatIdx >= 0 {
+				rel := line.flatIdx - tl.Cursor
+				if rel < 0 {
+					rel = -rel
+				}
+				num := fmt.Sprintf("%3d ", rel)
+				if rel == 0 {
+					if line.highlighted {
+						gutter = lipgloss.NewStyle().
+							Foreground(lipgloss.Color(props.Theme.Highlight)).
+							Background(lipgloss.Color(props.Theme.Highlight)).
+							Render(num)
+					} else {
+						gutter = highlightStyle.Render(num)
+					}
+				} else {
+					gutter = dimStyle.Render(num)
+				}
+			} else {
+				// Expanded content lines: blank gutter
+				gutter = dimStyle.Render("    ")
+			}
+			text = gutter + text
+		}
+
+		// For highlighted rows, pad to full width with the same background.
 		if line.highlighted {
 			displayWidth := lipgloss.Width(text)
 			if displayWidth < props.Width {

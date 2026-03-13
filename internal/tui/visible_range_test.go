@@ -345,6 +345,155 @@ func TestVisibleRangeCursorBelowViewport(t *testing.T) {
 	}
 }
 
+// TestVisibleRangeFromBottomMatchesVisibleRange verifies that visibleRangeFromBottom
+// produces the same result as visibleRange when scrolled to the bottom. This is
+// the core correctness invariant: the backward walk must agree with the forward walk.
+func TestVisibleRangeFromBottomMatchesVisibleRange(t *testing.T) {
+	tests := []struct {
+		name    string
+		items   []model.TimelineItem
+		height  int
+		cursor  int
+		width   int
+		compact bool
+	}{
+		{
+			name:   "all collapsed",
+			items:  makeCollapsedToolCalls(10),
+			height: 3,
+			cursor: 9,
+			width:  80,
+		},
+		{
+			name:   "all fit in viewport",
+			items:  makeCollapsedToolCalls(3),
+			height: 10,
+			cursor: 2,
+			width:  80,
+		},
+		{
+			name: "with expanded item",
+			items: []model.TimelineItem{
+				&model.ToolCall{Name: "Read", Status: model.ToolCallDone},
+				&model.ToolCall{
+					Name: "Bash", Status: model.ToolCallDone, Expanded: true,
+					RawInput:      map[string]interface{}{"command": "ls"},
+					ResultContent: "a\nb\nc\nd\ne",
+				},
+				&model.ToolCall{Name: "Read", Status: model.ToolCallDone},
+			},
+			height: 5,
+			cursor: 2,
+			width:  80,
+		},
+		{
+			name: "with expanded group",
+			items: []model.TimelineItem{
+				&model.ToolCall{Name: "Bash", Status: model.ToolCallDone},
+				&model.ToolCallGroup{
+					ToolName: "Read",
+					Expanded: true,
+					Children: []*model.ToolCall{
+						{Name: "Read", Summary: "a.go", Status: model.ToolCallDone},
+						{Name: "Read", Summary: "b.go", Status: model.ToolCallDone},
+					},
+				},
+				&model.ToolCall{Name: "Bash", Status: model.ToolCallDone},
+			},
+			height: 3,
+			cursor: 4,
+			width:  80,
+		},
+		{
+			name:   "large set collapsed",
+			items:  makeCollapsedToolCalls(100),
+			height: 10,
+			cursor: 99,
+			width:  80,
+		},
+		{
+			name:   "single item",
+			items:  makeCollapsedToolCalls(1),
+			height: 5,
+			cursor: 0,
+			width:  80,
+		},
+		{
+			name: "expanded item larger than viewport",
+			items: []model.TimelineItem{
+				&model.ToolCall{Name: "Read", Status: model.ToolCallDone},
+				&model.ToolCall{
+					Name: "Bash", Status: model.ToolCallDone, Expanded: true,
+					RawInput:      map[string]interface{}{"command": "ls"},
+					ResultContent: "1\n2\n3\n4\n5\n6\n7\n8\n9\n10",
+				},
+			},
+			height: 4,
+			cursor: 1,
+			width:  80,
+		},
+		{
+			name:    "compact view",
+			items:   makeCollapsedToolCalls(20),
+			height:  5,
+			cursor:  19,
+			width:   80,
+			compact: true,
+		},
+		{
+			name: "width-dependent edit layout",
+			items: []model.TimelineItem{
+				&model.ToolCall{Name: "Read", Status: model.ToolCallDone},
+				&model.ToolCall{
+					Name: "Edit", Status: model.ToolCallDone, Expanded: true,
+					RawInput: map[string]interface{}{
+						"old_string": "aaa\nbbb\nccc",
+						"new_string": "xxx\nyyy",
+					},
+				},
+			},
+			height: 3,
+			cursor: 1,
+			width:  140,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			total := TotalLines(tt.items, tt.compact, tt.width)
+			scrollOffset := total - tt.height
+			if scrollOffset < 0 {
+				scrollOffset = 0
+			}
+
+			expected := visibleRange(tt.items, scrollOffset, tt.height, tt.cursor, tt.width, tt.compact)
+			got := visibleRangeFromBottom(tt.items, tt.height, tt.cursor, tt.width, tt.compact)
+
+			if got != expected {
+				t.Errorf("mismatch:\n  got:  %+v\n  want: %+v", got, expected)
+			}
+		})
+	}
+}
+
+func TestVisibleRangeFromBottomEmpty(t *testing.T) {
+	w := visibleRangeFromBottom(nil, 50, 0, 80, false)
+	if w.StartItem != -1 {
+		t.Errorf("StartItem = %d, want -1", w.StartItem)
+	}
+	if w.CursorItemIndex != -1 {
+		t.Errorf("CursorItemIndex = %d, want -1", w.CursorItemIndex)
+	}
+}
+
+func TestVisibleRangeFromBottomZeroViewport(t *testing.T) {
+	items := makeCollapsedToolCalls(5)
+	w := visibleRangeFromBottom(items, 0, 0, 80, false)
+	if w.StartItem != -1 {
+		t.Errorf("StartItem = %d, want -1", w.StartItem)
+	}
+}
+
 func TestVisibleRangeWidthAffectsEditLayout(t *testing.T) {
 	// Edit diffs switch from unified to side-by-side at width >= 120.
 	// Verify visibleRange produces correct results at different widths.

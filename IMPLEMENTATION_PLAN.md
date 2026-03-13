@@ -23,29 +23,31 @@ Spec: [specs/viewport-rendering.md](specs/viewport-rendering.md)
    - Groups: CursorItemIndex maps to group's item index for both header and children
    - 17 unit tests: empty, zero viewport, all visible, scroll middle/bottom, cursor off-screen (above/below), expanded items, partial items at top, expanded/collapsed groups, cursor on group header/child, text blocks, compact view, width-dependent Edit layout, consistency with TotalLines, early exit at n=1000
 
-4. **Implement `visibleRangeFromBottom` function in `timeline.go`**
-   - Walks items backward from the last item, accumulating line counts
-   - Stops once `viewportHeight` lines are accounted for
-   - Returns the same `visibleWindow` struct
-   - Unit test: verify matches `visibleRange` result when scroll is at bottom
+4. ~~**Implement `visibleRangeFromBottom` function in `visible_range.go`**~~ ✅ DONE
+   - Walks items backward from last item, accumulating line counts via `ItemLineCount`, stops once `viewportHeight` lines covered — O(visible) backward walk
+   - Added `width` and `cursorPos` parameters (spec signature was incomplete — these are needed for `ItemLineCount` and `CursorItemIndex`)
+   - Computes `AbsLineNumber` and flat cursor position via single forward pass to `startIdx`
+   - 11 tests: 9-subtest table test verifying exact match with `visibleRange` at scroll-bottom (all collapsed, all fit, expanded items, expanded groups, large set, single item, expanded larger than viewport, compact view, width-dependent Edit layout), plus empty and zero-viewport edge cases
 
-5. **Refactor `View()` to use two-phase rendering**
-   - Phase 1: call `visibleRange` (or `visibleRangeFromBottom` when auto-following) to get the visible window
-   - Phase 2: iterate only items in `[StartItem..EndItem]`, render styled lines using existing `renderToolCallLine`, `renderTextBlockLines`, `expandedContentLines` etc.
-   - Handle `StartLineOffset`/`EndLineOffset` for items partially above/below the viewport
-   - Remove the old "render all, slice later" code path from `View()` and `renderWithLines()`
-   - Line numbers: use `AbsLineNumber` from the visible window to compute gutter values
-   - Cursor highlighting: use `CursorItemIndex` from the visible window
+5. ~~**Refactor `View()` to use two-phase rendering**~~ ✅ DONE
+   - Phase 1: `visibleRange(items, tl.Scroll, Height, Cursor, Width, CompactView)` computes visible window
+   - Phase 2: iterate only items in `[StartItem..EndItem]`, render styled lines
+   - `StartLineOffset` trimming for partial items at viewport top; `Height` cap for bottom
+   - Added `renderVisibleLines()` — gutter + highlight padding + count buffer, no scroll slicing
+   - Sub-scroll mode falls back to full render + `renderWithLines()` (to be optimized in task 6)
+   - Groups fully handled: header + expanded children rendered only when in visible range
+   - Thinking indicator appended only when last item is in visible range
+   - Used `ItemToFlat()` to compute `flatPos` at `StartItem` for cursor highlighting
+   - Benchmark results at n=500: ~360μs (was 4.7ms), 2,201 allocs (was 38,537), ~200KB (was 1.4MB)
+   - Constant time across n=50/200/500 confirming O(visible) behavior
 
 6. **Handle sub-scroll in viewport rendering**
-   - When in sub-scroll mode, the visible window may be entirely within one expanded item's content
-   - Phase 2 calls `expandedContentLines` for that item and slices to the sub-scroll offset
-   - Verify existing sub-scroll enter/exit/navigation still works correctly
+   - Currently sub-scroll falls back to full-render path (all items rendered, sliced by `renderWithLines`)
+   - Need to integrate sub-scroll with two-phase rendering: `visibleRange` with capped line counts
+   - Verify existing sub-scroll enter/exit/navigation still works correctly (currently passing all tests)
 
-7. **Handle groups in viewport rendering**
-   - Expanded groups: phase 1 counts 1 (header) + visible children line counts
-   - Phase 2 renders group header + only children that fall in the visible range
-   - Collapsed groups: 1 line, same as before
+7. ~~**Handle groups in viewport rendering**~~ ✅ DONE (completed as part of task 5)
+   - Groups are rendered in phase 2 with the same logic as before, but only when in the visible range
 
 8. **Add `makeCollapsedTestItems` helper to `benchmark_test.go`**
    - All items collapsed, no expanded content — simulates the feed-watching case
