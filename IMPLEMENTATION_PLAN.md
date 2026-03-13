@@ -1,19 +1,17 @@
 # Implementation Plan: System Stats
 
-Add system-wide CPU and memory utilization to the header bar per `specs/system-stats.md`.
+All tasks complete. The system stats feature is fully implemented.
 
-## Tasks
+## Summary
 
-1. ~~Create `internal/stats/stats.go`~~ — DONE. Package provides `ParseCPUSample`, `CPUPercent`, `ParseMemPercent`, and file-reading wrappers (`ReadCPUSampleFrom`, `ReadMemPercentFrom`).
-2. ~~Create `internal/stats/stats_test.go`~~ — DONE. 13 tests covering: normal parsing, minimal fields, too-few fields, no cpu line, CPU delta calc, first-sample nil, zero-prev, high utilization, mem normal/high/missing/empty/zero-total.
-3. Add `CPUPercent *int` and `MemPercent *int` fields to the `Session` struct in `internal/model/model.go`. Nil means no data yet.
-4. Add CPU previous-sample fields (`PrevCPUActive int64`, `PrevCPUTotal int64`) to Session for delta calculation.
-5. Define `systemStatsTickMsg` message type and `systemStatsTickCmd()` (2-second interval) in `internal/tui/root.go`.
-6. Handle `systemStatsTickMsg` in `Update()` — call the stats reader, compute percentages, store in Session, return next tick command.
-7. Fire `systemStatsTickCmd()` in `Init()` via `tea.Batch` alongside existing tick commands.
-8. Add `CPUPercent *int` and `MemPercent *int` to `HeaderProps` in `internal/tui/header.go`.
-9. Populate the new `HeaderProps` fields from Session state in `headerProps()` in `internal/tui/root.go`.
-10. Render `⚙ N% ◼ N%` in `RenderHeader()` on the far right, after the iteration indicator, with color thresholds (green <50%, yellow 50-79%, red 80%+). Show `⚙ --% ◼ --%` in `ForegroundDim` when nil.
-11. If `/proc` files are unreadable, hide the stats section entirely (graceful non-Linux degradation).
-12. Add header rendering tests in `internal/tui/header_test.go` covering: stats present, stats nil (placeholder), and color threshold boundaries.
-13. Run `make check` and fix any lint/vet/test issues.
+- `internal/stats/stats.go` — CPU/memory parsing from `/proc/stat` and `/proc/meminfo`
+- `internal/stats/stats_test.go` — 13 tests for parsing edge cases
+- `internal/model/model.go` — `CPUPercent`, `MemPercent`, `PrevCPUActive`, `PrevCPUTotal` on Session
+- `internal/tui/root.go` — Stats read piggybacked on existing 1-second tick (every 2 ticks = 2s interval)
+- `internal/tui/header.go` — `⚙ N% ◼ N%` rendered far-right with color thresholds; hidden when `/proc` unavailable
+- `internal/tui/header_test.go` — 5 tests: present, nil placeholder, both-nil hidden, color thresholds, idle state
+
+## Learnings
+
+- Integration tests use `executeBatchCmd` which synchronously executes `tea.Cmd`. Adding a separate `tea.Tick` for stats would block tests. Solution: piggyback on existing 1-second tick with a counter.
+- `executeBatchCmd` now uses a 50ms timeout to skip blocking commands (ticks, channel reads), reducing test suite from ~92s to ~5s.

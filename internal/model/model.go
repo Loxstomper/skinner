@@ -205,4 +205,10 @@ type Session struct {
 	RateLimit RateLimitInfo
 
 	StartTime time.Time
+
+	// System stats (CPU and memory utilization)
+	CPUPercent    *int // nil = no data yet
+	MemPercent    *int // nil = no data yet
+	PrevCPUActive int64
+	PrevCPUTotal  int64
 }

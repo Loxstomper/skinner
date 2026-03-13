@@ -352,6 +352,136 @@ func TestRenderHeader_FinishedPhaseShowsFullStats(t *testing.T) {
 	}
 }
 
+func TestRenderHeader_SystemStatsPresent(t *testing.T) {
+	cpu := 42
+	mem := 61
+	p := HeaderProps{
+		Phase:          model.PhaseRunning,
+		IterationCount: 1,
+		SessionStatus:  model.IterationRunning,
+		CPUPercent:     &cpu,
+		MemPercent:     &mem,
+		Width:          160,
+		Theme:          testTheme(),
+	}
+
+	result := RenderHeader(p)
+
+	if !strings.Contains(result, "⚙ 42%") {
+		t.Error("expected CPU stats '⚙ 42%'")
+	}
+	if !strings.Contains(result, "◼ 61%") {
+		t.Error("expected memory stats '◼ 61%'")
+	}
+}
+
+func TestRenderHeader_SystemStatsNil(t *testing.T) {
+	// When stats are available but CPU has no delta yet (first sample),
+	// CPU shows --% while memory shows value
+	mem := 50
+	p := HeaderProps{
+		Phase:          model.PhaseRunning,
+		IterationCount: 1,
+		SessionStatus:  model.IterationRunning,
+		CPUPercent:     nil,
+		MemPercent:     &mem,
+		Width:          160,
+		Theme:          testTheme(),
+	}
+
+	result := RenderHeader(p)
+
+	if !strings.Contains(result, "⚙ --%") {
+		t.Error("expected CPU placeholder '⚙ --%'")
+	}
+	if !strings.Contains(result, "◼ 50%") {
+		t.Error("expected memory stats '◼ 50%'")
+	}
+}
+
+func TestRenderHeader_SystemStatsHiddenWhenBothNil(t *testing.T) {
+	// When both are nil (non-Linux), stats section is hidden entirely
+	p := HeaderProps{
+		Phase:          model.PhaseRunning,
+		IterationCount: 1,
+		SessionStatus:  model.IterationRunning,
+		CPUPercent:     nil,
+		MemPercent:     nil,
+		Width:          160,
+		Theme:          testTheme(),
+	}
+
+	result := RenderHeader(p)
+
+	if strings.Contains(result, "⚙") {
+		t.Error("did not expect CPU icon when both stats are nil")
+	}
+	if strings.Contains(result, "◼") {
+		t.Error("did not expect memory icon when both stats are nil")
+	}
+}
+
+func TestRenderHeader_SystemStatsColorThresholds(t *testing.T) {
+	// Verify that stats render at various threshold levels
+	tests := []struct {
+		name string
+		pct  int
+		want string
+	}{
+		{"low", 25, "⚙ 25%"},
+		{"medium_boundary", 50, "⚙ 50%"},
+		{"medium", 65, "⚙ 65%"},
+		{"high_boundary", 80, "⚙ 80%"},
+		{"high", 95, "⚙ 95%"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			pct := tt.pct
+			mem := 50
+			p := HeaderProps{
+				Phase:          model.PhaseRunning,
+				IterationCount: 1,
+				SessionStatus:  model.IterationRunning,
+				CPUPercent:     &pct,
+				MemPercent:     &mem,
+				Width:          160,
+				Theme:          testTheme(),
+			}
+
+			result := RenderHeader(p)
+			if !strings.Contains(result, tt.want) {
+				t.Errorf("expected %q in output", tt.want)
+			}
+		})
+	}
+}
+
+func TestRenderHeader_SystemStatsIdle(t *testing.T) {
+	// System stats should appear in idle state too
+	cpu := 30
+	mem := 45
+	p := HeaderProps{
+		Phase:      model.PhaseIdle,
+		CPUPercent: &cpu,
+		MemPercent: &mem,
+		Width:      120,
+		Theme:      testTheme(),
+	}
+
+	result := RenderHeader(p)
+
+	if !strings.Contains(result, "⚙ 30%") {
+		t.Error("expected CPU stats in idle header")
+	}
+	if !strings.Contains(result, "◼ 45%") {
+		t.Error("expected memory stats in idle header")
+	}
+	if !strings.Contains(result, "Idle") {
+		t.Error("expected Idle label in idle header")
+	}
+}
+
 func TestRenderHeader_RateLimitMixed(t *testing.T) {
 	// Only one value known, the other should show "--"
 	fiveHour := 42.0

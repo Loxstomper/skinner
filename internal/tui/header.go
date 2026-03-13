@@ -24,6 +24,8 @@ type HeaderProps struct {
 	MaxIterations   int
 	SessionStatus   model.IterationStatus
 	StatusFlash     string
+	CPUPercent      *int // nil = no data yet
+	MemPercent      *int // nil = no data yet
 	Width           int
 	Theme           theme.Theme
 }
@@ -49,10 +51,13 @@ func RenderHeader(p HeaderProps) string {
 		return strings.Repeat(" ", leftPad) + flashRendered + strings.Repeat(" ", rightPad)
 	}
 
+	// System stats section (far right, after iteration indicator)
+	statsRendered := renderSystemStats(p.CPUPercent, p.MemPercent, p.Theme)
+
 	// Idle state: only show stopped timer placeholder and "Idle" status
 	if p.Phase == model.PhaseIdle {
 		centreRendered := dim.Render("⏱ --")
-		rightRendered := dim.Render("Idle ")
+		rightRendered := dim.Render("Idle") + statsRendered
 
 		centreWidth := lipgloss.Width(centreRendered)
 		rightWidth := lipgloss.Width(rightRendered)
@@ -124,7 +129,7 @@ func RenderHeader(p HeaderProps) string {
 	}
 
 	styledStatusIcon := lipgloss.NewStyle().Foreground(lipgloss.Color(statusColor)).Render(statusIcon)
-	rightRendered := dim.Render(iterText+" ") + styledStatusIcon + dim.Render(" ")
+	rightRendered := dim.Render(iterText+" ") + styledStatusIcon + statsRendered
 
 	// Centre the stats in the space to the left of the right-aligned iteration indicator
 	centreWidth := lipgloss.Width(centreRendered)
@@ -140,6 +145,43 @@ func RenderHeader(p HeaderProps) string {
 	}
 
 	return strings.Repeat(" ", leftPad) + centreRendered + strings.Repeat(" ", gap) + rightRendered
+}
+
+// renderSystemStats renders the system CPU and memory stats section.
+// Returns empty string if both values are nil (e.g. non-Linux platform where /proc is unavailable).
+func renderSystemStats(cpuPct, memPct *int, th theme.Theme) string {
+	// If both are nil and we never got data, hide entirely (non-Linux graceful degradation)
+	if cpuPct == nil && memPct == nil {
+		return ""
+	}
+
+	dim := lipgloss.NewStyle().Foreground(lipgloss.Color(th.ForegroundDim))
+
+	cpuRendered := renderStatValue("⚙", cpuPct, th)
+	memRendered := renderStatValue("◼", memPct, th)
+
+	return dim.Render("   ") + cpuRendered + dim.Render(" ") + memRendered + dim.Render(" ")
+}
+
+// renderStatValue renders a single stat indicator like "⚙ 42%" with color thresholds.
+func renderStatValue(icon string, pct *int, th theme.Theme) string {
+	dim := lipgloss.NewStyle().Foreground(lipgloss.Color(th.ForegroundDim))
+	if pct == nil {
+		return dim.Render(fmt.Sprintf("%s --%%", icon))
+	}
+
+	var color string
+	switch {
+	case *pct >= 80:
+		color = th.StatusError
+	case *pct >= 50:
+		color = th.StatusRunning
+	default:
+		color = th.StatusSuccess
+	}
+
+	style := lipgloss.NewStyle().Foreground(lipgloss.Color(color))
+	return style.Render(fmt.Sprintf("%s %d%%", icon, *pct))
 }
 
 // renderRateLimitField renders a single rate limit field (e.g. "5h: 34%" or "5h: --").

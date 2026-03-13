@@ -35,6 +35,7 @@ No tokens, cost, context %, rate limits, or iteration counter. Just the stopped 
 **Right side** (right-aligned):
 - **Iteration progress** — `Iter N` (unlimited mode) or `Iter N/M` (when max iterations is set).
 - **Status icon** — `⟳` while an iteration is running, `✓` when the session has finished all iterations, `✗` if the last iteration failed. Colored per theme (`StatusRunning`/`StatusSuccess`/`StatusError`).
+- **System stats** — `⚙ N% ◼ N%` showing host CPU and memory utilization. Always visible, even when idle. Polled every 2 seconds. Color-tinted by threshold (green/yellow/red). See [system-stats.md](system-stats.md).
 
 ## Layout Modes
 

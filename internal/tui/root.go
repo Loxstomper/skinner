@@ -15,6 +15,7 @@ import (
 	"github.com/loxstomper/skinner/internal/git"
 	"github.com/loxstomper/skinner/internal/model"
 	"github.com/loxstomper/skinner/internal/session"
+	"github.com/loxstomper/skinner/internal/stats"
 	"github.com/loxstomper/skinner/internal/theme"
 )
 
@@ -36,6 +37,13 @@ type fileExplorerTickMsg struct{}
 type fileExplorerRefreshMsg struct {
 	roots           []*FileNode
 	porcelainOutput string
+}
+type systemStatsResultMsg struct {
+	cpuPct *int
+	memPct *int
+	// raw CPU sample for next delta
+	cpuActive int64
+	cpuTotal  int64
 }
 
 // Pane focus
@@ -152,6 +160,10 @@ type Model struct {
 	filePreviewScroll  int
 	filePreviewHScroll int
 
+	// System stats state
+	systemStatsAvailable bool // set to true after first successful read
+	systemStatsTick      int  // counts 1-second ticks; fires stats read every 2
+
 	// Quit state
 	quitting bool
 }
@@ -225,6 +237,13 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Rescan prompt and plan files on each tick (1s interval)
 		m.promptList.ScanFiles(m.workDir)
 		m.planList.ScanFiles(m.workDir)
+
+		// Fire system stats read every 2 ticks (2-second interval)
+		m.systemStatsTick++
+		if m.systemStatsTick%2 == 0 {
+			sess := m.controller.Session
+			return m, tea.Batch(tickCmd(), systemStatsReadCmd(sess.PrevCPUActive, sess.PrevCPUTotal))
+		}
 		return m, tickCmd()
 
 	case gitTickMsg:
@@ -269,6 +288,19 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.mergeFileExplorerTree(msg.roots, msg.porcelainOutput)
 		}
 		return m, fileExplorerTickCmd()
+
+	case systemStatsResultMsg:
+		sess := m.controller.Session
+		if msg.cpuActive != 0 || msg.cpuTotal != 0 {
+			sess.PrevCPUActive = msg.cpuActive
+			sess.PrevCPUTotal = msg.cpuTotal
+			m.systemStatsAvailable = true
+		}
+		if m.systemStatsAvailable {
+			sess.CPUPercent = msg.cpuPct
+			sess.MemPercent = msg.memPct
+		}
+		return m, nil
 
 	case fileExplorerEditorDoneMsg:
 		// Editor exited — file preview will re-render on next View()
@@ -1309,6 +1341,8 @@ func (m *Model) headerProps() HeaderProps {
 		MaxIterations:   sess.MaxIterations,
 		SessionStatus:   sessionStatus,
 		StatusFlash:     m.statusFlash,
+		CPUPercent:      sess.CPUPercent,
+		MemPercent:      sess.MemPercent,
 		Width:           m.width,
 		Theme:           m.theme,
 	}
@@ -1614,6 +1648,32 @@ func gitTickCmd() tea.Cmd {
 	return tea.Tick(5*time.Second, func(t time.Time) tea.Msg {
 		return gitTickMsg{}
 	})
+}
+
+func systemStatsReadCmd(prevActive, prevTotal int64) tea.Cmd {
+	return func() tea.Msg {
+		cpuSample, cpuErr := stats.ReadCPUSample()
+		memPct := stats.ReadMemPercent()
+
+		var cpuPct *int
+		if cpuErr == nil && (prevActive != 0 || prevTotal != 0) {
+			prev := stats.CPUSample{Active: prevActive, Total: prevTotal}
+			cpuPct = stats.CPUPercent(prev, cpuSample)
+		}
+
+		var active, total int64
+		if cpuErr == nil {
+			active = cpuSample.Active
+			total = cpuSample.Total
+		}
+
+		return systemStatsResultMsg{
+			cpuPct:    cpuPct,
+			memPct:    memPct,
+			cpuActive: active,
+			cpuTotal:  total,
+		}
+	}
 }
 
 func gitRefreshCmd() tea.Cmd {

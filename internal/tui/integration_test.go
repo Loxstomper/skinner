@@ -65,7 +65,8 @@ func drainEventsTrackQuit(t *testing.T, m *Model) bool {
 		var nextMsgs []tea.Msg
 		for _, msg := range msgs {
 			// Skip tick messages — they cause infinite loops.
-			if _, ok := msg.(tickMsg); ok {
+			switch msg.(type) {
+			case tickMsg, systemStatsResultMsg:
 				continue
 			}
 			// Check if we received a QuitMsg (produced by tea.Quit).
@@ -86,13 +87,24 @@ func drainEventsTrackQuit(t *testing.T, m *Model) bool {
 
 // executeBatchCmd executes a tea.Cmd and collects all resulting messages.
 // It handles tea.BatchMsg by recursively executing sub-commands.
-// For commands that block on channels, it uses a short timeout.
+// Commands that block longer than 50ms are skipped to avoid hanging on
+// tea.Tick and channel-reading commands in tests.
 func executeBatchCmd(cmd tea.Cmd) []tea.Msg {
 	if cmd == nil {
 		return nil
 	}
 
-	msg := cmd()
+	ch := make(chan tea.Msg, 1)
+	go func() {
+		ch <- cmd()
+	}()
+
+	var msg tea.Msg
+	select {
+	case msg = <-ch:
+	case <-time.After(50 * time.Millisecond):
+		return nil
+	}
 	if msg == nil {
 		return nil
 	}

@@ -31,3 +31,4 @@ Skinner is a Go TUI that runs Claude CLI in a loop and displays tool call activi
 | [git-view.md](git-view.md) | Read-only git history viewer with side-by-side diffs and syntax highlighting |
 | [thinking-indicator.md](thinking-indicator.md) | Transient thinking row with timer when waiting for Claude's API response |
 | [file-explorer.md](file-explorer.md) | File tree browser with syntax-highlighted preview, fuzzy search, git status |
+| [system-stats.md](system-stats.md) | System-wide CPU and memory utilization in header bar |
