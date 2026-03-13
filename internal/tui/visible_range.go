@@ -14,13 +14,66 @@ type visibleWindow struct {
 	CursorItemIndex int // index of item containing cursor, or -1 if cursor is off-screen
 }
 
+// itemLineCountForSubScroll returns the line count for an item, using capped
+// line counts when the item (or a group child) is the sub-scrolled item.
+// flatPos is the starting flat cursor position for this item.
+// subScrollIdx is the flat position of the sub-scrolled item (-1 if not active).
+// paneHeight is the viewport height used for sub-scroll capping calculations.
+func itemLineCountForSubScroll(item model.TimelineItem, compactView bool, width, flatPos, subScrollIdx, paneHeight int) int {
+	if subScrollIdx < 0 {
+		return ItemLineCount(item, compactView, width)
+	}
+
+	switch it := item.(type) {
+	case *model.ToolCall:
+		if flatPos == subScrollIdx {
+			return toolCallLineCountCapped(it, width, paneHeight)
+		}
+	case *model.ToolCallGroup:
+		if it.Expanded {
+			childStart := flatPos + 1
+			childEnd := childStart + len(it.Children)
+			if subScrollIdx >= childStart && subScrollIdx < childEnd {
+				// Sub-scrolled child is in this group — compute with capped child.
+				lc := 1 // header
+				cf := childStart
+				for _, c := range it.Children {
+					if cf == subScrollIdx {
+						lc += toolCallLineCountCapped(c, width, paneHeight)
+					} else {
+						lc += toolCallLineCount(c, width)
+					}
+					cf++
+				}
+				return lc
+			}
+		}
+	}
+
+	return ItemLineCount(item, compactView, width)
+}
+
+// flatAdvance returns the number of flat cursor positions consumed by an item.
+func flatAdvance(item model.TimelineItem) int {
+	if g, ok := item.(*model.ToolCallGroup); ok {
+		n := 1 // header
+		if g.Expanded {
+			n += len(g.Children)
+		}
+		return n
+	}
+	return 1
+}
+
 // visibleRangeFromBottom computes the visible window when pinned to the
 // bottom of the timeline (auto-follow mode). It walks items backward from the
 // last item, accumulating line counts via ItemLineCount, and stops once
 // viewportHeight lines are covered — making the backward walk O(visible)
 // rather than O(n). This is the fast path for the common auto-follow case
 // where the user is watching a live feed and all items are collapsed.
-func visibleRangeFromBottom(items []model.TimelineItem, viewportHeight, cursorPos, width int, compactView bool) visibleWindow {
+//
+// subScrollIdx is the flat cursor position of the sub-scrolled item (-1 if not active).
+func visibleRangeFromBottom(items []model.TimelineItem, viewportHeight, cursorPos, width int, compactView bool, subScrollIdx int) visibleWindow {
 	w := visibleWindow{
 		StartItem:       -1,
 		CursorItemIndex: -1,
@@ -32,11 +85,21 @@ func visibleRangeFromBottom(items []model.TimelineItem, viewportHeight, cursorPo
 	}
 
 	// Walk backwards from the last item, accumulating line counts.
+	// We need flatPos for sub-scroll capping, so precompute ending flatPos
+	// and walk backward.
 	linesAccum := 0
 	startIdx := 0
 
+	// Compute per-item flatPos start positions for sub-scroll lookup.
+	flatStarts := make([]int, n)
+	fp := 0
+	for i := 0; i < n; i++ {
+		flatStarts[i] = fp
+		fp += flatAdvance(items[i])
+	}
+
 	for i := n - 1; i >= 0; i-- {
-		lc := ItemLineCount(items[i], compactView, width)
+		lc := itemLineCountForSubScroll(items[i], compactView, width, flatStarts[i], subScrollIdx, viewportHeight)
 		linesAccum += lc
 		if linesAccum >= viewportHeight {
 			startIdx = i
@@ -48,22 +111,14 @@ func visibleRangeFromBottom(items []model.TimelineItem, viewportHeight, cursorPo
 
 	w.StartItem = startIdx
 	w.EndItem = n - 1
-	w.EndLineOffset = ItemLineCount(items[n-1], compactView, width)
+	w.EndLineOffset = itemLineCountForSubScroll(items[n-1], compactView, width, flatStarts[n-1], subScrollIdx, viewportHeight)
 
-	// Compute AbsLineNumber and starting flatPos in one forward pass up to startIdx.
+	// Compute AbsLineNumber in one forward pass up to startIdx.
 	linesBefore := 0
-	flatPos := 0
 	for i := 0; i < startIdx; i++ {
-		linesBefore += ItemLineCount(items[i], compactView, width)
-		if g, ok := items[i].(*model.ToolCallGroup); ok {
-			flatPos++
-			if g.Expanded {
-				flatPos += len(g.Children)
-			}
-		} else {
-			flatPos++
-		}
+		linesBefore += itemLineCountForSubScroll(items[i], compactView, width, flatStarts[i], subScrollIdx, viewportHeight)
 	}
+	flatPos := flatStarts[startIdx]
 	w.AbsLineNumber = linesBefore + w.StartLineOffset
 
 	// Walk visible items to find cursor ownership.
@@ -102,7 +157,10 @@ func visibleRangeFromBottom(items []model.TimelineItem, viewportHeight, cursorPo
 // as Timeline.Cursor). CursorItemIndex is set to the items-slice index of the
 // item that owns the cursor, or -1 if the cursor's item doesn't overlap the
 // viewport.
-func visibleRange(items []model.TimelineItem, scrollOffset, viewportHeight, cursorPos, width int, compactView bool) visibleWindow {
+//
+// subScrollIdx is the flat cursor position of the sub-scrolled item (-1 if not active).
+// When active, the sub-scrolled item's line count is capped per sub-scroll rules.
+func visibleRange(items []model.TimelineItem, scrollOffset, viewportHeight, cursorPos, width int, compactView bool, subScrollIdx int) visibleWindow {
 	w := visibleWindow{
 		StartItem:       -1,
 		CursorItemIndex: -1,
@@ -118,7 +176,7 @@ func visibleRange(items []model.TimelineItem, scrollOffset, viewportHeight, curs
 	flatPos := 0
 
 	for i, item := range items {
-		lc := ItemLineCount(item, compactView, width)
+		lc := itemLineCountForSubScroll(item, compactView, width, flatPos, subScrollIdx, viewportHeight)
 		itemEnd := currentLine + lc
 
 		overlaps := itemEnd > scrollOffset && currentLine < viewEnd

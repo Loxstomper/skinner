@@ -41,10 +41,12 @@ Spec: [specs/viewport-rendering.md](specs/viewport-rendering.md)
    - Benchmark results at n=500: ~360μs (was 4.7ms), 2,201 allocs (was 38,537), ~200KB (was 1.4MB)
    - Constant time across n=50/200/500 confirming O(visible) behavior
 
-6. **Handle sub-scroll in viewport rendering**
-   - Currently sub-scroll falls back to full-render path (all items rendered, sliced by `renderWithLines`)
-   - Need to integrate sub-scroll with two-phase rendering: `visibleRange` with capped line counts
-   - Verify existing sub-scroll enter/exit/navigation still works correctly (currently passing all tests)
+6. ~~**Handle sub-scroll in viewport rendering**~~ ✅ DONE
+   - Added `itemLineCountForSubScroll()` helper that uses `toolCallLineCountCapped` for the sub-scrolled item (handles both top-level tool calls and group children)
+   - Added `subScrollIdx` parameter to `visibleRange()` and `visibleRangeFromBottom()`
+   - Removed `fullRender` fallback in `View()` — sub-scroll now uses the same two-phase rendering path as normal scrolling
+   - Removed dead `renderWithLines()` function (was only used by the fullRender path)
+   - 5 new tests: sub-scroll capping, partial scroll, group child sub-scroll, fromBottom consistency with sub-scroll, no-effect when subScrollIdx=-1
 
 7. ~~**Handle groups in viewport rendering**~~ ✅ DONE (completed as part of task 5)
    - Groups are rendered in phase 2 with the same logic as before, but only when in the visible range

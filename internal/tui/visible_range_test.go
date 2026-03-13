@@ -17,7 +17,7 @@ func makeCollapsedToolCalls(n int) []model.TimelineItem {
 }
 
 func TestVisibleRangeEmpty(t *testing.T) {
-	w := visibleRange(nil, 0, 50, 0, 80, false)
+	w := visibleRange(nil, 0, 50, 0, 80, false, -1)
 	if w.StartItem != -1 {
 		t.Errorf("StartItem = %d, want -1", w.StartItem)
 	}
@@ -28,7 +28,7 @@ func TestVisibleRangeEmpty(t *testing.T) {
 
 func TestVisibleRangeZeroViewport(t *testing.T) {
 	items := makeCollapsedToolCalls(5)
-	w := visibleRange(items, 0, 0, 0, 80, false)
+	w := visibleRange(items, 0, 0, 0, 80, false, -1)
 	if w.StartItem != -1 {
 		t.Errorf("StartItem = %d, want -1", w.StartItem)
 	}
@@ -37,7 +37,7 @@ func TestVisibleRangeZeroViewport(t *testing.T) {
 func TestVisibleRangeAllVisible(t *testing.T) {
 	// 5 collapsed items = 5 lines total. Viewport = 10 lines.
 	items := makeCollapsedToolCalls(5)
-	w := visibleRange(items, 0, 10, 0, 80, false)
+	w := visibleRange(items, 0, 10, 0, 80, false, -1)
 
 	if w.StartItem != 0 {
 		t.Errorf("StartItem = %d, want 0", w.StartItem)
@@ -62,7 +62,7 @@ func TestVisibleRangeAllVisible(t *testing.T) {
 func TestVisibleRangeScrollMiddle(t *testing.T) {
 	// 10 collapsed items, viewport=3, scroll=4 → visible items 4,5,6
 	items := makeCollapsedToolCalls(10)
-	w := visibleRange(items, 4, 3, 5, 80, false)
+	w := visibleRange(items, 4, 3, 5, 80, false, -1)
 
 	if w.StartItem != 4 {
 		t.Errorf("StartItem = %d, want 4", w.StartItem)
@@ -88,7 +88,7 @@ func TestVisibleRangeScrollMiddle(t *testing.T) {
 func TestVisibleRangeScrollBottom(t *testing.T) {
 	// 10 collapsed items, viewport=3, scroll=7 → visible items 7,8,9
 	items := makeCollapsedToolCalls(10)
-	w := visibleRange(items, 7, 3, 9, 80, false)
+	w := visibleRange(items, 7, 3, 9, 80, false, -1)
 
 	if w.StartItem != 7 {
 		t.Errorf("StartItem = %d, want 7", w.StartItem)
@@ -104,7 +104,7 @@ func TestVisibleRangeScrollBottom(t *testing.T) {
 func TestVisibleRangeCursorOffScreen(t *testing.T) {
 	// 10 collapsed items, viewport=3, scroll=4, cursor=0 (above viewport)
 	items := makeCollapsedToolCalls(10)
-	w := visibleRange(items, 4, 3, 0, 80, false)
+	w := visibleRange(items, 4, 3, 0, 80, false, -1)
 
 	if w.CursorItemIndex != -1 {
 		t.Errorf("CursorItemIndex = %d, want -1 (off-screen)", w.CursorItemIndex)
@@ -129,7 +129,7 @@ func TestVisibleRangeExpandedItem(t *testing.T) {
 	}
 
 	// Viewport=4, scroll=0: see item 0 (1 line) + first 3 lines of item 1
-	w := visibleRange(items, 0, 4, 0, 80, false)
+	w := visibleRange(items, 0, 4, 0, 80, false, -1)
 
 	if w.StartItem != 0 {
 		t.Errorf("StartItem = %d, want 0", w.StartItem)
@@ -160,7 +160,7 @@ func TestVisibleRangePartialItemAtTop(t *testing.T) {
 
 	// Scroll into the middle of item 0
 	scroll := 3
-	w := visibleRange(items, scroll, 5, 0, 80, false)
+	w := visibleRange(items, scroll, 5, 0, 80, false, -1)
 
 	if w.StartItem != 0 {
 		t.Errorf("StartItem = %d, want 0", w.StartItem)
@@ -196,7 +196,7 @@ func TestVisibleRangeExpandedGroup(t *testing.T) {
 	}
 
 	// Viewport covers everything (scroll=0, height=10)
-	w := visibleRange(items, 0, 10, 3, 80, false)
+	w := visibleRange(items, 0, 10, 3, 80, false, -1)
 
 	if w.StartItem != 0 {
 		t.Errorf("StartItem = %d, want 0", w.StartItem)
@@ -224,7 +224,7 @@ func TestVisibleRangeCollapsedGroup(t *testing.T) {
 		&model.ToolCall{Name: "Bash", Status: model.ToolCallDone}, // flat 1
 	}
 
-	w := visibleRange(items, 0, 10, 0, 80, false)
+	w := visibleRange(items, 0, 10, 0, 80, false, -1)
 
 	if w.StartItem != 0 {
 		t.Errorf("StartItem = %d, want 0", w.StartItem)
@@ -248,7 +248,7 @@ func TestVisibleRangeGroupCursorOnHeader(t *testing.T) {
 	items := []model.TimelineItem{group}
 
 	// Cursor at flat 0 = group header
-	w := visibleRange(items, 0, 10, 0, 80, false)
+	w := visibleRange(items, 0, 10, 0, 80, false, -1)
 	if w.CursorItemIndex != 0 {
 		t.Errorf("CursorItemIndex = %d, want 0", w.CursorItemIndex)
 	}
@@ -260,7 +260,7 @@ func TestVisibleRangeTextBlock(t *testing.T) {
 		&model.ToolCall{Name: "Bash", Status: model.ToolCallDone},
 	}
 
-	w := visibleRange(items, 0, 10, 0, 80, false)
+	w := visibleRange(items, 0, 10, 0, 80, false, -1)
 
 	if w.StartItem != 0 {
 		t.Errorf("StartItem = %d, want 0", w.StartItem)
@@ -277,7 +277,7 @@ func TestVisibleRangeCompactView(t *testing.T) {
 		&model.ToolCall{Name: "Bash", Status: model.ToolCallDone},
 	}
 
-	w := visibleRange(items, 0, 1, 0, 80, true)
+	w := visibleRange(items, 0, 1, 0, 80, true, -1)
 
 	// Only 1 line visible, should show just item 0
 	if w.StartItem != 0 {
@@ -300,7 +300,7 @@ func TestVisibleRangeConsistentWithTotalLines(t *testing.T) {
 	}
 
 	total := TotalLines(items, false, 80)
-	w := visibleRange(items, 0, total, 0, 80, false)
+	w := visibleRange(items, 0, total, 0, 80, false, -1)
 
 	if w.StartItem != 0 {
 		t.Errorf("StartItem = %d, want 0", w.StartItem)
@@ -322,7 +322,7 @@ func TestVisibleRangeEarlyExit(t *testing.T) {
 	// With 1000 collapsed items, visibleRange should stop early.
 	// We can't directly test "early exit" but we can verify correctness.
 	items := makeCollapsedToolCalls(1000)
-	w := visibleRange(items, 500, 10, 505, 80, false)
+	w := visibleRange(items, 500, 10, 505, 80, false, -1)
 
 	if w.StartItem != 500 {
 		t.Errorf("StartItem = %d, want 500", w.StartItem)
@@ -338,7 +338,7 @@ func TestVisibleRangeEarlyExit(t *testing.T) {
 func TestVisibleRangeCursorBelowViewport(t *testing.T) {
 	items := makeCollapsedToolCalls(10)
 	// Viewport shows items 0-2, cursor at item 8
-	w := visibleRange(items, 0, 3, 8, 80, false)
+	w := visibleRange(items, 0, 3, 8, 80, false, -1)
 
 	if w.CursorItemIndex != -1 {
 		t.Errorf("CursorItemIndex = %d, want -1 (cursor below viewport)", w.CursorItemIndex)
@@ -466,8 +466,8 @@ func TestVisibleRangeFromBottomMatchesVisibleRange(t *testing.T) {
 				scrollOffset = 0
 			}
 
-			expected := visibleRange(tt.items, scrollOffset, tt.height, tt.cursor, tt.width, tt.compact)
-			got := visibleRangeFromBottom(tt.items, tt.height, tt.cursor, tt.width, tt.compact)
+			expected := visibleRange(tt.items, scrollOffset, tt.height, tt.cursor, tt.width, tt.compact, -1)
+			got := visibleRangeFromBottom(tt.items, tt.height, tt.cursor, tt.width, tt.compact, -1)
 
 			if got != expected {
 				t.Errorf("mismatch:\n  got:  %+v\n  want: %+v", got, expected)
@@ -477,7 +477,7 @@ func TestVisibleRangeFromBottomMatchesVisibleRange(t *testing.T) {
 }
 
 func TestVisibleRangeFromBottomEmpty(t *testing.T) {
-	w := visibleRangeFromBottom(nil, 50, 0, 80, false)
+	w := visibleRangeFromBottom(nil, 50, 0, 80, false, -1)
 	if w.StartItem != -1 {
 		t.Errorf("StartItem = %d, want -1", w.StartItem)
 	}
@@ -488,7 +488,7 @@ func TestVisibleRangeFromBottomEmpty(t *testing.T) {
 
 func TestVisibleRangeFromBottomZeroViewport(t *testing.T) {
 	items := makeCollapsedToolCalls(5)
-	w := visibleRangeFromBottom(items, 0, 0, 80, false)
+	w := visibleRangeFromBottom(items, 0, 0, 80, false, -1)
 	if w.StartItem != -1 {
 		t.Errorf("StartItem = %d, want -1", w.StartItem)
 	}
@@ -511,13 +511,176 @@ func TestVisibleRangeWidthAffectsEditLayout(t *testing.T) {
 	narrowLC := ItemLineCount(tc, false, 80)
 	wideLC := ItemLineCount(tc, false, 140)
 
-	wNarrow := visibleRange(items, 0, 100, 0, 80, false)
-	wWide := visibleRange(items, 0, 100, 0, 140, false)
+	wNarrow := visibleRange(items, 0, 100, 0, 80, false, -1)
+	wWide := visibleRange(items, 0, 100, 0, 140, false, -1)
 
 	if wNarrow.EndLineOffset != narrowLC {
 		t.Errorf("narrow EndLineOffset = %d, want %d", wNarrow.EndLineOffset, narrowLC)
 	}
 	if wWide.EndLineOffset != wideLC {
 		t.Errorf("wide EndLineOffset = %d, want %d", wWide.EndLineOffset, wideLC)
+	}
+}
+
+// makeSubScrollTestItems creates items with a large expanded tool call at the given
+// index (flat position) suitable for sub-scroll testing.
+func makeSubScrollTestItems() ([]model.TimelineItem, int) {
+	var lines []string
+	for i := 0; i < 50; i++ {
+		lines = append(lines, "x")
+	}
+	content := ""
+	for i, l := range lines {
+		if i > 0 {
+			content += "\n"
+		}
+		content += l
+	}
+	items := []model.TimelineItem{
+		&model.ToolCall{Name: "Read", Status: model.ToolCallDone},                                         // flat 0
+		&model.ToolCall{Name: "Read", Status: model.ToolCallDone},                                         // flat 1
+		&model.ToolCall{Name: "Read", Status: model.ToolCallDone, Expanded: true, ResultContent: content}, // flat 2, 51 lines
+		&model.ToolCall{Name: "Read", Status: model.ToolCallDone},                                         // flat 3
+		&model.ToolCall{Name: "Read", Status: model.ToolCallDone},                                         // flat 4
+	}
+	return items, 2 // subScrollIdx = flat position 2
+}
+
+func TestVisibleRangeSubScroll(t *testing.T) {
+	// With sub-scroll active on item 2 (50 content lines), the line count
+	// should be capped. paneHeight=20 → cap = 70% * 20 = 14 → 1 + 14 = 15 lines.
+	items, subScrollIdx := makeSubScrollTestItems()
+	paneHeight := 20
+
+	// Without sub-scroll: item 2 has 1 + 50 = 51 lines.
+	normalLC := ItemLineCount(items[2], false, 80)
+	if normalLC != 51 {
+		t.Fatalf("expected normal line count 51, got %d", normalLC)
+	}
+
+	// With sub-scroll: item 2 should be capped.
+	cappedLC := itemLineCountForSubScroll(items[2], false, 80, subScrollIdx, subScrollIdx, paneHeight)
+	expectedCapped := 1 + subScrollViewportHeight(50, paneHeight) // 1 + 14 = 15
+	if cappedLC != expectedCapped {
+		t.Fatalf("expected capped line count %d, got %d", expectedCapped, cappedLC)
+	}
+
+	// Total lines with sub-scroll: 1 + 1 + 15 + 1 + 1 = 19
+	// Scroll=0, viewport=20 → all items visible.
+	w := visibleRange(items, 0, paneHeight, subScrollIdx, 80, false, subScrollIdx)
+	if w.StartItem != 0 {
+		t.Errorf("StartItem = %d, want 0", w.StartItem)
+	}
+	if w.EndItem != 4 {
+		t.Errorf("EndItem = %d, want 4", w.EndItem)
+	}
+	if w.CursorItemIndex != 2 {
+		t.Errorf("CursorItemIndex = %d, want 2", w.CursorItemIndex)
+	}
+}
+
+func TestVisibleRangeSubScrollPartial(t *testing.T) {
+	// With sub-scroll capping, verify items after the sub-scrolled item
+	// are reachable when scrolled down.
+	items, subScrollIdx := makeSubScrollTestItems()
+
+	// Use paneHeight=20 for capping consistency with other tests.
+	// visibleRange uses viewportHeight as paneHeight for sub-scroll capping.
+	// With viewport=20: cap = 14, sub-scroll item = 15 lines.
+	// Total = 1+1+15+1+1 = 19. Scroll=17, viewport=20 → items 3,4 at lines 17,18.
+	w := visibleRange(items, 17, 20, 4, 80, false, subScrollIdx)
+	if w.StartItem != 3 {
+		t.Errorf("StartItem = %d, want 3", w.StartItem)
+	}
+	if w.EndItem != 4 {
+		t.Errorf("EndItem = %d, want 4", w.EndItem)
+	}
+}
+
+func TestVisibleRangeSubScrollGroupChild(t *testing.T) {
+	// Sub-scroll on a group child.
+	var lines []string
+	for i := 0; i < 30; i++ {
+		lines = append(lines, "x")
+	}
+	content := ""
+	for i, l := range lines {
+		if i > 0 {
+			content += "\n"
+		}
+		content += l
+	}
+	group := &model.ToolCallGroup{
+		ToolName: "Read",
+		Expanded: true,
+		Children: []*model.ToolCall{
+			{Name: "Read", Summary: "a.go", Status: model.ToolCallDone},
+			{Name: "Read", Summary: "b.go", Status: model.ToolCallDone, Expanded: true, ResultContent: content},
+		},
+	}
+	items := []model.TimelineItem{
+		&model.ToolCall{Name: "Bash", Status: model.ToolCallDone}, // flat 0
+		group, // flat 1 (header), flat 2 (child 0), flat 3 (child 1 — sub-scrolled)
+	}
+
+	subScrollIdx := 3 // child 1 of the group
+	paneHeight := 20
+
+	// Without sub-scroll, group has 1 + 1 + (1+30) = 33 lines.
+	// With sub-scroll on child 1: cap = 70% * 20 = 14 → child 1 = 1+14 = 15 lines.
+	// Group = 1 + 1 + 15 = 17 lines. Total = 1 + 17 = 18 lines.
+	w := visibleRange(items, 0, paneHeight, subScrollIdx, 80, false, subScrollIdx)
+	if w.StartItem != 0 {
+		t.Errorf("StartItem = %d, want 0", w.StartItem)
+	}
+	if w.EndItem != 1 {
+		t.Errorf("EndItem = %d, want 1", w.EndItem)
+	}
+	// Cursor at flat 3 is in the group (item index 1)
+	if w.CursorItemIndex != 1 {
+		t.Errorf("CursorItemIndex = %d, want 1", w.CursorItemIndex)
+	}
+}
+
+func TestVisibleRangeFromBottomSubScroll(t *testing.T) {
+	// visibleRangeFromBottom should produce the same result as visibleRange
+	// when scrolled to the bottom, even with sub-scroll active.
+	items, subScrollIdx := makeSubScrollTestItems()
+	paneHeight := 20
+
+	// Compute total lines with sub-scroll capping.
+	totalLines := 0
+	fp := 0
+	for _, item := range items {
+		totalLines += itemLineCountForSubScroll(item, false, 80, fp, subScrollIdx, paneHeight)
+		fp += flatAdvance(item)
+	}
+
+	scrollOffset := totalLines - paneHeight
+	if scrollOffset < 0 {
+		scrollOffset = 0
+	}
+
+	expected := visibleRange(items, scrollOffset, paneHeight, subScrollIdx, 80, false, subScrollIdx)
+	got := visibleRangeFromBottom(items, paneHeight, subScrollIdx, 80, false, subScrollIdx)
+
+	if got != expected {
+		t.Errorf("mismatch:\n  got:  %+v\n  want: %+v", got, expected)
+	}
+}
+
+func TestItemLineCountForSubScrollNoEffect(t *testing.T) {
+	// When subScrollIdx is -1, itemLineCountForSubScroll should return
+	// the same result as ItemLineCount.
+	tc := &model.ToolCall{
+		Name: "Read", Status: model.ToolCallDone, Expanded: true,
+		ResultContent: "a\nb\nc\nd\ne",
+	}
+	items := []model.TimelineItem{tc}
+
+	normal := ItemLineCount(items[0], false, 80)
+	sub := itemLineCountForSubScroll(items[0], false, 80, 0, -1, 20)
+	if normal != sub {
+		t.Errorf("expected %d == %d when subScrollIdx=-1", normal, sub)
 	}
 }
