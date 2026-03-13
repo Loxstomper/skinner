@@ -384,3 +384,4 @@ func fakeClock(t *time.Time) func() time.Time {
 | `timeline` | Cursor movement, scroll, expand/collapse, rendering | Same pattern |
 | `executor` | Real executor: skip in CI. Fake executor: verify channel behavior. | Unit test the fake; integration test the real with a mock binary if needed |
 | Integration | Full TUI loop with fake executor | Create root model with `FakeExecutor`, send messages via `Update()`, assert `View()` output |
+| Benchmarks | Rendering and cursor hot paths at scale | `testing.B` sub-benchmarks at 50/200/500 items. See [benchmarks.md](../specs/benchmarks.md) |
