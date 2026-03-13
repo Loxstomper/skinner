@@ -8,12 +8,13 @@ Spec: [specs/viewport-rendering.md](specs/viewport-rendering.md)
    - Implemented `expandedContentLineCount(tc, width)` with zero-allocation helpers: `bashContentLineCount`, `editContentLineCount`, `writeContentLineCount`, `resultContentLineCount`
    - Edit diffs are width-aware: unified (old+new) when width < 120, side-by-side (max) when width >= 120
    - 18 unit tests verify counts match `len(expandedContentLines(...))` for all tool types, plus Edit layout-specific tests
-   - Note: existing `toolCallLineCount` is left unchanged — it still uses `expandedContentLines` (allocating). Task 2 will address using the new function.
 
-2. **Add `itemLineCount` helper to `expand.go` (or extend existing `ItemLineCount` in `cursor.go`)**
-   - Returns line count for any `TimelineItem` using `expandedContentLineCount` for expanded tool calls
-   - This is the building block for both `visibleRange` and `visibleRangeFromBottom`
-   - Should match the existing `ItemLineCount` in `cursor.go` — consider reusing or replacing it
+2. ~~**Add width parameter to `ItemLineCount` and make line counting zero-allocation**~~ ✅ DONE
+   - Updated `toolCallLineCount(tc, width)` and `toolCallLineCountCapped(tc, width, paneHeight)` to use `expandedContentLineCount` — zero allocation for line counting
+   - Added `width int` parameter to `ItemLineCount`, `TotalLines`, `FlatCursorLineRange`, `LineToFlatCursor`
+   - Updated all callers in `timeline.go` to pass `props.Width`
+   - Updated all tests to pass width parameter (80 for non-Edit tests, matching unified layout)
+   - This also fixes a pre-existing bug where Edit tool calls at width >= 120 had mismatched line counts between cursor functions (which always counted unified) and rendering (which used side-by-side)
 
 3. **Implement `visibleRange` function in `timeline.go`**
    - Walks items forward from index 0, accumulating line counts via `itemLineCount`

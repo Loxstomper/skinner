@@ -1411,11 +1411,11 @@ func TestTimeline_SubScroll_ToolCallLineCountCapped(t *testing.T) {
 		Expanded:      true,
 		ResultContent: strings.Repeat("x\n", 49) + "x", // 50 lines
 	}
-	full := toolCallLineCount(tc)
+	full := toolCallLineCount(tc, 80)
 	if full != 51 {
 		t.Errorf("expected full count 51 (1+50), got %d", full)
 	}
-	capped := toolCallLineCountCapped(tc, 20)
+	capped := toolCallLineCountCapped(tc, 80, 20)
 	// cap = 20*70/100 = 14, so capped = 1 + 14 = 15
 	if capped != 15 {
 		t.Errorf("expected capped count 15 (1+14), got %d", capped)

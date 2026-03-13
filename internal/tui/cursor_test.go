@@ -251,11 +251,11 @@ func TestFlatToItem_ItemToFlat_Roundtrip(t *testing.T) {
 }
 
 func TestItemLineCount_ToolCall(t *testing.T) {
-	lc := ItemLineCount(tc("a"), false)
+	lc := ItemLineCount(tc("a"), false, 80)
 	if lc != 1 {
 		t.Errorf("ItemLineCount(ToolCall, false) = %d, want 1", lc)
 	}
-	lc = ItemLineCount(tc("a"), true)
+	lc = ItemLineCount(tc("a"), true, 80)
 	if lc != 1 {
 		t.Errorf("ItemLineCount(ToolCall, true) = %d, want 1", lc)
 	}
@@ -280,7 +280,7 @@ func TestItemLineCount_TextBlock(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			item := &model.TextBlock{Text: tt.text, Expanded: tt.expanded}
-			got := ItemLineCount(item, tt.compactView)
+			got := ItemLineCount(item, tt.compactView, 80)
 			if got != tt.want {
 				t.Errorf("ItemLineCount = %d, want %d", got, tt.want)
 			}
@@ -290,20 +290,20 @@ func TestItemLineCount_TextBlock(t *testing.T) {
 
 func TestItemLineCount_Group(t *testing.T) {
 	expanded := expandedGroup(3)
-	lc := ItemLineCount(expanded, false)
+	lc := ItemLineCount(expanded, false, 80)
 	if lc != 4 { // header + 3 children
 		t.Errorf("ItemLineCount(expanded group of 3) = %d, want 4", lc)
 	}
 
 	collapsed := collapsedGroup(3)
-	lc = ItemLineCount(collapsed, false)
+	lc = ItemLineCount(collapsed, false, 80)
 	if lc != 1 { // header only
 		t.Errorf("ItemLineCount(collapsed group) = %d, want 1", lc)
 	}
 }
 
 func TestTotalLines_Empty(t *testing.T) {
-	total := TotalLines(nil, false)
+	total := TotalLines(nil, false, 80)
 	if total != 0 {
 		t.Errorf("TotalLines(nil) = %d, want 0", total)
 	}
@@ -315,7 +315,7 @@ func TestTotalLines_Mixed(t *testing.T) {
 		expandedGroup(2), // 3 lines (header + 2)
 		tb("x\ny\nz\nw"), // 3 lines (4 > maxLines=3, collapsed)
 	}
-	total := TotalLines(items, false)
+	total := TotalLines(items, false, 80)
 	if total != 7 { // 1 + 3 + 3
 		t.Errorf("TotalLines = %d, want 7", total)
 	}
@@ -326,7 +326,7 @@ func TestTotalLines_CompactView(t *testing.T) {
 		tc("a"),          // 1 line
 		tb("x\ny\nz\nw"), // 1 line in compact (4 > maxLines=1)
 	}
-	total := TotalLines(items, true)
+	total := TotalLines(items, true, 80)
 	if total != 2 { // 1 + 1
 		t.Errorf("TotalLines(compact) = %d, want 2", total)
 	}
@@ -345,7 +345,7 @@ func TestFlatCursorLineRange_StandaloneItems(t *testing.T) {
 		{2, 2, 1},
 	}
 	for _, tt := range tests {
-		start, count := FlatCursorLineRange(items, tt.flatIdx, false)
+		start, count := FlatCursorLineRange(items, tt.flatIdx, false, 80)
 		if start != tt.wantStart || count != tt.wantCount {
 			t.Errorf("FlatCursorLineRange(items, %d) = (%d, %d), want (%d, %d)",
 				tt.flatIdx, start, count, tt.wantStart, tt.wantCount)
@@ -369,7 +369,7 @@ func TestFlatCursorLineRange_TextBlock(t *testing.T) {
 		{2, 4, 1},
 	}
 	for _, tt := range tests {
-		start, count := FlatCursorLineRange(items, tt.flatIdx, false)
+		start, count := FlatCursorLineRange(items, tt.flatIdx, false, 80)
 		if start != tt.wantStart || count != tt.wantCount {
 			t.Errorf("FlatCursorLineRange(items, %d) = (%d, %d), want (%d, %d)",
 				tt.flatIdx, start, count, tt.wantStart, tt.wantCount)
@@ -397,7 +397,7 @@ func TestFlatCursorLineRange_ExpandedGroup(t *testing.T) {
 		{4, 4, 1},
 	}
 	for _, tt := range tests {
-		start, count := FlatCursorLineRange(items, tt.flatIdx, false)
+		start, count := FlatCursorLineRange(items, tt.flatIdx, false, 80)
 		if start != tt.wantStart || count != tt.wantCount {
 			t.Errorf("FlatCursorLineRange(items, %d) = (%d, %d), want (%d, %d)",
 				tt.flatIdx, start, count, tt.wantStart, tt.wantCount)
@@ -407,7 +407,7 @@ func TestFlatCursorLineRange_ExpandedGroup(t *testing.T) {
 
 func TestFlatCursorLineRange_OutOfRange(t *testing.T) {
 	items := []model.TimelineItem{tc("a")}
-	start, count := FlatCursorLineRange(items, 99, false)
+	start, count := FlatCursorLineRange(items, 99, false, 80)
 	// Out-of-range returns (total lines, 1) — the fallthrough at end
 	if count != 1 {
 		t.Errorf("FlatCursorLineRange(items, 99) count = %d, want 1", count)
@@ -416,14 +416,14 @@ func TestFlatCursorLineRange_OutOfRange(t *testing.T) {
 }
 
 func TestFlatCursorLineRange_Empty(t *testing.T) {
-	start, count := FlatCursorLineRange(nil, 0, false)
+	start, count := FlatCursorLineRange(nil, 0, false, 80)
 	if start != 0 || count != 1 {
 		t.Errorf("FlatCursorLineRange(nil, 0) = (%d, %d), want (0, 1)", start, count)
 	}
 }
 
 func TestLineToFlatCursor_Empty(t *testing.T) {
-	got := LineToFlatCursor(nil, 0, false)
+	got := LineToFlatCursor(nil, 0, false, 80)
 	if got != 0 {
 		t.Errorf("LineToFlatCursor(nil, 0) = %d, want 0", got)
 	}
@@ -441,7 +441,7 @@ func TestLineToFlatCursor_StandaloneItems(t *testing.T) {
 		{2, 2},
 	}
 	for _, tt := range tests {
-		got := LineToFlatCursor(items, tt.line, false)
+		got := LineToFlatCursor(items, tt.line, false, 80)
 		if got != tt.want {
 			t.Errorf("LineToFlatCursor(items, %d) = %d, want %d", tt.line, got, tt.want)
 		}
@@ -462,7 +462,7 @@ func TestLineToFlatCursor_TextBlock(t *testing.T) {
 		{4, 2}, // tc("b")
 	}
 	for _, tt := range tests {
-		got := LineToFlatCursor(items, tt.line, false)
+		got := LineToFlatCursor(items, tt.line, false, 80)
 		if got != tt.want {
 			t.Errorf("LineToFlatCursor(items, %d) = %d, want %d", tt.line, got, tt.want)
 		}
@@ -488,7 +488,7 @@ func TestLineToFlatCursor_ExpandedGroup(t *testing.T) {
 		{4, 4},
 	}
 	for _, tt := range tests {
-		got := LineToFlatCursor(items, tt.line, false)
+		got := LineToFlatCursor(items, tt.line, false, 80)
 		if got != tt.want {
 			t.Errorf("LineToFlatCursor(items, %d) = %d, want %d", tt.line, got, tt.want)
 		}
@@ -510,7 +510,7 @@ func TestLineToFlatCursor_CollapsedGroup(t *testing.T) {
 		{2, 2},
 	}
 	for _, tt := range tests {
-		got := LineToFlatCursor(items, tt.line, false)
+		got := LineToFlatCursor(items, tt.line, false, 80)
 		if got != tt.want {
 			t.Errorf("LineToFlatCursor(items, %d) = %d, want %d", tt.line, got, tt.want)
 		}
@@ -520,7 +520,7 @@ func TestLineToFlatCursor_CollapsedGroup(t *testing.T) {
 func TestLineToFlatCursor_BeyondEnd(t *testing.T) {
 	items := []model.TimelineItem{tc("a"), tc("b")}
 	// Line 99 is way beyond — should return last flat position (1)
-	got := LineToFlatCursor(items, 99, false)
+	got := LineToFlatCursor(items, 99, false, 80)
 	if got != 1 {
 		t.Errorf("LineToFlatCursor(items, 99) = %d, want 1", got)
 	}
@@ -538,8 +538,8 @@ func TestLineToFlatCursor_RoundtripWithFlatCursorLineRange(t *testing.T) {
 	}
 	count := FlatCursorCount(items)
 	for f := 0; f < count; f++ {
-		lineStart, _ := FlatCursorLineRange(items, f, false)
-		roundtrip := LineToFlatCursor(items, lineStart, false)
+		lineStart, _ := FlatCursorLineRange(items, f, false, 80)
+		roundtrip := LineToFlatCursor(items, lineStart, false, 80)
 		if roundtrip != f {
 			t.Errorf("Roundtrip failed: flat %d -> line %d -> flat %d", f, lineStart, roundtrip)
 		}
@@ -561,7 +561,7 @@ func TestLineToFlatCursor_CompactView(t *testing.T) {
 		{2, 2},
 	}
 	for _, tt := range tests {
-		got := LineToFlatCursor(items, tt.line, true)
+		got := LineToFlatCursor(items, tt.line, true, 80)
 		if got != tt.want {
 			t.Errorf("LineToFlatCursor(items, %d, compact) = %d, want %d", tt.line, got, tt.want)
 		}
@@ -588,14 +588,14 @@ func TestFlatCursorCount_MixedItems(t *testing.T) {
 func TestItemLineCount_ExpandedToolCall(t *testing.T) {
 	// An expanded ToolCall with 3 content lines = 1 header + 3 content = 4 lines
 	etc := expandedTC("a", 3)
-	lc := ItemLineCount(etc, false)
+	lc := ItemLineCount(etc, false, 80)
 	if lc != 4 {
 		t.Errorf("ItemLineCount(expanded ToolCall, 3 content lines) = %d, want 4", lc)
 	}
 
 	// A collapsed ToolCall still returns 1
 	collapsed := tc("b")
-	lc = ItemLineCount(collapsed, false)
+	lc = ItemLineCount(collapsed, false, 80)
 	if lc != 1 {
 		t.Errorf("ItemLineCount(collapsed ToolCall) = %d, want 1", lc)
 	}
@@ -605,7 +605,7 @@ func TestItemLineCount_GroupWithExpandedChild(t *testing.T) {
 	// Group with 3 children, child 1 expanded with 2 content lines.
 	// header(1) + child0(1) + child1(1+2=3) + child2(1) = 6
 	g := expandedGroupWithExpandedChild(3, 1, 2)
-	lc := ItemLineCount(g, false)
+	lc := ItemLineCount(g, false, 80)
 	if lc != 6 {
 		t.Errorf("ItemLineCount(group with expanded child) = %d, want 6", lc)
 	}
@@ -617,7 +617,7 @@ func TestTotalLines_WithExpandedToolCall(t *testing.T) {
 		expandedTC("a", 3), // 4 lines
 		tc("b"),            // 1 line
 	}
-	total := TotalLines(items, false)
+	total := TotalLines(items, false, 80)
 	if total != 5 {
 		t.Errorf("TotalLines with expanded ToolCall = %d, want 5", total)
 	}
@@ -639,7 +639,7 @@ func TestFlatCursorLineRange_ExpandedToolCall(t *testing.T) {
 		{2, 5, 1},
 	}
 	for _, tt := range tests {
-		start, count := FlatCursorLineRange(items, tt.flatIdx, false)
+		start, count := FlatCursorLineRange(items, tt.flatIdx, false, 80)
 		if start != tt.wantStart || count != tt.wantCount {
 			t.Errorf("FlatCursorLineRange(items, %d) = (%d, %d), want (%d, %d)",
 				tt.flatIdx, start, count, tt.wantStart, tt.wantCount)
@@ -671,7 +671,7 @@ func TestFlatCursorLineRange_GroupWithExpandedChild(t *testing.T) {
 		{5, 7, 1},
 	}
 	for _, tt := range tests {
-		start, count := FlatCursorLineRange(items, tt.flatIdx, false)
+		start, count := FlatCursorLineRange(items, tt.flatIdx, false, 80)
 		if start != tt.wantStart || count != tt.wantCount {
 			t.Errorf("FlatCursorLineRange(items, %d) = (%d, %d), want (%d, %d)",
 				tt.flatIdx, start, count, tt.wantStart, tt.wantCount)
@@ -700,7 +700,7 @@ func TestLineToFlatCursor_ExpandedToolCall(t *testing.T) {
 		{5, 2},
 	}
 	for _, tt := range tests {
-		got := LineToFlatCursor(items, tt.line, false)
+		got := LineToFlatCursor(items, tt.line, false, 80)
 		if got != tt.want {
 			t.Errorf("LineToFlatCursor(items, %d) = %d, want %d", tt.line, got, tt.want)
 		}
@@ -732,7 +732,7 @@ func TestLineToFlatCursor_GroupWithExpandedChild(t *testing.T) {
 		{7, 5},
 	}
 	for _, tt := range tests {
-		got := LineToFlatCursor(items, tt.line, false)
+		got := LineToFlatCursor(items, tt.line, false, 80)
 		if got != tt.want {
 			t.Errorf("LineToFlatCursor(items, %d) = %d, want %d", tt.line, got, tt.want)
 		}
@@ -750,8 +750,8 @@ func TestLineToFlatCursor_RoundtripWithExpandedToolCalls(t *testing.T) {
 	}
 	count := FlatCursorCount(items)
 	for f := 0; f < count; f++ {
-		lineStart, _ := FlatCursorLineRange(items, f, false)
-		roundtrip := LineToFlatCursor(items, lineStart, false)
+		lineStart, _ := FlatCursorLineRange(items, f, false, 80)
+		roundtrip := LineToFlatCursor(items, lineStart, false, 80)
 		if roundtrip != f {
 			t.Errorf("Roundtrip failed: flat %d -> line %d -> flat %d", f, lineStart, roundtrip)
 		}

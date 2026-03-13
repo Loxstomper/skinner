@@ -144,7 +144,7 @@ func (tl *Timeline) HandleActionWithCount(action string, count int, props Timeli
 		tl.Scroll += props.Height
 		tl.clampScroll(props)
 		tl.clampCursorToViewport(props)
-		total := TotalLines(props.Items, props.CompactView)
+		total := TotalLines(props.Items, props.CompactView, props.Width)
 		tl.AutoFollow.OnManualMove(tl.Scroll+props.Height >= total)
 
 	case "page_up":
@@ -651,7 +651,7 @@ func (tl *Timeline) scrollToBottom(props TimelineProps) {
 func (tl *Timeline) effectiveTotalLines(props TimelineProps) int {
 	var total int
 	if !tl.InSubScroll() {
-		total = TotalLines(props.Items, props.CompactView)
+		total = TotalLines(props.Items, props.CompactView, props.Width)
 	} else {
 		total = tl.totalLinesWithCap(props)
 	}
@@ -665,7 +665,7 @@ func (tl *Timeline) effectiveTotalLines(props TimelineProps) int {
 // for sub-scroll viewport capping.
 func (tl *Timeline) effectiveLineRange(props TimelineProps) (lineStart int, lineCount int) {
 	if !tl.InSubScroll() {
-		return FlatCursorLineRange(props.Items, tl.Cursor, props.CompactView)
+		return FlatCursorLineRange(props.Items, tl.Cursor, props.CompactView, props.Width)
 	}
 	return tl.lineRangeWithCap(props)
 }
@@ -677,13 +677,13 @@ func (tl *Timeline) totalLinesWithCap(props TimelineProps) int {
 	for _, item := range props.Items {
 		switch it := item.(type) {
 		case *model.TextBlock:
-			total += ItemLineCount(it, props.CompactView)
+			total += ItemLineCount(it, props.CompactView, props.Width)
 			flatPos++
 		case *model.ToolCall:
 			if flatPos == tl.SubScrollIdx {
-				total += toolCallLineCountCapped(it, props.Height)
+				total += toolCallLineCountCapped(it, props.Width, props.Height)
 			} else {
-				total += toolCallLineCount(it)
+				total += toolCallLineCount(it, props.Width)
 			}
 			flatPos++
 		case *model.ToolCallGroup:
@@ -692,9 +692,9 @@ func (tl *Timeline) totalLinesWithCap(props TimelineProps) int {
 			if it.Expanded {
 				for _, child := range it.Children {
 					if flatPos == tl.SubScrollIdx {
-						total += toolCallLineCountCapped(child, props.Height)
+						total += toolCallLineCountCapped(child, props.Width, props.Height)
 					} else {
-						total += toolCallLineCount(child)
+						total += toolCallLineCount(child, props.Width)
 					}
 					flatPos++
 				}
@@ -711,7 +711,7 @@ func (tl *Timeline) lineRangeWithCap(props TimelineProps) (lineStart int, lineCo
 	for _, item := range props.Items {
 		switch it := item.(type) {
 		case *model.TextBlock:
-			lc := ItemLineCount(it, props.CompactView)
+			lc := ItemLineCount(it, props.CompactView, props.Width)
 			if pos == tl.Cursor {
 				return line, lc
 			}
@@ -720,9 +720,9 @@ func (tl *Timeline) lineRangeWithCap(props TimelineProps) (lineStart int, lineCo
 		case *model.ToolCall:
 			var lc int
 			if pos == tl.SubScrollIdx {
-				lc = toolCallLineCountCapped(it, props.Height)
+				lc = toolCallLineCountCapped(it, props.Width, props.Height)
 			} else {
-				lc = toolCallLineCount(it)
+				lc = toolCallLineCount(it, props.Width)
 			}
 			if pos == tl.Cursor {
 				return line, lc
@@ -739,9 +739,9 @@ func (tl *Timeline) lineRangeWithCap(props TimelineProps) (lineStart int, lineCo
 				for _, child := range it.Children {
 					var clc int
 					if pos == tl.SubScrollIdx {
-						clc = toolCallLineCountCapped(child, props.Height)
+						clc = toolCallLineCountCapped(child, props.Width, props.Height)
 					} else {
-						clc = toolCallLineCount(child)
+						clc = toolCallLineCount(child, props.Width)
 					}
 					if pos == tl.Cursor {
 						return line, clc
@@ -759,7 +759,7 @@ func (tl *Timeline) lineRangeWithCap(props TimelineProps) (lineStart int, lineCo
 // page scrolling. If the cursor is above the viewport, it moves to the first
 // visible flat position; if below, to the last visible flat position.
 func (tl *Timeline) clampCursorToViewport(props TimelineProps) {
-	lineStart, lc := FlatCursorLineRange(props.Items, tl.Cursor, props.CompactView)
+	lineStart, lc := FlatCursorLineRange(props.Items, tl.Cursor, props.CompactView, props.Width)
 	lineEnd := lineStart + lc
 
 	viewStart := tl.Scroll
@@ -767,10 +767,10 @@ func (tl *Timeline) clampCursorToViewport(props TimelineProps) {
 
 	if lineEnd <= viewStart {
 		// Cursor is above viewport — move to first visible position
-		tl.Cursor = LineToFlatCursor(props.Items, viewStart, props.CompactView)
+		tl.Cursor = LineToFlatCursor(props.Items, viewStart, props.CompactView, props.Width)
 	} else if lineStart >= viewEnd {
 		// Cursor is below viewport — move to last visible position
-		tl.Cursor = LineToFlatCursor(props.Items, viewEnd-1, props.CompactView)
+		tl.Cursor = LineToFlatCursor(props.Items, viewEnd-1, props.CompactView, props.Width)
 	}
 }
 
@@ -791,12 +791,12 @@ func (tl *Timeline) ScrollBy(delta int, props TimelineProps) {
 // Returns true if the click was handled.
 func (tl *Timeline) ClickRow(row int, props TimelineProps) bool {
 	line := tl.Scroll + row
-	total := TotalLines(props.Items, props.CompactView)
+	total := TotalLines(props.Items, props.CompactView, props.Width)
 	if line < 0 || line >= total {
 		return false
 	}
 	oldCursor := tl.Cursor
-	tl.Cursor = LineToFlatCursor(props.Items, line, props.CompactView)
+	tl.Cursor = LineToFlatCursor(props.Items, line, props.CompactView, props.Width)
 	maxPos := FlatCursorCount(props.Items) - 1
 	tl.AutoFollow.OnManualMove(tl.Cursor >= maxPos)
 	if tl.Cursor == oldCursor {
@@ -851,7 +851,7 @@ func (tl *Timeline) lineToFlatCursorWithCap(line int, props TimelineProps) int {
 	for _, item := range props.Items {
 		switch it := item.(type) {
 		case *model.TextBlock:
-			lc := ItemLineCount(it, props.CompactView)
+			lc := ItemLineCount(it, props.CompactView, props.Width)
 			if line < currentLine+lc {
 				return flatPos
 			}
@@ -860,9 +860,9 @@ func (tl *Timeline) lineToFlatCursorWithCap(line int, props TimelineProps) int {
 		case *model.ToolCall:
 			var lc int
 			if flatPos == tl.SubScrollIdx {
-				lc = toolCallLineCountCapped(it, props.Height)
+				lc = toolCallLineCountCapped(it, props.Width, props.Height)
 			} else {
-				lc = toolCallLineCount(it)
+				lc = toolCallLineCount(it, props.Width)
 			}
 			if line < currentLine+lc {
 				return flatPos
@@ -879,9 +879,9 @@ func (tl *Timeline) lineToFlatCursorWithCap(line int, props TimelineProps) int {
 				for _, child := range it.Children {
 					var clc int
 					if flatPos == tl.SubScrollIdx {
-						clc = toolCallLineCountCapped(child, props.Height)
+						clc = toolCallLineCountCapped(child, props.Width, props.Height)
 					} else {
-						clc = toolCallLineCount(child)
+						clc = toolCallLineCount(child, props.Width)
 					}
 					if line < currentLine+clc {
 						return flatPos

@@ -74,7 +74,8 @@ func ItemToFlat(items []model.TimelineItem, itemIdx int) int {
 }
 
 // ItemLineCount returns the number of rendered lines for a single timeline item.
-func ItemLineCount(item model.TimelineItem, compactView bool) int {
+// The width parameter determines Edit diff layout (side-by-side when >= 120).
+func ItemLineCount(item model.TimelineItem, compactView bool, width int) int {
 	switch it := item.(type) {
 	case *model.TextBlock:
 		lines := strings.Count(it.Text, "\n") + 1
@@ -87,12 +88,12 @@ func ItemLineCount(item model.TimelineItem, compactView bool) int {
 		}
 		return lines
 	case *model.ToolCall:
-		return toolCallLineCount(it)
+		return toolCallLineCount(it, width)
 	case *model.ToolCallGroup:
 		if it.Expanded {
 			lines := 1 // header
 			for _, child := range it.Children {
-				lines += toolCallLineCount(child)
+				lines += toolCallLineCount(child, width)
 			}
 			return lines
 		}
@@ -102,10 +103,11 @@ func ItemLineCount(item model.TimelineItem, compactView bool) int {
 }
 
 // TotalLines returns the total number of rendered lines across all items.
-func TotalLines(items []model.TimelineItem, compactView bool) int {
+// The width parameter determines Edit diff layout (side-by-side when >= 120).
+func TotalLines(items []model.TimelineItem, compactView bool, width int) int {
 	total := 0
 	for _, item := range items {
-		total += ItemLineCount(item, compactView)
+		total += ItemLineCount(item, compactView, width)
 	}
 	return total
 }
@@ -113,7 +115,8 @@ func TotalLines(items []model.TimelineItem, compactView bool) int {
 // LineToFlatCursor maps a rendered line number to the flat cursor position
 // that owns that line (inverse of FlatCursorLineRange). If the line is beyond
 // all items, it returns the last valid flat position.
-func LineToFlatCursor(items []model.TimelineItem, line int, compactView bool) int {
+// The width parameter determines Edit diff layout (side-by-side when >= 120).
+func LineToFlatCursor(items []model.TimelineItem, line int, compactView bool, width int) int {
 	if len(items) == 0 {
 		return 0
 	}
@@ -122,14 +125,14 @@ func LineToFlatCursor(items []model.TimelineItem, line int, compactView bool) in
 	for _, item := range items {
 		switch it := item.(type) {
 		case *model.TextBlock:
-			lc := ItemLineCount(it, compactView)
+			lc := ItemLineCount(it, compactView, width)
 			if line < currentLine+lc {
 				return flatPos
 			}
 			currentLine += lc
 			flatPos++
 		case *model.ToolCall:
-			lc := toolCallLineCount(it)
+			lc := toolCallLineCount(it, width)
 			if line < currentLine+lc {
 				return flatPos
 			}
@@ -144,7 +147,7 @@ func LineToFlatCursor(items []model.TimelineItem, line int, compactView bool) in
 			flatPos++
 			if it.Expanded {
 				for _, child := range it.Children {
-					clc := toolCallLineCount(child)
+					clc := toolCallLineCount(child, width)
 					if line < currentLine+clc {
 						return flatPos
 					}
@@ -164,20 +167,21 @@ func LineToFlatCursor(items []model.TimelineItem, line int, compactView bool) in
 
 // FlatCursorLineRange returns the start line and line count for the given flat
 // cursor position.
-func FlatCursorLineRange(items []model.TimelineItem, flatIdx int, compactView bool) (lineStart int, lineCount int) {
+// The width parameter determines Edit diff layout (side-by-side when >= 120).
+func FlatCursorLineRange(items []model.TimelineItem, flatIdx int, compactView bool, width int) (lineStart int, lineCount int) {
 	line := 0
 	pos := 0
 	for _, item := range items {
 		switch it := item.(type) {
 		case *model.TextBlock:
-			lc := ItemLineCount(it, compactView)
+			lc := ItemLineCount(it, compactView, width)
 			if pos == flatIdx {
 				return line, lc
 			}
 			line += lc
 			pos++
 		case *model.ToolCall:
-			lc := toolCallLineCount(it)
+			lc := toolCallLineCount(it, width)
 			if pos == flatIdx {
 				return line, lc
 			}
@@ -192,7 +196,7 @@ func FlatCursorLineRange(items []model.TimelineItem, flatIdx int, compactView bo
 			pos++
 			if it.Expanded {
 				for _, child := range it.Children {
-					clc := toolCallLineCount(child)
+					clc := toolCallLineCount(child, width)
 					if pos == flatIdx {
 						return line, clc
 					}

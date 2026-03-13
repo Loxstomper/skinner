@@ -352,7 +352,7 @@ func TestToolCallLineCount_Collapsed(t *testing.T) {
 		Expanded: false,
 	}
 
-	count := toolCallLineCount(tc)
+	count := toolCallLineCount(tc, 80)
 	if count != 1 {
 		t.Errorf("expected 1 for collapsed, got %d", count)
 	}
@@ -365,7 +365,7 @@ func TestToolCallLineCount_ExpandedWithContent(t *testing.T) {
 		ResultContent: "line1\nline2\nline3",
 	}
 
-	count := toolCallLineCount(tc)
+	count := toolCallLineCount(tc, 80)
 	// 1 header + 3 content lines = 4
 	if count != 4 {
 		t.Errorf("expected 4 (1 header + 3 content), got %d", count)
@@ -378,7 +378,7 @@ func TestToolCallLineCount_ExpandedNoContent(t *testing.T) {
 		Expanded: true,
 	}
 
-	count := toolCallLineCount(tc)
+	count := toolCallLineCount(tc, 80)
 	// Expanded but no content: still just 1 (header only)
 	if count != 1 {
 		t.Errorf("expected 1 for expanded with no content, got %d", count)
@@ -397,7 +397,7 @@ func TestToolCallLineCount_ExpandedLargeContent(t *testing.T) {
 		ResultContent: strings.Join(contentLines, "\n"),
 	}
 
-	count := toolCallLineCount(tc)
+	count := toolCallLineCount(tc, 80)
 	// 1 header + 30 content lines = 31
 	if count != 31 {
 		t.Errorf("expected 31 (1 header + 30 content), got %d", count)
@@ -414,7 +414,7 @@ func TestToolCallLineCount_ExpandedBash(t *testing.T) {
 		ResultContent: "hello",
 	}
 
-	count := toolCallLineCount(tc)
+	count := toolCallLineCount(tc, 80)
 	// 1 header + 2 content lines ($ command + output) = 3
 	if count != 3 {
 		t.Errorf("expected 3 (1 header + $ cmd + output), got %d", count)
@@ -431,7 +431,7 @@ func TestToolCallLineCount_ExpandedEdit(t *testing.T) {
 		},
 	}
 
-	count := toolCallLineCount(tc)
+	count := toolCallLineCount(tc, 80)
 	// 1 header + 3 diff lines (-old, +new1, +new2) = 4
 	if count != 4 {
 		t.Errorf("expected 4 (1 header + 3 diff lines), got %d", count)

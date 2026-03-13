@@ -157,7 +157,7 @@ func BenchmarkFlatCursorLineRange(b *testing.B) {
 			maxPos := FlatCursorCount(items) - 1
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
-				FlatCursorLineRange(items, maxPos, false)
+				FlatCursorLineRange(items, maxPos, false, 140)
 			}
 		})
 	}
@@ -169,7 +169,7 @@ func BenchmarkTotalLines(b *testing.B) {
 			items := makeTestItems(n)
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
-				TotalLines(items, false)
+				TotalLines(items, false, 140)
 			}
 		})
 	}
