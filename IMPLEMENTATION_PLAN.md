@@ -33,10 +33,13 @@ Spec: [specs/render-cache.md](specs/render-cache.md)
    - `BenchmarkFilePreviewSourceUncached` — full file read + split + chroma highlight of visible lines (~3ms)
    - `BenchmarkFilePreviewSourceCached` — cache hit skips I/O; chroma still runs per-frame (~2.9ms) — confirms cache saves only I/O, not highlighting (by design)
 
-## Tasks
+10. ~~Run full benchmark suite and verify improvements~~ — Done
+    - All benchmarks pass, `make check` clean (0 lint issues, all tests pass)
+    - Plan view cached: ~69-93μs constant vs 331μs-21ms uncached (up to 230x faster for large files)
+    - File preview markdown cached: ~77-107μs vs 342μs-22ms uncached
+    - File preview source cached: ~2.9ms vs ~3.0ms (by design — cache saves I/O only)
+    - Timeline benchmarks: no regressions from rename
 
-10. **Run full benchmark suite and verify improvements**
-    - Run `go test -bench=. -benchmem ./internal/tui/` to confirm all benchmarks pass
-    - Verify cached benchmarks show near-zero cost regardless of file size
-    - Verify timeline benchmarks have no regressions from the rename
-    - Run `make check` to confirm no lint/test failures
+## Render Cache — Complete
+
+All 10 tasks finished. The render cache eliminates redundant glamour rendering and file I/O for plan view and file preview, with benchmarks confirming near-constant cached render times regardless of file size.
