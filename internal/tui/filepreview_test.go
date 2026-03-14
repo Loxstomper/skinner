@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/loxstomper/skinner/internal/theme"
 )
@@ -217,6 +218,106 @@ func TestRenderFilePreview_SmallDimensions(t *testing.T) {
 	// Height=1 means only title bar, no content area
 	if result.Content == "" {
 		t.Error("height=1 should still render title bar")
+	}
+}
+
+func TestRenderFilePreview_MarkdownCachePopulatedAndReused(t *testing.T) {
+	dir := t.TempDir()
+	_ = os.WriteFile(filepath.Join(dir, "cached.md"), []byte("# Cached\n\nMarkdown content.\n"), 0o644)
+
+	cache := &RenderCache{}
+	props := previewProps(dir, "cached.md", 60, 10)
+	props.Cache = cache
+
+	// First call — cache miss, populates cache
+	result1 := RenderFilePreview(props)
+	if !strings.Contains(result1.Content, "Cached") {
+		t.Error("first render should contain 'Cached'")
+	}
+
+	// Verify cache was populated
+	fullPath := filepath.Join(dir, "cached.md")
+	cachedLines, hit := cache.Get(fullPath, 60)
+	if !hit {
+		t.Fatal("cache should be populated after first markdown render")
+	}
+	if len(cachedLines) == 0 {
+		t.Fatal("cached lines should not be empty")
+	}
+
+	// Second call — cache hit, identical output
+	result2 := RenderFilePreview(props)
+	if result1.Content != result2.Content {
+		t.Error("cached markdown render should produce identical output")
+	}
+	if result1.TotalLines != result2.TotalLines {
+		t.Errorf("totalLines mismatch: first=%d, second=%d", result1.TotalLines, result2.TotalLines)
+	}
+}
+
+func TestRenderFilePreview_MarkdownCacheInvalidatedOnChange(t *testing.T) {
+	dir := t.TempDir()
+	mdPath := filepath.Join(dir, "changing.md")
+	_ = os.WriteFile(mdPath, []byte("# Original\n\nFirst version.\n"), 0o644)
+
+	cache := &RenderCache{}
+	props := previewProps(dir, "changing.md", 60, 10)
+	props.Cache = cache
+
+	// First render
+	result1 := RenderFilePreview(props)
+	if !strings.Contains(result1.Content, "Original") {
+		t.Error("first render should contain 'Original'")
+	}
+
+	// Modify file with new modtime
+	newTime := time.Now().Add(2 * time.Second)
+	_ = os.WriteFile(mdPath, []byte("# Updated\n\nSecond version.\n"), 0o644)
+	_ = os.Chtimes(mdPath, newTime, newTime)
+
+	// Second render — should show updated content
+	result2 := RenderFilePreview(props)
+	if !strings.Contains(result2.Content, "Updated") {
+		t.Error("second render should contain 'Updated' after file modification")
+	}
+}
+
+func TestRenderFilePreview_SourceCachePopulatedAndReused(t *testing.T) {
+	dir := t.TempDir()
+	_ = os.WriteFile(filepath.Join(dir, "cached.go"), []byte("package main\n\nfunc main() {\n\tprintln(\"cached\")\n}\n"), 0o644)
+
+	cache := &RenderCache{}
+	props := previewProps(dir, "cached.go", 60, 10)
+	props.Cache = cache
+
+	// First call — cache miss, populates cache with raw lines
+	result1 := RenderFilePreview(props)
+	if result1.TotalLines != 5 {
+		t.Errorf("expected 5 total lines, got %d", result1.TotalLines)
+	}
+
+	// Verify cache was populated with raw source lines
+	fullPath := filepath.Join(dir, "cached.go")
+	cachedLines, hit := cache.Get(fullPath, 60)
+	if !hit {
+		t.Fatal("cache should be populated after first source render")
+	}
+	// Cache stores raw lines (not chroma-styled), so first line should be "package main"
+	if len(cachedLines) == 0 {
+		t.Fatal("cached lines should not be empty")
+	}
+	if cachedLines[0] != "package main" {
+		t.Errorf("cached source line should be raw text, got %q", cachedLines[0])
+	}
+
+	// Second call — cache hit, chroma still applies to visible lines
+	result2 := RenderFilePreview(props)
+	if result1.TotalLines != result2.TotalLines {
+		t.Errorf("totalLines mismatch: first=%d, second=%d", result1.TotalLines, result2.TotalLines)
+	}
+	// Content should be identical since chroma runs on same raw lines
+	if result1.Content != result2.Content {
+		t.Error("cached source render should produce identical output")
 	}
 }
 

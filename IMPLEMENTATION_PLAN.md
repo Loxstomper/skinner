@@ -19,14 +19,14 @@ Spec: [specs/render-cache.md](specs/render-cache.md)
 5. ~~Wire `RenderCache` into root model~~ — Done
    - Plan view: passed through `PlanViewProps.Cache`
    - File preview: passed through `FilePreviewProps.Cache` in `fileExplorerView`
+6. ~~Add integration tests for cached plan view and file preview rendering~~ — Done
+   - `TestRenderPlanView_CachePopulatedAndReused`: first call populates cache, second produces identical output
+   - `TestRenderPlanView_CacheInvalidatedOnFileChange`: file modification triggers re-render with new content
+   - `TestRenderFilePreview_MarkdownCachePopulatedAndReused`: markdown cache hit/miss with identical output
+   - `TestRenderFilePreview_MarkdownCacheInvalidatedOnChange`: markdown file modification triggers re-render
+   - `TestRenderFilePreview_SourceCachePopulatedAndReused`: raw lines cached, chroma still produces identical output
 
 ## Tasks
-
-6. **Add integration tests for cached plan view and file preview rendering**
-   - Test `RenderPlanView` with cache: first call populates cache, second call uses it, verify identical output
-   - Test `RenderPlanView` cache invalidation: modify temp file between calls, verify re-render
-   - Test `RenderFilePreview` markdown path with cache: same hit/miss pattern
-   - Test `RenderFilePreview` source path with cache: verify cached raw lines, chroma still applied
 
 7. **Rename `benchmark_test.go` to `timeline_benchmark_test.go`**
    - Rename the file; no code changes needed

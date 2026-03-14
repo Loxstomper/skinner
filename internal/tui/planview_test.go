@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestRenderPlanView_TitleCentered(t *testing.T) {
@@ -209,6 +210,96 @@ func TestClampPlanScroll(t *testing.T) {
 					tt.scroll, tt.totalLines, tt.viewHeight, got, tt.want)
 			}
 		})
+	}
+}
+
+func TestRenderPlanView_CachePopulatedAndReused(t *testing.T) {
+	dir := t.TempDir()
+	filename := "CACHED_PLAN.md"
+	content := "# Cached Plan\n\nThis tests cache integration.\n\n- Item A\n- Item B\n"
+	if err := os.WriteFile(filepath.Join(dir, filename), []byte(content), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	cache := &RenderCache{}
+	props := PlanViewProps{
+		Filename: filename,
+		Dir:      dir,
+		Width:    60,
+		Height:   20,
+		Theme:    testTheme(),
+		Cache:    cache,
+	}
+
+	// First call — cache miss, populates cache
+	result1, totalLines1 := RenderPlanView(props)
+	if result1 == "" {
+		t.Fatal("first render should produce output")
+	}
+	if totalLines1 < 1 {
+		t.Fatalf("expected totalLines > 0, got %d", totalLines1)
+	}
+
+	// Verify cache was populated
+	filePath := filepath.Join(dir, filename)
+	cachedLines, hit := cache.Get(filePath, 60)
+	if !hit {
+		t.Fatal("cache should be populated after first render")
+	}
+	if len(cachedLines) == 0 {
+		t.Fatal("cached lines should not be empty")
+	}
+
+	// Second call — cache hit, should produce identical output
+	result2, totalLines2 := RenderPlanView(props)
+	if result1 != result2 {
+		t.Error("cached render should produce identical output to uncached render")
+	}
+	if totalLines1 != totalLines2 {
+		t.Errorf("totalLines mismatch: first=%d, second=%d", totalLines1, totalLines2)
+	}
+}
+
+func TestRenderPlanView_CacheInvalidatedOnFileChange(t *testing.T) {
+	dir := t.TempDir()
+	filename := "CHANGING_PLAN.md"
+	filePath := filepath.Join(dir, filename)
+	if err := os.WriteFile(filePath, []byte("# Version 1\n\nOriginal content.\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	cache := &RenderCache{}
+	props := PlanViewProps{
+		Filename: filename,
+		Dir:      dir,
+		Width:    60,
+		Height:   20,
+		Theme:    testTheme(),
+		Cache:    cache,
+	}
+
+	// First render — populates cache
+	result1, _ := RenderPlanView(props)
+	if !strings.Contains(result1, "Version 1") {
+		t.Error("first render should contain 'Version 1'")
+	}
+
+	// Modify the file with new content and ensure modtime changes
+	newTime := time.Now().Add(2 * time.Second)
+	if err := os.WriteFile(filePath, []byte("# Version 2\n\nUpdated content.\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chtimes(filePath, newTime, newTime); err != nil {
+		t.Fatal(err)
+	}
+
+	// Second render — cache miss due to modtime change, should show new content
+	result2, _ := RenderPlanView(props)
+	if !strings.Contains(result2, "Version 2") {
+		t.Error("second render should contain 'Version 2' after file modification")
+	}
+	if strings.Contains(result2, "Version 1") {
+		t.Error("second render should not contain old 'Version 1' content")
 	}
 }
 
