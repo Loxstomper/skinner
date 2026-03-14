@@ -1,0 +1,7 @@
+{
+  "database": "dolt",
+  "backend": "dolt",
+  "dolt_mode": "server",
+  "dolt_database": "skinner",
+  "project_id": "0e8d63c9-a922-4710-87a7-21da8b2eaaaf"
+}
