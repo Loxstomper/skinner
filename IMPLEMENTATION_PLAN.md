@@ -1,70 +1,54 @@
-# Viewport-Only Rendering — Implementation Plan
+# Render Cache — Implementation Plan
 
-Spec: [specs/viewport-rendering.md](specs/viewport-rendering.md)
+Spec: [specs/render-cache.md](specs/render-cache.md)
+
+## Completed
+
+1. ~~Create `RenderCache` struct in `internal/tui/rendercache.go`~~ — Done
+2. ~~Add unit tests for `RenderCache` in `internal/tui/rendercache_test.go`~~ — Done (7 tests: empty miss, hit after set, path change, width change, modtime change, deleted file, nil safety)
 
 ## Tasks
 
-1. ~~**Add `expandedContentLineCount` function to `expand.go`**~~ ✅ DONE
-   - Implemented `expandedContentLineCount(tc, width)` with zero-allocation helpers: `bashContentLineCount`, `editContentLineCount`, `writeContentLineCount`, `resultContentLineCount`
-   - Edit diffs are width-aware: unified (old+new) when width < 120, side-by-side (max) when width >= 120
-   - 18 unit tests verify counts match `len(expandedContentLines(...))` for all tool types, plus Edit layout-specific tests
+3. **Add `*RenderCache` to `PlanViewProps` and integrate in `RenderPlanView`**
+   - Add `Cache *RenderCache` field to `PlanViewProps`
+   - In `RenderPlanView`: call `cache.Get(path, width)` before file read; on hit, skip `os.ReadFile` and `renderMarkdown`, use cached lines; on miss, render as before then call `cache.Set`
+   - Handle nil cache (no-op, render without caching) for backward compatibility with existing tests
 
-2. ~~**Add width parameter to `ItemLineCount` and make line counting zero-allocation**~~ ✅ DONE
-   - Updated `toolCallLineCount(tc, width)` and `toolCallLineCountCapped(tc, width, paneHeight)` to use `expandedContentLineCount` — zero allocation for line counting
-   - Added `width int` parameter to `ItemLineCount`, `TotalLines`, `FlatCursorLineRange`, `LineToFlatCursor`
-   - Updated all callers in `timeline.go` to pass `props.Width`
-   - Updated all tests to pass width parameter (80 for non-Edit tests, matching unified layout)
-   - This also fixes a pre-existing bug where Edit tool calls at width >= 120 had mismatched line counts between cursor functions (which always counted unified) and rendering (which used side-by-side)
+4. **Add `*RenderCache` to `FilePreviewProps` and integrate in `RenderFilePreview`**
+   - Add `Cache *RenderCache` field to `FilePreviewProps`
+   - In `renderMarkdownPreview`: call `cache.Get` before rendering; on hit use cached lines; on miss render then `cache.Set`
+   - In `renderSourcePreview`: call `cache.Get` to cache raw source lines (pre-split, pre-chroma); on hit skip `os.ReadFile` + `strings.Split`; chroma tokenization of visible lines still runs per-frame
+   - Handle nil cache for backward compatibility
 
-3. ~~**Implement `visibleRange` function in `visible_range.go`**~~ ✅ DONE
-   - Implemented `visibleRange(items, scrollOffset, viewportHeight, cursorPos, width, compactView)` returning `visibleWindow` struct
-   - Walks items forward accumulating line counts via `ItemLineCount`, stops once past viewport (early exit)
-   - Returns: StartItem/EndItem (inclusive), StartLineOffset/EndLineOffset for partial items, AbsLineNumber, CursorItemIndex (-1 if off-screen)
-   - Groups: CursorItemIndex maps to group's item index for both header and children
-   - 17 unit tests: empty, zero viewport, all visible, scroll middle/bottom, cursor off-screen (above/below), expanded items, partial items at top, expanded/collapsed groups, cursor on group header/child, text blocks, compact view, width-dependent Edit layout, consistency with TotalLines, early exit at n=1000
+5. **Wire `RenderCache` into root model**
+   - Add a `renderCache *RenderCache` field to the root model, initialized in the constructor
+   - Pass it through `PlanViewProps.Cache` when calling `RenderPlanView`
+   - Pass it through `FilePreviewProps.Cache` when calling `RenderFilePreview`
 
-4. ~~**Implement `visibleRangeFromBottom` function in `visible_range.go`**~~ ✅ DONE
-   - Walks items backward from last item, accumulating line counts via `ItemLineCount`, stops once `viewportHeight` lines covered — O(visible) backward walk
-   - Added `width` and `cursorPos` parameters (spec signature was incomplete — these are needed for `ItemLineCount` and `CursorItemIndex`)
-   - Computes `AbsLineNumber` and flat cursor position via single forward pass to `startIdx`
-   - 11 tests: 9-subtest table test verifying exact match with `visibleRange` at scroll-bottom (all collapsed, all fit, expanded items, expanded groups, large set, single item, expanded larger than viewport, compact view, width-dependent Edit layout), plus empty and zero-viewport edge cases
+6. **Add integration tests for cached plan view and file preview rendering**
+   - Test `RenderPlanView` with cache: first call populates cache, second call uses it, verify identical output
+   - Test `RenderPlanView` cache invalidation: modify temp file between calls, verify re-render
+   - Test `RenderFilePreview` markdown path with cache: same hit/miss pattern
+   - Test `RenderFilePreview` source path with cache: verify cached raw lines, chroma still applied
 
-5. ~~**Refactor `View()` to use two-phase rendering**~~ ✅ DONE
-   - Phase 1: `visibleRange(items, tl.Scroll, Height, Cursor, Width, CompactView)` computes visible window
-   - Phase 2: iterate only items in `[StartItem..EndItem]`, render styled lines
-   - `StartLineOffset` trimming for partial items at viewport top; `Height` cap for bottom
-   - Added `renderVisibleLines()` — gutter + highlight padding + count buffer, no scroll slicing
-   - Sub-scroll mode falls back to full render + `renderWithLines()` (to be optimized in task 6)
-   - Groups fully handled: header + expanded children rendered only when in visible range
-   - Thinking indicator appended only when last item is in visible range
-   - Used `ItemToFlat()` to compute `flatPos` at `StartItem` for cursor highlighting
-   - Benchmark results at n=500: ~360μs (was 4.7ms), 2,201 allocs (was 38,537), ~200KB (was 1.4MB)
-   - Constant time across n=50/200/500 confirming O(visible) behavior
+7. **Rename `benchmark_test.go` to `timeline_benchmark_test.go`**
+   - Rename the file; no code changes needed
+   - Update `specs/benchmarks.md` if any references to the old filename remain (already done in spec update)
 
-6. ~~**Handle sub-scroll in viewport rendering**~~ ✅ DONE
-   - Added `itemLineCountForSubScroll()` helper that uses `toolCallLineCountCapped` for the sub-scrolled item (handles both top-level tool calls and group children)
-   - Added `subScrollIdx` parameter to `visibleRange()` and `visibleRangeFromBottom()`
-   - Removed `fullRender` fallback in `View()` — sub-scroll now uses the same two-phase rendering path as normal scrolling
-   - Removed dead `renderWithLines()` function (was only used by the fullRender path)
-   - 5 new tests: sub-scroll capping, partial scroll, group child sub-scroll, fromBottom consistency with sub-scroll, no-effect when subScrollIdx=-1
+8. **Create `planview_benchmark_test.go`**
+   - Add `makePlanMarkdown(size string)` helper generating realistic markdown (headings, prose, code blocks) at ~1KB/10KB/100KB
+   - Add `BenchmarkPlanViewUncached` — parameterized by small/medium/large, invalidates cache each iteration, measures full glamour render cost
+   - Add `BenchmarkPlanViewCached` — parameterized by small/medium/large, primes cache once, measures cached render cost
 
-7. ~~**Handle groups in viewport rendering**~~ ✅ DONE (completed as part of task 5)
-   - Groups are rendered in phase 2 with the same logic as before, but only when in the visible range
+9. **Create `filepreview_benchmark_test.go`**
+   - Add `makeSourceFile(size string)` helper generating realistic Go source code at ~1KB/10KB/100KB
+   - Add `BenchmarkFilePreviewMarkdownUncached` — markdown file preview without cache
+   - Add `BenchmarkFilePreviewMarkdownCached` — markdown file preview with warm cache
+   - Add `BenchmarkFilePreviewSourceUncached` — source code preview without cache
+   - Add `BenchmarkFilePreviewSourceCached` — source code preview with warm cache
 
-8. ~~**Add `makeCollapsedTestItems` helper to `benchmark_test.go`**~~ ✅ DONE
-   - `makeCollapsedTestItems(n)` creates n collapsed tool calls (no expanded content) — simulates the feed-watching case
-   - Deterministic (seeded RNG), used by the scaling benchmark
-
-9. ~~**Add `BenchmarkTimelineViewScaling` benchmark**~~ ✅ DONE
-   - Runs View() at n=50, 200, 500, 1000 with all collapsed items and auto-follow active (scrollToBottom)
-   - Confirms roughly constant time (~390-416μs) across all n values — O(visible) verified
-
-10. ~~**Run full benchmark suite, verify targets**~~ ✅ DONE
-    - `BenchmarkTimelineView` at n=500: ~370μs (target < 0.5ms ✅), 2,201 allocs (target < 4K ✅), ~214KB (close to 150KB target, acceptable)
-    - `BenchmarkTimelineViewScaling`: constant across n=50→1000 ✅
-    - `BenchmarkNewItemArrival` at n=500: ~380μs (was 4.7ms, 12x improvement) ✅
-    - Cursor benchmarks unchanged (no regressions) ✅
-
-11. **Manual smoke test**
-    - Run skinner against a real Claude session with 100+ tool calls
-    - Verify: smooth scrolling, correct line numbers, cursor highlighting, expand/collapse, sub-scroll, group rendering, auto-follow, compact view toggle
+10. **Run full benchmark suite and verify improvements**
+    - Run `go test -bench=. -benchmem ./internal/tui/` to confirm all benchmarks pass
+    - Verify cached benchmarks show near-zero cost regardless of file size
+    - Verify timeline benchmarks have no regressions from the rename
+    - Run `make check` to confirm no lint/test failures
