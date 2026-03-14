@@ -21,13 +21,12 @@ Spec: [specs/render-cache.md](specs/render-cache.md)
    - File preview: passed through `FilePreviewProps.Cache` in `fileExplorerView`
 6. ~~Add integration tests for cached plan view and file preview rendering~~ — Done
 7. ~~Rename `benchmark_test.go` to `timeline_benchmark_test.go`~~ — Done
+8. ~~Create `planview_benchmark_test.go`~~ — Done
+   - `makePlanMarkdown(size string)` helper generates realistic markdown (headings, prose, bullet lists, fenced code blocks) at ~1KB/10KB/100KB
+   - `BenchmarkPlanViewUncached` — nil cache forces full glamour render each iteration; scales with file size (353μs→21.6ms for small→large)
+   - `BenchmarkPlanViewCached` — primes cache once; near-constant ~70-96μs regardless of file size, confirming cache eliminates glamour bottleneck
 
 ## Tasks
-
-8. **Create `planview_benchmark_test.go`**
-   - Add `makePlanMarkdown(size string)` helper generating realistic markdown (headings, prose, code blocks) at ~1KB/10KB/100KB
-   - Add `BenchmarkPlanViewUncached` — parameterized by small/medium/large, invalidates cache each iteration, measures full glamour render cost
-   - Add `BenchmarkPlanViewCached` — parameterized by small/medium/large, primes cache once, measures cached render cost
 
 9. **Create `filepreview_benchmark_test.go`**
    - Add `makeSourceFile(size string)` helper generating realistic Go source code at ~1KB/10KB/100KB
