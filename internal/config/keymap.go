@@ -27,6 +27,7 @@ const (
 	ActionGitView           = "git_view"
 	ActionEditPlan          = "edit_plan"
 	ActionFileExplorer      = "file_explorer"
+	ActionTasksView         = "tasks_view"
 )
 
 // KeyBinding represents a single key or key sequence that triggers an action.
@@ -93,6 +94,7 @@ func DefaultKeyMap() KeyMap {
 			ActionGitView:           {Keys: []string{"ctrl+g"}},
 			ActionEditPlan:          {Keys: []string{"e"}},
 			ActionFileExplorer:      {Keys: []string{"f"}},
+			ActionTasksView:         {Keys: []string{"t"}},
 		},
 	}
 }

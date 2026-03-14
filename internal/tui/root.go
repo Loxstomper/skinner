@@ -10,6 +10,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/loxstomper/skinner/internal/bd"
 	"github.com/loxstomper/skinner/internal/config"
 	"github.com/loxstomper/skinner/internal/executor"
 	"github.com/loxstomper/skinner/internal/git"
@@ -153,6 +154,21 @@ type Model struct {
 	gitTotalStatsLoaded bool
 	gitTotalStatsCancel context.CancelFunc
 
+	// Tasks view state
+	tasksViewActive      bool
+	tasksViewDepth       int // 0=list focused, 1=detail scrollable
+	tasksViewLoading     bool
+	tasksViewError       error
+	tasksViewGraph       *bd.Graph
+	tasksViewCursor      int
+	tasksViewScroll      int // detail pane scroll offset
+	tasksViewTab         int // 0=Ready, 1=All, 2=Blocked, 3=InProgress
+	tasksViewFiltered    []*bd.Issue
+	tasksViewExpanded    map[string]bool
+	tasksViewFlatMode    bool
+	tasksViewSearchActive bool
+	tasksViewSearchQuery  string
+
 	// File explorer state
 	fileExplorerActive bool
 	fileExplorerDepth  int // 0=tree focused, 1=scrollable preview
@@ -293,6 +309,19 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, fileExplorerTickCmd()
 
+	case tasksViewDataMsg:
+		if !m.tasksViewActive {
+			return m, nil
+		}
+		m.tasksViewLoading = false
+		if msg.err != nil {
+			m.tasksViewError = msg.err
+			return m, nil
+		}
+		m.tasksViewGraph = msg.graph
+		m.tasksViewRefilter()
+		return m, nil
+
 	case systemStatsResultMsg:
 		sess := m.controller.Session
 		if msg.cpuActive != 0 || msg.cpuTotal != 0 {
@@ -424,6 +453,13 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.handleModalKey(msg)
 	}
 
+	// When tasks view is active and in search mode, route raw keys to search handler.
+	if m.tasksViewActive && m.tasksViewSearchActive {
+		if m.handleTasksViewSearchRawKey(key) {
+			return m, nil
+		}
+	}
+
 	// When file explorer is active and in search mode, route raw keys to search handler
 	// before action resolution (search needs raw character input).
 	if m.fileExplorerActive && m.fileExplorerTree != nil && m.fileExplorerTree.IsSearching() {
@@ -477,6 +513,14 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	// Any resolved action (or unrecognized key) clears the count buffer,
 	// except for move_down/move_up which consume it.
 	clearCount := true
+
+	// When tasks view is active, route keys to the tasks view handler.
+	if m.tasksViewActive {
+		if action == "" && key == "/" && m.tasksViewDepth == 0 {
+			action = "search"
+		}
+		return m.handleTasksViewKey(action, key)
+	}
 
 	// When file explorer is active, route keys to the file explorer handler.
 	if m.fileExplorerActive {
@@ -634,6 +678,9 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	case config.ActionFileExplorer:
 		return m, m.enterFileExplorer()
+
+	case config.ActionTasksView:
+		return m, m.enterTasksView()
 
 	case config.ActionPlanMode:
 		// p key: launch interactive plan mode CLI (disabled while running)
@@ -977,6 +1024,11 @@ func (m *Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
+	// When tasks view is active, handle mouse events
+	if m.tasksViewActive {
+		return m.handleTasksViewMouse(msg, paneRow)
+	}
+
 	// When file explorer is active, handle mouse events
 	if m.fileExplorerActive {
 		return m.handleFileExplorerMouse(msg, paneRow)
@@ -1180,6 +1232,20 @@ func (m *Model) View() string {
 	}
 
 	header := RenderHeader(m.headerProps())
+
+	// Tasks view: render when active
+	if m.tasksViewActive {
+		tasksView := m.renderTasksView()
+		view := header + "\n" + tasksView
+
+		switch m.activeModal {
+		case modalQuitConfirm:
+			view = RenderQuitConfirmModal(m.width, m.height, m.theme)
+		case modalHelp:
+			view = RenderHelpModal(m.width, m.height, m.theme, &m.config.KeyMap, m.helpModalScroll)
+		}
+		return view
+	}
 
 	// File explorer: render when active
 	if m.fileExplorerActive {
