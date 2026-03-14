@@ -312,6 +312,85 @@ func TestTasksViewSearchRawKeyInput(t *testing.T) {
 	}
 }
 
+func TestTasksViewSearchInputBarRendered(t *testing.T) {
+	m := newTasksTestModel()
+	m.tasksViewActive = true
+	m.tasksViewSearchActive = true
+	m.tasksViewSearchQuery = "bug"
+	m.tasksViewGraph = bd.NewGraph([]bd.Issue{
+		{ID: "t-1", Title: "fix login bug", Status: "open", Priority: 1},
+	})
+	m.tasksViewTab = 1
+	m.tasksViewRefilter()
+
+	list := m.renderTasksViewList(32, 10)
+
+	if !strings.Contains(list, "/bug█") {
+		t.Errorf("expected search input bar with '/bug█', got %q", list)
+	}
+}
+
+func TestTasksViewSearchInputBarHiddenWhenInactive(t *testing.T) {
+	m := newTasksTestModel()
+	m.tasksViewActive = true
+	m.tasksViewSearchActive = false
+	m.tasksViewGraph = bd.NewGraph([]bd.Issue{
+		{ID: "t-1", Title: "fix login bug", Status: "open", Priority: 1},
+	})
+	m.tasksViewTab = 1
+	m.tasksViewRefilter()
+
+	list := m.renderTasksViewList(32, 10)
+
+	if strings.Contains(list, "/") && strings.Contains(list, "█") {
+		t.Error("expected no search input bar when search inactive")
+	}
+}
+
+func TestTasksViewSearchResetsCursor(t *testing.T) {
+	m := newTasksTestModel()
+	m.tasksViewSearchActive = true
+	m.tasksViewGraph = bd.NewGraph([]bd.Issue{
+		{ID: "t-1", Title: "alpha", Status: "open"},
+		{ID: "t-2", Title: "beta", Status: "open"},
+		{ID: "t-3", Title: "gamma", Status: "open"},
+	})
+	m.tasksViewTab = 1
+	m.tasksViewRefilter()
+	m.tasksViewCursor = 2
+
+	// Typing resets cursor to 0.
+	m.handleTasksViewSearchRawKey("a")
+	if m.tasksViewCursor != 0 {
+		t.Errorf("expected cursor reset to 0 on search input, got %d", m.tasksViewCursor)
+	}
+
+	// Set cursor again, backspace should also reset.
+	m.tasksViewCursor = 1
+	m.handleTasksViewSearchRawKey("backspace")
+	if m.tasksViewCursor != 0 {
+		t.Errorf("expected cursor reset to 0 on backspace, got %d", m.tasksViewCursor)
+	}
+}
+
+func TestTasksViewTabSwitchingClearsSearch(t *testing.T) {
+	m := newTasksTestModel()
+	m.enterTasksView()
+	m.tasksViewLoading = false
+	m.tasksViewGraph = bd.NewGraph([]bd.Issue{
+		{ID: "t-1", Title: "test issue", Status: "open"},
+	})
+	// Set search state that would be left over from a confirmed search.
+	m.tasksViewSearchActive = false
+	m.tasksViewSearchQuery = "test"
+
+	// Switch tab should clear leftover search query.
+	m.handleTasksViewKey("", "L")
+	if m.tasksViewSearchQuery != "" {
+		t.Errorf("expected search query cleared on tab switch, got %q", m.tasksViewSearchQuery)
+	}
+}
+
 func TestTasksViewTabSwitching(t *testing.T) {
 	m := newTasksTestModel()
 	m.enterTasksView()

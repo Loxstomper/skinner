@@ -212,6 +212,7 @@ func (m *Model) handleTasksViewSearchRawKey(key string) bool {
 		if len(m.tasksViewSearchQuery) > 0 {
 			m.tasksViewSearchQuery = m.tasksViewSearchQuery[:len(m.tasksViewSearchQuery)-1]
 			m.tasksViewRefilter()
+			m.tasksViewCursor = 0
 		} else {
 			m.tasksViewSearchActive = false
 			m.tasksViewRefilter()
@@ -221,6 +222,7 @@ func (m *Model) handleTasksViewSearchRawKey(key string) bool {
 		if len(key) == 1 && key[0] >= 32 && key[0] < 127 {
 			m.tasksViewSearchQuery += key
 			m.tasksViewRefilter()
+			m.tasksViewCursor = 0
 			return true
 		}
 	}
@@ -460,18 +462,38 @@ func (m *Model) tasksViewTabCount(tab int) int {
 
 // renderTasksViewList renders the left pane issue list.
 func (m *Model) renderTasksViewList(width, height int) string {
+	var lines []string
+	listHeight := height
+
+	// Show search input bar when search is active.
+	if m.tasksViewSearchActive {
+		inputStyle := lipgloss.NewStyle().
+			Foreground(lipgloss.Color(m.theme.Foreground))
+		inputBar := inputStyle.Render("/" + m.tasksViewSearchQuery + "█")
+		// Pad to full width.
+		raw := "/" + m.tasksViewSearchQuery + "█"
+		if len(raw) < width {
+			inputBar = inputStyle.Render(raw + strings.Repeat(" ", width-len(raw)))
+		}
+		lines = append(lines, inputBar)
+		listHeight--
+	}
+
 	if len(m.tasksViewFiltered) == 0 {
 		style := lipgloss.NewStyle().
 			Foreground(lipgloss.Color(m.theme.ForegroundDim)).
 			Width(width).
-			Height(height).
+			Height(listHeight).
 			Align(lipgloss.Center, lipgloss.Center)
-		return style.Render("No issues")
+		emptyContent := style.Render("No issues")
+		if m.tasksViewSearchActive {
+			return strings.Join(lines, "\n") + "\n" + emptyContent
+		}
+		return emptyContent
 	}
 
-	var lines []string
 	for i, issue := range m.tasksViewFiltered {
-		if i >= height {
+		if i >= listHeight {
 			break
 		}
 		icon := statusIcon(issue.Status)
