@@ -14,7 +14,7 @@ func setupDetailModel(issues []bd.Issue) *Model {
 	m.tasksViewLoading = false
 	g := bd.NewGraph(issues)
 	m.tasksViewGraph = g
-	m.tasksViewTab = 1 // All tab (excludes closed)
+	m.tasksViewTab = 1 // All tab (regardless of status)
 	m.tasksViewRefilter()
 	return m
 }
@@ -361,7 +361,7 @@ func TestDetailRenderClosedTimestamp(t *testing.T) {
 			ClosedAt: closed, CloseReason: "All tasks completed"},
 	}
 	m := setupDetailModel(issues)
-	m.tasksViewTab = 1 // All tab excludes closed; set up manually.
+	m.tasksViewTab = 1 // All tab (regardless of status); set up manually.
 	issue := m.tasksViewGraph.Issues[0]
 	m.tasksViewFiltered = []*bd.Issue{issue}
 	m.tasksViewVisibleRows = []tasksViewRow{{issue: issue, depth: 0}}
