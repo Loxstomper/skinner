@@ -315,7 +315,7 @@ func (m *Model) renderTasksView() string {
 	rightWidth := m.width - leftWidth - 1 // 1 for separator
 
 	leftContent := m.renderTasksViewList(leftWidth, paneHeight)
-	rightContent := m.renderTasksViewDetail(rightWidth, paneHeight)
+	rightContent := m.tasksViewRenderDetail(rightWidth, paneHeight)
 
 	sep := strings.Repeat("│\n", paneHeight)
 	sep = strings.TrimSuffix(sep, "\n")
@@ -504,78 +504,6 @@ func (m *Model) renderTasksViewList(width, height int) string {
 	return strings.Join(lines, "\n")
 }
 
-// renderTasksViewDetail renders the right pane issue detail.
-func (m *Model) renderTasksViewDetail(width, height int) string {
-	if len(m.tasksViewFiltered) == 0 || m.tasksViewCursor >= len(m.tasksViewFiltered) {
-		return strings.Repeat("\n", max(0, height-1))
-	}
-
-	issue := m.tasksViewFiltered[m.tasksViewCursor]
-
-	var sections []string
-
-	// Title + priority badge.
-	priorityBadge := fmt.Sprintf("[P%d]", issue.Priority)
-	titleLine := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color(m.theme.Foreground)).
-		Render(priorityBadge+" "+issue.Title)
-	sections = append(sections, titleLine)
-
-	// Separator.
-	sections = append(sections, lipgloss.NewStyle().
-		Foreground(lipgloss.Color(m.theme.ForegroundDim)).
-		Render(strings.Repeat("─", width)))
-
-	// Meta line.
-	meta := fmt.Sprintf("%s  %s %s", issue.IssueType, statusIcon(issue.Status), issue.Status)
-	if issue.Assignee != "" {
-		meta += "  assigned: " + issue.Assignee
-	}
-	if issue.Parent != "" {
-		meta += "  parent: " + issue.Parent
-	}
-	sections = append(sections, lipgloss.NewStyle().
-		Foreground(lipgloss.Color(m.theme.ForegroundDim)).
-		Render(meta))
-
-	// Description.
-	if issue.Description != "" {
-		sections = append(sections, "")
-		sections = append(sections, issue.Description)
-	}
-
-	// Timestamps.
-	sections = append(sections, "")
-	ts := fmt.Sprintf("Created  %s\nUpdated  %s",
-		issue.CreatedAt.Format("2006-01-02 15:04"),
-		issue.UpdatedAt.Format("2006-01-02 15:04"))
-	if !issue.ClosedAt.IsZero() {
-		ts += fmt.Sprintf("\nClosed   %s", issue.ClosedAt.Format("2006-01-02 15:04"))
-		if issue.CloseReason != "" {
-			ts += fmt.Sprintf("  %q", issue.CloseReason)
-		}
-	}
-	sections = append(sections, lipgloss.NewStyle().
-		Foreground(lipgloss.Color(m.theme.ForegroundDim)).
-		Render(ts))
-
-	content := strings.Join(sections, "\n")
-
-	// Apply scroll for depth 1.
-	lines := strings.Split(content, "\n")
-	if m.tasksViewDepth == 1 && m.tasksViewScroll > 0 {
-		if m.tasksViewScroll >= len(lines) {
-			m.tasksViewScroll = max(0, len(lines)-1)
-		}
-		lines = lines[m.tasksViewScroll:]
-	}
-
-	// Truncate to height.
-	if len(lines) > height {
-		lines = lines[:height]
-	}
-
-	return lipgloss.NewStyle().Width(width).Render(strings.Join(lines, "\n"))
-}
 
 // statusIcon returns the unicode status icon for an issue status.
 func statusIcon(status string) string {
