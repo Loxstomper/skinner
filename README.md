@@ -29,10 +29,25 @@ make install  # installs to $GOPATH/bin
 ## Usage
 
 ```
-skinner [--theme=<name>] [--exit] [plan] [max_iterations]
+skinner [--theme=<name>] [--exit] [build|plan] [max_iterations]
 ```
 
-Skinner runs Claude CLI as a subprocess and renders a two-pane TUI — iterations on the left, tool call timeline on the right. It reads from `PROMPT_BUILD.md` by default, or `PROMPT_PLAN.md` in plan mode. Navigate with vim-style keybindings, expand tool calls to see details, scroll around. Press `?` for help.
+Skinner runs Claude CLI as a subprocess and renders a two-pane TUI — iterations on the left, tool call timeline on the right. Launch with `build` or `plan` to start immediately, or run without arguments to browse prompts and plans interactively. Press `?` for help.
+
+## Features
+
+- **Two-pane layout** — iterations on the left, tool call timeline on the right (auto-switches to bottom layout on narrow terminals)
+- **Tool call groups** — consecutive same-type calls collapse into expandable groups
+- **Vim navigation** — hjkl, count+motion, gg/G, configurable keybindings
+- **Mouse support** — scroll and click in both panes
+- **File explorer** — browse project files with syntax highlighting and git status
+- **Git viewer** — commit history with side-by-side diffs
+- **Plan & prompt pickers** — browse and select `*_PLAN.md` / `PROMPT_*.md` files
+- **Themes** — solarized-dark (default), solarized-light, monokai, nord
+- **System stats** — live CPU/memory in the header
+- **Token tracking** — input/output/cache tokens, cost, rate limits, context window %
+- **TOML config** — `~/.config/skinner/config.toml` for view mode, theme, keybindings, pricing
+- **Thinking indicator** — shows elapsed time while waiting for Claude's response
 
 ## Details
 
