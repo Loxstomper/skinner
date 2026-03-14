@@ -256,8 +256,12 @@ func (m *Model) tasksViewRefilter() {
 				issues = append(issues, issue)
 			}
 		}
-	case 1: // All
-		issues = m.tasksViewGraph.Issues
+	case 1: // All (excluding closed)
+		for _, issue := range m.tasksViewGraph.Issues {
+			if issue.Status != "closed" {
+				issues = append(issues, issue)
+			}
+		}
 	case 2: // Blocked
 		issues = m.tasksViewGraph.FilterByStatus("blocked")
 	case 3: // In Progress
@@ -354,7 +358,7 @@ func (m *Model) renderTasksViewError(height int) string {
 	return container.Render(content)
 }
 
-// renderTasksViewTabHeader renders the tab bar.
+// renderTasksViewTabHeader renders the tab bar with counts and right-aligned hint.
 func (m *Model) renderTasksViewTabHeader(width int) string {
 	tabs := []struct {
 		label string
@@ -368,22 +372,38 @@ func (m *Model) renderTasksViewTabHeader(width int) string {
 
 	activeStyle := lipgloss.NewStyle().
 		Foreground(lipgloss.Color(m.theme.Foreground)).
-		Bold(true).
-		Underline(true)
+		Bold(true)
 	inactiveStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color(m.theme.ForegroundDim))
+	hintStyle := lipgloss.NewStyle().
 		Foreground(lipgloss.Color(m.theme.ForegroundDim))
 
 	var parts []string
+	tabTextLen := 1 // leading space
 	for i, tab := range tabs {
-		label := fmt.Sprintf("%s (%d)", tab.label, tab.count)
+		var label string
 		if i == m.tasksViewTab {
+			label = fmt.Sprintf("[%s %d]", tab.label, tab.count)
 			parts = append(parts, activeStyle.Render(label))
 		} else {
+			label = fmt.Sprintf("%s %d", tab.label, tab.count)
 			parts = append(parts, inactiveStyle.Render(label))
+		}
+		tabTextLen += len(label)
+		if i < len(tabs)-1 {
+			tabTextLen += 2 // separator "  "
 		}
 	}
 
-	tabLine := " " + strings.Join(parts, "    ")
+	tabLine := " " + strings.Join(parts, "  ")
+
+	// Right-align q:back hint.
+	hint := "q:back"
+	padding := width - tabTextLen - len(hint) - 1 // 1 for trailing space
+	if padding > 0 {
+		tabLine += strings.Repeat(" ", padding) + hintStyle.Render(hint)
+	}
+
 	separator := lipgloss.NewStyle().
 		Foreground(lipgloss.Color(m.theme.ForegroundDim)).
 		Render(strings.Repeat("─", width))
@@ -391,28 +411,51 @@ func (m *Model) renderTasksViewTabHeader(width int) string {
 	return tabLine + "\n" + separator
 }
 
-// tasksViewTabCount returns the issue count for a given tab.
+// tasksViewTabCount returns the issue count for a given tab,
+// applying the current search filter if active.
 func (m *Model) tasksViewTabCount(tab int) int {
 	if m.tasksViewGraph == nil {
 		return 0
 	}
+
+	// Build the base set of issues for this tab.
+	var issues []*bd.Issue
 	switch tab {
-	case 0: // Ready
-		count := 0
+	case 0: // Ready (open status)
 		for _, issue := range m.tasksViewGraph.Issues {
 			if issue.Status == "open" {
+				issues = append(issues, issue)
+			}
+		}
+	case 1: // All (excluding closed)
+		for _, issue := range m.tasksViewGraph.Issues {
+			if issue.Status != "closed" {
+				issues = append(issues, issue)
+			}
+		}
+	case 2: // Blocked
+		issues = m.tasksViewGraph.FilterByStatus("blocked")
+	case 3: // In Progress
+		issues = m.tasksViewGraph.FilterByStatus("in_progress")
+	}
+
+	// If search is active, intersect with search results.
+	if m.tasksViewSearchQuery != "" {
+		searchResults := m.tasksViewGraph.FuzzySearch(m.tasksViewSearchQuery)
+		searchSet := make(map[string]bool, len(searchResults))
+		for _, r := range searchResults {
+			searchSet[r.ID] = true
+		}
+		count := 0
+		for _, issue := range issues {
+			if searchSet[issue.ID] {
 				count++
 			}
 		}
 		return count
-	case 1: // All
-		return len(m.tasksViewGraph.Issues)
-	case 2: // Blocked
-		return len(m.tasksViewGraph.FilterByStatus("blocked"))
-	case 3: // In Progress
-		return len(m.tasksViewGraph.FilterByStatus("in_progress"))
 	}
-	return 0
+
+	return len(issues)
 }
 
 // renderTasksViewList renders the left pane issue list.

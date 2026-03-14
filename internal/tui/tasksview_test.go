@@ -228,11 +228,11 @@ func TestTasksViewRefilterByTab(t *testing.T) {
 		t.Errorf("Ready tab: expected 1 issue, got %d", len(m.tasksViewFiltered))
 	}
 
-	// Tab 1: All
+	// Tab 1: All (excluding closed)
 	m.tasksViewTab = 1
 	m.tasksViewRefilter()
-	if len(m.tasksViewFiltered) != 4 {
-		t.Errorf("All tab: expected 4 issues, got %d", len(m.tasksViewFiltered))
+	if len(m.tasksViewFiltered) != 3 {
+		t.Errorf("All tab: expected 3 issues (excluding closed), got %d", len(m.tasksViewFiltered))
 	}
 
 	// Tab 2: Blocked
@@ -336,6 +336,72 @@ func TestTasksViewTabSwitching(t *testing.T) {
 	m.handleTasksViewKey("", "H")
 	if m.tasksViewTab != 0 {
 		t.Errorf("expected tab still 0, got %d", m.tasksViewTab)
+	}
+}
+
+func TestTasksViewTabHeaderFormat(t *testing.T) {
+	m := newTasksTestModel()
+	m.tasksViewGraph = bd.NewGraph([]bd.Issue{
+		{ID: "t-1", Status: "open", Priority: 1},
+		{ID: "t-2", Status: "in_progress", Priority: 2},
+		{ID: "t-3", Status: "blocked", Priority: 1},
+	})
+	m.tasksViewTab = 0
+
+	header := m.renderTasksViewTabHeader(80)
+
+	// Active tab should use bracket format [Ready 1].
+	if !strings.Contains(header, "[Ready 1]") {
+		t.Errorf("expected active tab with brackets, got %q", header)
+	}
+	// Inactive tabs should not use brackets.
+	if strings.Contains(header, "[All") {
+		t.Errorf("expected inactive tabs without brackets, got %q", header)
+	}
+	// Should have q:back hint.
+	if !strings.Contains(header, "q:back") {
+		t.Errorf("expected q:back hint, got %q", header)
+	}
+	// Should have separator line.
+	if !strings.Contains(header, "─") {
+		t.Errorf("expected separator line, got %q", header)
+	}
+}
+
+func TestTasksViewTabCountExcludesClosed(t *testing.T) {
+	m := newTasksTestModel()
+	m.tasksViewGraph = bd.NewGraph([]bd.Issue{
+		{ID: "t-1", Status: "open"},
+		{ID: "t-2", Status: "in_progress"},
+		{ID: "t-3", Status: "closed"},
+	})
+
+	// All tab should exclude closed.
+	allCount := m.tasksViewTabCount(1)
+	if allCount != 2 {
+		t.Errorf("All tab count: expected 2 (excluding closed), got %d", allCount)
+	}
+}
+
+func TestTasksViewTabCountWithSearch(t *testing.T) {
+	m := newTasksTestModel()
+	m.tasksViewGraph = bd.NewGraph([]bd.Issue{
+		{ID: "t-1", Title: "fix login bug", Status: "open"},
+		{ID: "t-2", Title: "add dashboard", Status: "open"},
+		{ID: "t-3", Title: "fix logout", Status: "in_progress"},
+	})
+	m.tasksViewSearchQuery = "fix"
+
+	// Ready tab (open) with search "fix" should match only t-1.
+	readyCount := m.tasksViewTabCount(0)
+	if readyCount != 1 {
+		t.Errorf("Ready tab with search: expected 1, got %d", readyCount)
+	}
+
+	// All tab (excluding closed) with search "fix" should match t-1 and t-3.
+	allCount := m.tasksViewTabCount(1)
+	if allCount != 2 {
+		t.Errorf("All tab with search: expected 2, got %d", allCount)
 	}
 }
 
