@@ -295,12 +295,9 @@ func (m *Model) tasksViewRefilter() {
 				issues = append(issues, issue)
 			}
 		}
-	case 1: // All (excluding closed)
-		for _, issue := range m.tasksViewGraph.Issues {
-			if issue.Status != "closed" {
-				issues = append(issues, issue)
-			}
-		}
+	case 1: // All (regardless of status)
+		issues = make([]*bd.Issue, len(m.tasksViewGraph.Issues))
+		copy(issues, m.tasksViewGraph.Issues)
 	case 2: // Blocked
 		issues = m.tasksViewGraph.FilterByStatus("blocked")
 	case 3: // In Progress
@@ -589,12 +586,9 @@ func (m *Model) tasksViewTabCount(tab int) int {
 				issues = append(issues, issue)
 			}
 		}
-	case 1: // All (excluding closed)
-		for _, issue := range m.tasksViewGraph.Issues {
-			if issue.Status != "closed" {
-				issues = append(issues, issue)
-			}
-		}
+	case 1: // All (regardless of status)
+		issues = make([]*bd.Issue, len(m.tasksViewGraph.Issues))
+		copy(issues, m.tasksViewGraph.Issues)
 	case 2: // Blocked
 		issues = m.tasksViewGraph.FilterByStatus("blocked")
 	case 3: // In Progress

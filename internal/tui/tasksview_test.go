@@ -233,11 +233,11 @@ func TestTasksViewRefilterByTab(t *testing.T) {
 		t.Errorf("Ready tab: expected 1 issue, got %d", len(m.tasksViewFiltered))
 	}
 
-	// Tab 1: All (excluding closed)
+	// Tab 1: All (regardless of status)
 	m.tasksViewTab = 1
 	m.tasksViewRefilter()
-	if len(m.tasksViewFiltered) != 3 {
-		t.Errorf("All tab: expected 3 issues (excluding closed), got %d", len(m.tasksViewFiltered))
+	if len(m.tasksViewFiltered) != 4 {
+		t.Errorf("All tab: expected 4 issues (all regardless of status), got %d", len(m.tasksViewFiltered))
 	}
 
 	// Tab 2: Blocked
@@ -454,7 +454,7 @@ func TestTasksViewTabHeaderFormat(t *testing.T) {
 	}
 }
 
-func TestTasksViewTabCountExcludesClosed(t *testing.T) {
+func TestTasksViewTabCountIncludesClosed(t *testing.T) {
 	m := newTasksTestModel()
 	m.tasksViewGraph = bd.NewGraph([]bd.Issue{
 		{ID: "t-1", Status: "open"},
@@ -462,10 +462,10 @@ func TestTasksViewTabCountExcludesClosed(t *testing.T) {
 		{ID: "t-3", Status: "closed"},
 	})
 
-	// All tab should exclude closed.
+	// All tab should include all issues regardless of status.
 	allCount := m.tasksViewTabCount(1)
-	if allCount != 2 {
-		t.Errorf("All tab count: expected 2 (excluding closed), got %d", allCount)
+	if allCount != 3 {
+		t.Errorf("All tab count: expected 3 (all issues), got %d", allCount)
 	}
 }
 
@@ -484,7 +484,7 @@ func TestTasksViewTabCountWithSearch(t *testing.T) {
 		t.Errorf("Ready tab with search: expected 1, got %d", readyCount)
 	}
 
-	// All tab (excluding closed) with search "fix" should match t-1 and t-3.
+	// All tab with search "fix" should match t-1 and t-3.
 	allCount := m.tasksViewTabCount(1)
 	if allCount != 2 {
 		t.Errorf("All tab with search: expected 2, got %d", allCount)
