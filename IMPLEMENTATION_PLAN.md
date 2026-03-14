@@ -26,14 +26,14 @@ Spec: [specs/render-cache.md](specs/render-cache.md)
    - `BenchmarkPlanViewUncached` — nil cache forces full glamour render each iteration; scales with file size (353μs→21.6ms for small→large)
    - `BenchmarkPlanViewCached` — primes cache once; near-constant ~70-96μs regardless of file size, confirming cache eliminates glamour bottleneck
 
-## Tasks
+9. ~~Create `filepreview_benchmark_test.go`~~ — Done
+   - `makeSourceFile(size string)` helper generates realistic Go source (structs, methods, error handling) at ~1KB/10KB/100KB
+   - `BenchmarkFilePreviewMarkdownUncached` — nil cache forces full glamour render; scales with file size (348μs→21ms for small→large)
+   - `BenchmarkFilePreviewMarkdownCached` — primes cache once; near-constant ~74-106μs regardless of file size
+   - `BenchmarkFilePreviewSourceUncached` — full file read + split + chroma highlight of visible lines (~3ms)
+   - `BenchmarkFilePreviewSourceCached` — cache hit skips I/O; chroma still runs per-frame (~2.9ms) — confirms cache saves only I/O, not highlighting (by design)
 
-9. **Create `filepreview_benchmark_test.go`**
-   - Add `makeSourceFile(size string)` helper generating realistic Go source code at ~1KB/10KB/100KB
-   - Add `BenchmarkFilePreviewMarkdownUncached` — markdown file preview without cache
-   - Add `BenchmarkFilePreviewMarkdownCached` — markdown file preview with warm cache
-   - Add `BenchmarkFilePreviewSourceUncached` — source code preview without cache
-   - Add `BenchmarkFilePreviewSourceCached` — source code preview with warm cache
+## Tasks
 
 10. **Run full benchmark suite and verify improvements**
     - Run `go test -bench=. -benchmem ./internal/tui/` to confirm all benchmarks pass
