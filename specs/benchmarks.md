@@ -2,11 +2,25 @@
 
 ## Overview
 
-Performance benchmarks for the TUI rendering and cursor calculation hot paths. These benchmarks live in `internal/tui/benchmark_test.go` and are designed to track performance over time as the codebase evolves. They use Go's `testing.B` framework with sub-benchmarks at multiple scale points.
+Performance benchmarks for the TUI rendering and cursor calculation hot paths. Benchmarks use Go's `testing.B` framework with sub-benchmarks at multiple scale points.
 
-## Scale Points
+## Benchmark Files
 
-Each benchmark runs at three item counts to reveal scaling behavior:
+Each benchmark file corresponds to the component it tests:
+
+| File | Component | What it measures |
+|------|-----------|-----------------|
+| `timeline_benchmark_test.go` | Timeline rendering | `View()` render path, cursor mapping, line counting, scaling |
+| `planview_benchmark_test.go` | Plan view rendering | Glamour markdown rendering, cached vs uncached |
+| `filepreview_benchmark_test.go` | File preview rendering | Source code + markdown preview, cached vs uncached |
+
+All benchmark files live in `internal/tui/`.
+
+## Timeline Benchmarks (`timeline_benchmark_test.go`)
+
+### Scale Points
+
+Each timeline benchmark runs at three item counts to reveal scaling behavior:
 
 | Label | Items | Represents |
 |-------|-------|------------|
@@ -14,7 +28,7 @@ Each benchmark runs at three item counts to reveal scaling behavior:
 | `n=200` | 200 | Moderate session with many tool calls |
 | `n=500` | 500 | Heavy session, stress test |
 
-## Test Data Helper
+### Test Data Helper
 
 A shared helper function `makeTestItems(n int)` constructs a realistic mix of timeline items:
 
@@ -27,8 +41,6 @@ Edit tool calls include `RawInput` with `old_string`/`new_string` fields (10–3
 Bash tool calls include `ResultContent` with 5–20 lines of output.
 
 The helper is deterministic (seeded RNG) so results are reproducible across runs.
-
-## Benchmarks
 
 ### `BenchmarkTimelineView`
 
@@ -182,14 +194,98 @@ func BenchmarkTimelineViewScaling(b *testing.B) {
 }
 ```
 
+## Plan View Benchmarks (`planview_benchmark_test.go`)
+
+### Scale Points
+
+Plan view benchmarks parameterize by markdown file size:
+
+| Label | Size | Represents |
+|-------|------|------------|
+| `small` | ~1KB | Short plan file, few sections |
+| `medium` | ~10KB | Typical plan with multiple sections and code blocks |
+| `large` | ~100KB | Very large plan with extensive code examples |
+
+### Test Data Helper
+
+A helper function `makePlanMarkdown(size string)` generates realistic plan markdown content with headings, prose, bullet lists, and fenced code blocks. The content is deterministic.
+
+### `BenchmarkPlanViewUncached`
+
+Measures the full render path on a cache miss: file read + glamour markdown rendering. This is the baseline showing why caching is needed.
+
+```go
+func BenchmarkPlanViewUncached(b *testing.B) {
+    for _, size := range []string{"small", "medium", "large"} {
+        b.Run(size, func(b *testing.B) {
+            // Write generated markdown to a temp file
+            // Call RenderPlanView with cache invalidated each iteration
+            b.ResetTimer()
+            for i := 0; i < b.N; i++ {
+                // Invalidate cache, then render
+            }
+        })
+    }
+}
+```
+
+### `BenchmarkPlanViewCached`
+
+Measures the render path on a cache hit: stat check + scroll slicing. Should be near-zero regardless of file size.
+
+```go
+func BenchmarkPlanViewCached(b *testing.B) {
+    for _, size := range []string{"small", "medium", "large"} {
+        b.Run(size, func(b *testing.B) {
+            // Write generated markdown to a temp file
+            // Prime the cache with one render
+            b.ResetTimer()
+            for i := 0; i < b.N; i++ {
+                // Render with warm cache
+            }
+        })
+    }
+}
+```
+
+## File Preview Benchmarks (`filepreview_benchmark_test.go`)
+
+### Scale Points
+
+File preview benchmarks parameterize by file size:
+
+| Label | Size | Represents |
+|-------|------|------------|
+| `small` | ~1KB | Short source file |
+| `medium` | ~10KB | Typical source file |
+| `large` | ~100KB | Large source file |
+
+### `BenchmarkFilePreviewMarkdownUncached`
+
+Measures markdown file preview rendering on a cache miss. Same glamour cost as plan view, exercised through the file preview path.
+
+### `BenchmarkFilePreviewMarkdownCached`
+
+Measures markdown file preview rendering on a cache hit.
+
+### `BenchmarkFilePreviewSourceUncached`
+
+Measures source code preview rendering on a cache miss: file read + split + chroma highlighting of visible lines.
+
+### `BenchmarkFilePreviewSourceCached`
+
+Measures source code preview rendering on a cache hit: stat check + chroma highlighting of visible lines. The chroma cost is O(visible) and remains per-frame — only the file read and split are cached.
+
 ## Running
 
 ```bash
 # Run all benchmarks
 go test -bench=. -benchmem ./internal/tui/
 
-# Run a specific benchmark
-go test -bench=BenchmarkTimelineView -benchmem ./internal/tui/
+# Run benchmarks for a specific component
+go test -bench=BenchmarkTimeline -benchmem ./internal/tui/
+go test -bench=BenchmarkPlanView -benchmem ./internal/tui/
+go test -bench=BenchmarkFilePreview -benchmem ./internal/tui/
 
 # Compare before/after a change (using benchstat)
 go test -bench=. -benchmem -count=10 ./internal/tui/ > old.txt

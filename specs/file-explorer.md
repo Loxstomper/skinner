@@ -159,6 +159,8 @@ File preview is lazy-loaded — content is read only when the cursor moves to a 
 
 Binary file detection: attempt to read the first 512 bytes and check for null bytes.
 
+File content and rendered output are cached via [render-cache.md](render-cache.md) to avoid re-reading and re-rendering on every frame. For markdown files, this caches the glamour output. For source code files, this caches the raw lines (chroma tokenization of visible lines still runs per-frame as it is already O(visible)).
+
 ### Line Numbers
 
 Line numbers are displayed in the preview gutter, styled in `ForegroundDim`. The `#` key toggles line numbers on/off (reusing the existing line number infrastructure from [line-numbers.md](line-numbers.md)).

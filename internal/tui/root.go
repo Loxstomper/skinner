@@ -164,6 +164,9 @@ type Model struct {
 	systemStatsAvailable bool // set to true after first successful read
 	systemStatsTick      int  // counts 1-second ticks; fires stats read every 2
 
+	// Render cache for plan view and file preview
+	renderCache *RenderCache
+
 	// Quit state
 	quitting bool
 }
@@ -195,6 +198,7 @@ func NewModel(sess model.Session, cfg config.Config, promptContent string, th th
 		timeline:              NewTimeline(),
 		workDir:               workDir,
 		planScrollPositions:   make(map[string]int),
+		renderCache:           &RenderCache{},
 		gitSessionStart:       time.Now(),
 	}
 }
@@ -1223,6 +1227,7 @@ func (m *Model) View() string {
 			Scroll:   m.planViewScroll,
 			Focused:  m.focusedPane == rightPane,
 			Theme:    m.theme,
+			Cache:    m.renderCache,
 		})
 		m.planViewTotalLines = totalLines
 	} else {

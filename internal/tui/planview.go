@@ -19,6 +19,7 @@ type PlanViewProps struct {
 	Scroll   int
 	Focused  bool
 	Theme    theme.Theme
+	Cache    *RenderCache // optional; nil disables caching
 }
 
 // RenderPlanView renders the plan content view for the right pane.
@@ -55,29 +56,40 @@ func RenderPlanView(props PlanViewProps) (string, int) {
 			Render(strings.Join(lines, "\n")), 0
 	}
 
-	// Read file content
+	// Try cache first
 	filePath := filepath.Join(props.Dir, props.Filename)
-	data, err := os.ReadFile(filePath)
-	if err != nil {
-		dimStyle := lipgloss.NewStyle().
-			Foreground(lipgloss.Color(props.Theme.ForegroundDim))
-		msg := dimStyle.Render("  File not found")
-		lines := []string{title, msg}
-		for len(lines) < props.Height {
-			lines = append(lines, "")
+	contentLines, cacheHit := props.Cache.Get(filePath, props.Width)
+
+	if !cacheHit {
+		// Read file content
+		data, err := os.ReadFile(filePath)
+		if err != nil {
+			dimStyle := lipgloss.NewStyle().
+				Foreground(lipgloss.Color(props.Theme.ForegroundDim))
+			msg := dimStyle.Render("  File not found")
+			lines := []string{title, msg}
+			for len(lines) < props.Height {
+				lines = append(lines, "")
+			}
+			return lipgloss.NewStyle().Width(props.Width).Height(props.Height).
+				Render(strings.Join(lines, "\n")), 0
 		}
-		return lipgloss.NewStyle().Width(props.Width).Height(props.Height).
-			Render(strings.Join(lines, "\n")), 0
-	}
 
-	// Render markdown with glamour
-	rendered := renderMarkdown(string(data), props.Width)
+		// Render markdown with glamour
+		rendered := renderMarkdown(string(data), props.Width)
 
-	// Split into lines for scrolling
-	contentLines := strings.Split(rendered, "\n")
-	// Remove trailing empty line that glamour often adds
-	for len(contentLines) > 0 && contentLines[len(contentLines)-1] == "" {
-		contentLines = contentLines[:len(contentLines)-1]
+		// Split into lines for scrolling
+		contentLines = strings.Split(rendered, "\n")
+		// Remove trailing empty line that glamour often adds
+		for len(contentLines) > 0 && contentLines[len(contentLines)-1] == "" {
+			contentLines = contentLines[:len(contentLines)-1]
+		}
+
+		// Cache the rendered lines
+		info, statErr := os.Stat(filePath)
+		if statErr == nil {
+			props.Cache.Set(filePath, info.ModTime(), props.Width, contentLines)
+		}
 	}
 	totalLines := len(contentLines)
 

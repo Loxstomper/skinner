@@ -100,7 +100,7 @@ A title bar at the top of the right pane showing the full filename (e.g. `IMPLEM
 
 ### Content
 
-The plan file content is rendered using [glamour](https://github.com/charmbracelet/glamour) with the `auto` style (adapts to terminal background). Content is word-wrapped to the right pane width.
+The plan file content is rendered using [glamour](https://github.com/charmbracelet/glamour) with the `auto` style (adapts to terminal background). Content is word-wrapped to the right pane width. Rendered output is cached via [render-cache.md](render-cache.md) to avoid re-running glamour on every frame — only a file modification or terminal resize triggers a re-render.
 
 ### Navigation
 
