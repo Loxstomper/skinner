@@ -56,5 +56,6 @@ In the **timeline pane**, cursor movement highlights individual items (text bloc
 | `?`              | Show help modal (all keybindings)           |
 | `ctrl+g`         | Enter git view (read-only commit history and diffs) |
 | `f`              | Enter file explorer (file tree with preview)        |
+| `t`              | Enter tasks view (beads issue list with detail)     |
 
 See [quit-confirmation.md](quit-confirmation.md) for quit behavior and [help-modal.md](help-modal.md) for the help overlay.
