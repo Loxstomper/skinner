@@ -22,6 +22,7 @@ type FilePreviewProps struct {
 	ShowLineNumbers bool
 	ThemeName       string // for chroma style selection
 	Theme           theme.Theme
+	Cache           *RenderCache // optional; nil disables caching
 }
 
 // FilePreviewResult contains the render output and metadata.
@@ -80,7 +81,17 @@ func RenderFilePreview(props FilePreviewProps) FilePreviewResult {
 		return buildPreviewResult(title, []string{msg}, contentHeight, props.Width)
 	}
 
-	// Read file content
+	// Try cache first
+	cachedLines, cacheHit := props.Cache.Get(fullPath, props.Width)
+
+	if cacheHit {
+		if isMarkdown(props.Path) {
+			return renderMarkdownPreviewFromLines(title, cachedLines, props)
+		}
+		return renderSourcePreviewFromLines(title, cachedLines, props)
+	}
+
+	// Cache miss — read file content
 	data, err := os.ReadFile(fullPath)
 	if err != nil {
 		msg := dimStyle.Render("  File not found")
@@ -91,22 +102,34 @@ func RenderFilePreview(props FilePreviewProps) FilePreviewResult {
 
 	// Markdown: glamour rendering, no line numbers
 	if isMarkdown(props.Path) {
-		return renderMarkdownPreview(title, content, props)
+		return renderMarkdownPreview(title, content, fullPath, props)
 	}
 
 	// Source code: chroma syntax highlighting
-	return renderSourcePreview(title, content, props)
+	return renderSourcePreview(title, content, fullPath, props)
 }
 
-// renderMarkdownPreview renders markdown content via glamour.
-func renderMarkdownPreview(title, content string, props FilePreviewProps) FilePreviewResult {
-	contentHeight := props.Height - 1
+// renderMarkdownPreview renders markdown content via glamour, caching the result.
+func renderMarkdownPreview(title, content, fullPath string, props FilePreviewProps) FilePreviewResult {
 	rendered := renderMarkdown(content, props.Width)
 
 	contentLines := strings.Split(rendered, "\n")
 	for len(contentLines) > 0 && contentLines[len(contentLines)-1] == "" {
 		contentLines = contentLines[:len(contentLines)-1]
 	}
+
+	// Cache the rendered lines
+	info, statErr := os.Stat(fullPath)
+	if statErr == nil {
+		props.Cache.Set(fullPath, info.ModTime(), props.Width, contentLines)
+	}
+
+	return renderMarkdownPreviewFromLines(title, contentLines, props)
+}
+
+// renderMarkdownPreviewFromLines renders pre-processed markdown lines with scroll.
+func renderMarkdownPreviewFromLines(title string, contentLines []string, props FilePreviewProps) FilePreviewResult {
+	contentHeight := props.Height - 1
 	totalLines := len(contentLines)
 
 	scroll := clampPreviewScrollVal(props.Scroll, totalLines, contentHeight)
@@ -125,13 +148,25 @@ func renderMarkdownPreview(title, content string, props FilePreviewProps) FilePr
 	return result
 }
 
-// renderSourcePreview renders source code with chroma syntax highlighting.
-func renderSourcePreview(title, content string, props FilePreviewProps) FilePreviewResult {
-	contentHeight := props.Height - 1
+// renderSourcePreview reads source code, caches raw lines, and renders with chroma.
+func renderSourcePreview(title, content, fullPath string, props FilePreviewProps) FilePreviewResult {
 	sourceLines := strings.Split(content, "\n")
 	if len(sourceLines) > 0 && sourceLines[len(sourceLines)-1] == "" {
 		sourceLines = sourceLines[:len(sourceLines)-1]
 	}
+
+	// Cache the raw source lines (chroma highlighting still runs per-frame on visible slice)
+	info, statErr := os.Stat(fullPath)
+	if statErr == nil {
+		props.Cache.Set(fullPath, info.ModTime(), props.Width, sourceLines)
+	}
+
+	return renderSourcePreviewFromLines(title, sourceLines, props)
+}
+
+// renderSourcePreviewFromLines renders pre-split source lines with chroma highlighting.
+func renderSourcePreviewFromLines(title string, sourceLines []string, props FilePreviewProps) FilePreviewResult {
+	contentHeight := props.Height - 1
 	totalLines := len(sourceLines)
 
 	scroll := clampPreviewScrollVal(props.Scroll, totalLines, contentHeight)

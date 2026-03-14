@@ -10,20 +10,17 @@ Spec: [specs/render-cache.md](specs/render-cache.md)
    - Added `Cache *RenderCache` field to `PlanViewProps`
    - `RenderPlanView` calls `cache.Get` before file read; on hit skips `os.ReadFile` + `renderMarkdown`; on miss renders then calls `cache.Set` with modtime from `os.Stat`
    - Nil cache handled via `RenderCache.Get`/`Set` nil-receiver checks — existing tests pass unchanged
-5. ~~Wire `RenderCache` into root model (plan view portion)~~ — Done
-   - Added `renderCache *RenderCache` field to Model, initialized in `NewModel`
-   - Passed through `PlanViewProps.Cache` when calling `RenderPlanView`
+4. ~~Add `*RenderCache` to `FilePreviewProps` and integrate in `RenderFilePreview`~~ — Done
+   - Added `Cache *RenderCache` field to `FilePreviewProps`
+   - Cache check happens in `RenderFilePreview` before file read; on hit routes to `renderMarkdownPreviewFromLines` or `renderSourcePreviewFromLines`
+   - Markdown: caches glamour-rendered lines (same as plan view)
+   - Source: caches raw split lines; chroma tokenization still runs per-frame on visible slice (intentional — per-line cost is low, and caching styled output would require theme + hscroll in cache key)
+   - Nil cache handled via existing nil-receiver checks — all 13 existing tests pass unchanged
+5. ~~Wire `RenderCache` into root model~~ — Done
+   - Plan view: passed through `PlanViewProps.Cache`
+   - File preview: passed through `FilePreviewProps.Cache` in `fileExplorerView`
 
 ## Tasks
-
-4. **Add `*RenderCache` to `FilePreviewProps` and integrate in `RenderFilePreview`**
-   - Add `Cache *RenderCache` field to `FilePreviewProps`
-   - In `renderMarkdownPreview`: call `cache.Get` before rendering; on hit use cached lines; on miss render then `cache.Set`
-   - In `renderSourcePreview`: call `cache.Get` to cache raw source lines (pre-split, pre-chroma); on hit skip `os.ReadFile` + `strings.Split`; chroma tokenization of visible lines still runs per-frame
-   - Handle nil cache for backward compatibility
-
-5. **Wire `RenderCache` into root model (file preview portion)**
-   - Pass `renderCache` through `FilePreviewProps.Cache` when calling `RenderFilePreview` (after task 4 adds the field)
 
 6. **Add integration tests for cached plan view and file preview rendering**
    - Test `RenderPlanView` with cache: first call populates cache, second call uses it, verify identical output

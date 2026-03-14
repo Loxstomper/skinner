@@ -327,6 +327,7 @@ func (m *Model) renderFileExplorer() string {
 		ShowLineNumbers: m.lineNumbers,
 		ThemeName:       m.config.ThemeName,
 		Theme:           m.theme,
+		Cache:           m.renderCache,
 	})
 	// Clamp scroll based on actual content
 	m.filePreviewScroll = ClampFilePreviewScroll(m.filePreviewScroll, preview.TotalLines, rightHeight)
