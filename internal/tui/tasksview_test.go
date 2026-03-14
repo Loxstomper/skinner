@@ -2,6 +2,7 @@ package tui
 
 import (
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -43,6 +44,7 @@ func TestExitTasksViewClearsState(t *testing.T) {
 	m.enterTasksView()
 	m.tasksViewGraph = bd.NewGraph(nil)
 	m.tasksViewFiltered = []*bd.Issue{{ID: "test-1"}}
+	m.tasksViewVisibleRows = []tasksViewRow{{issue: &bd.Issue{ID: "test-1"}}}
 	m.tasksViewSearchActive = true
 	m.tasksViewSearchQuery = "foo"
 
@@ -56,6 +58,9 @@ func TestExitTasksViewClearsState(t *testing.T) {
 	}
 	if m.tasksViewFiltered != nil {
 		t.Error("expected tasksViewFiltered to be nil")
+	}
+	if m.tasksViewVisibleRows != nil {
+		t.Error("expected tasksViewVisibleRows to be nil")
 	}
 	if m.tasksViewExpanded != nil {
 		t.Error("expected tasksViewExpanded to be nil")
@@ -252,8 +257,10 @@ func TestTasksViewRefilterByTab(t *testing.T) {
 
 func TestTasksViewCursorMovement(t *testing.T) {
 	m := newTasksTestModel()
-	m.tasksViewFiltered = []*bd.Issue{
-		{ID: "t-1"}, {ID: "t-2"}, {ID: "t-3"},
+	m.tasksViewVisibleRows = []tasksViewRow{
+		{issue: &bd.Issue{ID: "t-1"}},
+		{issue: &bd.Issue{ID: "t-2"}},
+		{issue: &bd.Issue{ID: "t-3"}},
 	}
 
 	m.tasksViewMoveCursor(1)
@@ -481,6 +488,273 @@ func TestTasksViewTabCountWithSearch(t *testing.T) {
 	allCount := m.tasksViewTabCount(1)
 	if allCount != 2 {
 		t.Errorf("All tab with search: expected 2, got %d", allCount)
+	}
+}
+
+func TestTasksViewTreeModeRendersConnectors(t *testing.T) {
+	m := newTasksTestModel()
+	m.tasksViewActive = true
+	m.tasksViewExpanded = make(map[string]bool)
+	issues := []bd.Issue{
+		{ID: "root-1", Title: "Root Issue", Status: "open", Priority: 1, IssueType: "epic"},
+		{ID: "child-1", Title: "Child One", Status: "in_progress", Priority: 2, IssueType: "task", Parent: "root-1"},
+		{ID: "child-2", Title: "Child Two", Status: "blocked", Priority: 1, IssueType: "bug", Parent: "root-1"},
+	}
+	m.tasksViewGraph = bd.NewGraph(issues)
+	m.tasksViewTab = 1
+	m.tasksViewFlatMode = false
+	m.tasksViewRefilter()
+
+	list := m.renderTasksViewList(50, 20)
+
+	// Should contain tree connectors for children.
+	if !strings.Contains(list, "├") {
+		t.Errorf("expected ├ tree connector in tree mode, got:\n%s", list)
+	}
+	if !strings.Contains(list, "└") {
+		t.Errorf("expected └ tree connector in tree mode, got:\n%s", list)
+	}
+}
+
+func TestTasksViewFlatModeNoConnectors(t *testing.T) {
+	m := newTasksTestModel()
+	m.tasksViewActive = true
+	m.tasksViewExpanded = make(map[string]bool)
+	issues := []bd.Issue{
+		{ID: "root-1", Title: "Root Issue", Status: "open", Priority: 1, IssueType: "epic"},
+		{ID: "child-1", Title: "Child One", Status: "in_progress", Priority: 2, IssueType: "task", Parent: "root-1"},
+	}
+	m.tasksViewGraph = bd.NewGraph(issues)
+	m.tasksViewTab = 1
+	m.tasksViewFlatMode = true
+	m.tasksViewRefilter()
+
+	list := m.renderTasksViewList(50, 20)
+
+	// Flat mode should not have tree connectors.
+	if strings.Contains(list, "├") || strings.Contains(list, "└") || strings.Contains(list, "│") {
+		t.Errorf("expected no tree connectors in flat mode, got:\n%s", list)
+	}
+}
+
+func TestTasksViewCollapse(t *testing.T) {
+	m := newTasksTestModel()
+	m.tasksViewActive = true
+	m.tasksViewExpanded = make(map[string]bool)
+	issues := []bd.Issue{
+		{ID: "root-1", Title: "Root", Status: "open", Priority: 1, IssueType: "epic"},
+		{ID: "child-1", Title: "Child", Status: "open", Priority: 2, IssueType: "task", Parent: "root-1"},
+	}
+	m.tasksViewGraph = bd.NewGraph(issues)
+	m.tasksViewTab = 1
+	m.tasksViewFlatMode = false
+	m.tasksViewRefilter()
+
+	// Initially expanded: should see both root and child.
+	if len(m.tasksViewVisibleRows) != 2 {
+		t.Fatalf("expected 2 visible rows when expanded, got %d", len(m.tasksViewVisibleRows))
+	}
+
+	// Collapse root.
+	m.tasksViewCursor = 0
+	m.handleTasksViewKey("", " ")
+
+	// Should only see root now.
+	if len(m.tasksViewVisibleRows) != 1 {
+		t.Errorf("expected 1 visible row after collapse, got %d", len(m.tasksViewVisibleRows))
+	}
+
+	// List should show collapse indicator.
+	list := m.renderTasksViewList(50, 20)
+	if !strings.Contains(list, "▶") {
+		t.Errorf("expected ▶ collapse indicator, got:\n%s", list)
+	}
+
+	// Expand again.
+	m.handleTasksViewKey("", " ")
+	if len(m.tasksViewVisibleRows) != 2 {
+		t.Errorf("expected 2 visible rows after re-expand, got %d", len(m.tasksViewVisibleRows))
+	}
+}
+
+func TestTasksViewIsExpanded(t *testing.T) {
+	m := newTasksTestModel()
+	m.tasksViewExpanded = make(map[string]bool)
+
+	// Default should be expanded.
+	if !m.tasksViewIsExpanded("unknown-id") {
+		t.Error("expected default to be expanded")
+	}
+
+	m.tasksViewExpanded["test-id"] = false
+	if m.tasksViewIsExpanded("test-id") {
+		t.Error("expected explicitly collapsed to return false")
+	}
+
+	m.tasksViewExpanded["test-id"] = true
+	if !m.tasksViewIsExpanded("test-id") {
+		t.Error("expected explicitly expanded to return true")
+	}
+}
+
+func TestTasksViewSelectedIssue(t *testing.T) {
+	m := newTasksTestModel()
+
+	// No visible rows → nil.
+	if m.tasksViewSelectedIssue() != nil {
+		t.Error("expected nil when no visible rows")
+	}
+
+	issue := &bd.Issue{ID: "test-1", Title: "Test"}
+	m.tasksViewVisibleRows = []tasksViewRow{{issue: issue}}
+	m.tasksViewCursor = 0
+
+	selected := m.tasksViewSelectedIssue()
+	if selected == nil || selected.ID != "test-1" {
+		t.Error("expected selected issue to be test-1")
+	}
+}
+
+func TestTasksViewStatusIconColor(t *testing.T) {
+	m := newTasksTestModel()
+	tests := []struct {
+		status string
+		want   string
+	}{
+		{"open", m.theme.ForegroundDim},
+		{"in_progress", m.theme.StatusRunning},
+		{"blocked", m.theme.StatusError},
+		{"closed", m.theme.StatusSuccess},
+		{"unknown", m.theme.Foreground},
+	}
+	for _, tt := range tests {
+		got := m.statusIconColor(tt.status)
+		if got != tt.want {
+			t.Errorf("statusIconColor(%q) = %q, want %q", tt.status, got, tt.want)
+		}
+	}
+}
+
+func TestTasksViewIssueTypeColor(t *testing.T) {
+	m := newTasksTestModel()
+	tests := []struct {
+		issueType string
+		want      string
+	}{
+		{"bug", m.theme.StatusError},
+		{"feature", m.theme.StatusSuccess},
+		{"task", m.theme.Foreground},
+		{"epic", "#d33682"},
+		{"chore", "#b58900"},
+		{"decision", "#2aa198"},
+		{"unknown", m.theme.Foreground},
+	}
+	for _, tt := range tests {
+		got := m.issueTypeColor(tt.issueType)
+		if got != tt.want {
+			t.Errorf("issueTypeColor(%q) = %q, want %q", tt.issueType, got, tt.want)
+		}
+	}
+}
+
+func TestTasksViewListViewportScroll(t *testing.T) {
+	m := newTasksTestModel()
+	m.tasksViewActive = true
+	m.tasksViewExpanded = make(map[string]bool)
+
+	// Create more issues than fit in the viewport.
+	var issues []bd.Issue
+	for i := 0; i < 20; i++ {
+		issues = append(issues, bd.Issue{
+			ID: fmt.Sprintf("t-%d", i), Title: fmt.Sprintf("Issue %d", i),
+			Status: "open", Priority: 2, IssueType: "task",
+		})
+	}
+	m.tasksViewGraph = bd.NewGraph(issues)
+	m.tasksViewTab = 1
+	m.tasksViewRefilter()
+
+	// Move cursor past viewport height.
+	m.tasksViewCursor = 15
+
+	// Render with small height — should adjust scroll.
+	list := m.renderTasksViewList(40, 5)
+	_ = list
+
+	// After render, list scroll should have adjusted.
+	if m.tasksViewListScroll == 0 {
+		t.Error("expected list scroll to adjust when cursor is past viewport")
+	}
+	if m.tasksViewListScroll > m.tasksViewCursor {
+		t.Errorf("list scroll %d should not exceed cursor %d", m.tasksViewListScroll, m.tasksViewCursor)
+	}
+}
+
+func TestTasksViewRebuildVisiblePreservesCursor(t *testing.T) {
+	m := newTasksTestModel()
+	m.tasksViewExpanded = make(map[string]bool)
+	issues := []bd.Issue{
+		{ID: "t-1", Title: "First", Status: "open", Priority: 1, IssueType: "task"},
+		{ID: "t-2", Title: "Second", Status: "open", Priority: 2, IssueType: "task"},
+		{ID: "t-3", Title: "Third", Status: "open", Priority: 3, IssueType: "task"},
+	}
+	m.tasksViewGraph = bd.NewGraph(issues)
+	m.tasksViewTab = 1
+	m.tasksViewRefilter()
+
+	// Set cursor to second issue.
+	m.tasksViewCursor = 1
+
+	// Rebuild visible rows — cursor should stay on same issue.
+	m.tasksViewRebuildVisible()
+	if m.tasksViewCursor != 1 {
+		t.Errorf("expected cursor preserved at 1, got %d", m.tasksViewCursor)
+	}
+	if m.tasksViewVisibleRows[m.tasksViewCursor].issue.ID != "t-2" {
+		t.Errorf("expected cursor on t-2, got %s", m.tasksViewVisibleRows[m.tasksViewCursor].issue.ID)
+	}
+}
+
+func TestTasksViewJumpBottomUsesVisibleRows(t *testing.T) {
+	m := newTasksTestModel()
+	m.tasksViewExpanded = make(map[string]bool)
+	issues := []bd.Issue{
+		{ID: "t-1", Title: "First", Status: "open", Priority: 1, IssueType: "task"},
+		{ID: "t-2", Title: "Second", Status: "open", Priority: 2, IssueType: "task"},
+		{ID: "t-3", Title: "Third", Status: "open", Priority: 3, IssueType: "task"},
+	}
+	m.tasksViewGraph = bd.NewGraph(issues)
+	m.tasksViewTab = 1
+	m.tasksViewRefilter()
+
+	m.handleTasksViewKey("jump_bottom", "")
+	if m.tasksViewCursor != 2 {
+		t.Errorf("expected cursor at last row (2), got %d", m.tasksViewCursor)
+	}
+}
+
+func TestTasksViewHighlightDepthBehavior(t *testing.T) {
+	m := newTasksTestModel()
+	m.tasksViewActive = true
+	m.tasksViewExpanded = make(map[string]bool)
+	issues := []bd.Issue{
+		{ID: "t-1", Title: "Test", Status: "open", Priority: 1, IssueType: "task"},
+	}
+	m.tasksViewGraph = bd.NewGraph(issues)
+	m.tasksViewTab = 1
+	m.tasksViewRefilter()
+
+	// Verify render doesn't panic at either depth and produces output.
+	m.tasksViewDepth = 0
+	list0 := m.renderTasksViewList(40, 10)
+	if !strings.Contains(list0, "t-1") {
+		t.Error("expected issue ID in depth 0 list")
+	}
+
+	m.tasksViewDepth = 1
+	list1 := m.renderTasksViewList(40, 10)
+	if !strings.Contains(list1, "t-1") {
+		t.Error("expected issue ID in depth 1 list")
 	}
 }
 

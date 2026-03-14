@@ -162,8 +162,10 @@ type Model struct {
 	tasksViewGraph       *bd.Graph
 	tasksViewCursor      int
 	tasksViewScroll      int // detail pane scroll offset
+	tasksViewListScroll  int // list pane viewport scroll offset
 	tasksViewTab         int // 0=Ready, 1=All, 2=Blocked, 3=InProgress
 	tasksViewFiltered    []*bd.Issue
+	tasksViewVisibleRows []tasksViewRow // display-ordered rows (tree or flat)
 	tasksViewExpanded    map[string]bool
 	tasksViewFlatMode    bool
 	tasksViewSearchActive bool

@@ -22,6 +22,7 @@ func setupDetailModel(issues []bd.Issue) *Model {
 func TestDetailRenderEmptyFiltered(t *testing.T) {
 	m := newTasksTestModel()
 	m.tasksViewFiltered = nil
+	m.tasksViewVisibleRows = nil
 	result := m.tasksViewRenderDetail(80, 30)
 	// Should return empty lines, not panic.
 	if len(result) == 0 {
@@ -360,9 +361,10 @@ func TestDetailRenderClosedTimestamp(t *testing.T) {
 			ClosedAt: closed, CloseReason: "All tasks completed"},
 	}
 	m := setupDetailModel(issues)
-	m.tasksViewTab = 1 // All tab includes closed... wait, All excludes closed
-	// Use a direct setup to include closed issues.
-	m.tasksViewFiltered = []*bd.Issue{m.tasksViewGraph.Issues[0]}
+	m.tasksViewTab = 1 // All tab excludes closed; set up manually.
+	issue := m.tasksViewGraph.Issues[0]
+	m.tasksViewFiltered = []*bd.Issue{issue}
+	m.tasksViewVisibleRows = []tasksViewRow{{issue: issue, depth: 0}}
 	m.tasksViewCursor = 0
 
 	result := m.tasksViewRenderDetail(80, 30)

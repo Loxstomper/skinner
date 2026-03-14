@@ -10,11 +10,10 @@ import (
 
 // tasksViewRenderDetail renders the full issue detail pane with all sections.
 func (m *Model) tasksViewRenderDetail(width, height int) string {
-	if len(m.tasksViewFiltered) == 0 || m.tasksViewCursor >= len(m.tasksViewFiltered) {
+	issue := m.tasksViewSelectedIssue()
+	if issue == nil {
 		return strings.Repeat("\n", max(0, height-1))
 	}
-
-	issue := m.tasksViewFiltered[m.tasksViewCursor]
 
 	dimStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(m.theme.ForegroundDim))
 	fgStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(m.theme.Foreground))

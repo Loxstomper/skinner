@@ -11,6 +11,14 @@ import (
 	"github.com/loxstomper/skinner/internal/config"
 )
 
+// tasksViewRow represents a single display row in the issue list,
+// including tree-rendering metadata.
+type tasksViewRow struct {
+	issue  *bd.Issue
+	depth  int    // tree depth level (0 = root)
+	prefix string // tree connector prefix (e.g., "├ ", "│ └ ")
+}
+
 // tasksViewDataMsg carries the result of async bd data fetching.
 type tasksViewDataMsg struct {
 	graph *bd.Graph
@@ -26,8 +34,10 @@ func (m *Model) enterTasksView() tea.Cmd {
 	m.tasksViewGraph = nil
 	m.tasksViewCursor = 0
 	m.tasksViewScroll = 0
+	m.tasksViewListScroll = 0
 	m.tasksViewTab = 0 // Ready tab
 	m.tasksViewFiltered = nil
+	m.tasksViewVisibleRows = nil
 	m.tasksViewExpanded = make(map[string]bool)
 	m.tasksViewFlatMode = false
 	m.tasksViewSearchActive = false
@@ -42,6 +52,7 @@ func (m *Model) exitTasksView() {
 	m.tasksViewDepth = 0
 	m.tasksViewGraph = nil
 	m.tasksViewFiltered = nil
+	m.tasksViewVisibleRows = nil
 	m.tasksViewExpanded = nil
 	m.tasksViewLoading = false
 	m.tasksViewError = nil
@@ -116,6 +127,7 @@ func (m *Model) handleTasksViewKey(action, key string) (tea.Model, tea.Cmd) {
 			m.tasksViewScroll = 0
 		} else {
 			m.tasksViewCursor = 0
+			m.tasksViewListScroll = 0
 		}
 		return m, nil
 
@@ -123,14 +135,15 @@ func (m *Model) handleTasksViewKey(action, key string) (tea.Model, tea.Cmd) {
 		if m.tasksViewDepth == 1 {
 			// Will be clamped during render.
 			m.tasksViewScroll = 9999
-		} else if len(m.tasksViewFiltered) > 0 {
-			m.tasksViewCursor = len(m.tasksViewFiltered) - 1
+		} else if len(m.tasksViewVisibleRows) > 0 {
+			m.tasksViewCursor = len(m.tasksViewVisibleRows) - 1
 		}
 		return m, nil
 
 	case "search":
 		m.tasksViewSearchActive = true
 		m.tasksViewSearchQuery = ""
+		m.tasksViewRebuildVisible()
 		return m, nil
 	}
 
@@ -141,6 +154,7 @@ func (m *Model) handleTasksViewKey(action, key string) (tea.Model, tea.Cmd) {
 			if m.tasksViewTab > 0 {
 				m.tasksViewTab--
 				m.tasksViewCursor = 0
+				m.tasksViewListScroll = 0
 				m.tasksViewSearchActive = false
 				m.tasksViewSearchQuery = ""
 				m.tasksViewRefilter()
@@ -151,6 +165,7 @@ func (m *Model) handleTasksViewKey(action, key string) (tea.Model, tea.Cmd) {
 			if m.tasksViewTab < 3 {
 				m.tasksViewTab++
 				m.tasksViewCursor = 0
+				m.tasksViewListScroll = 0
 				m.tasksViewSearchActive = false
 				m.tasksViewSearchQuery = ""
 				m.tasksViewRefilter()
@@ -158,14 +173,16 @@ func (m *Model) handleTasksViewKey(action, key string) (tea.Model, tea.Cmd) {
 			return m, nil
 
 		case " ": // Toggle expand/collapse.
-			if !m.tasksViewFlatMode && len(m.tasksViewFiltered) > 0 && m.tasksViewCursor < len(m.tasksViewFiltered) {
-				issue := m.tasksViewFiltered[m.tasksViewCursor]
-				m.tasksViewExpanded[issue.ID] = !m.tasksViewExpanded[issue.ID]
+			if !m.tasksViewFlatMode && len(m.tasksViewVisibleRows) > 0 && m.tasksViewCursor < len(m.tasksViewVisibleRows) {
+				issue := m.tasksViewVisibleRows[m.tasksViewCursor].issue
+				m.tasksViewExpanded[issue.ID] = !m.tasksViewIsExpanded(issue.ID)
+				m.tasksViewRebuildVisible()
 			}
 			return m, nil
 
 		case "f": // Toggle flat/tree mode.
 			m.tasksViewFlatMode = !m.tasksViewFlatMode
+			m.tasksViewRebuildVisible()
 			return m, nil
 
 		case "r": // Refresh.
@@ -189,7 +206,8 @@ func (m *Model) handleTasksViewSearchKey(action string) (tea.Model, tea.Cmd) {
 
 	case config.ActionExpand: // enter
 		m.tasksViewSearchActive = false
-		// Keep filtered results.
+		// Keep filtered results, rebuild visible for tree mode.
+		m.tasksViewRebuildVisible()
 		return m, nil
 
 	case config.ActionMoveDown:
@@ -229,24 +247,43 @@ func (m *Model) handleTasksViewSearchRawKey(key string) bool {
 	return false
 }
 
-// tasksViewMoveCursor moves the cursor by delta, clamping to bounds.
+// tasksViewMoveCursor moves the cursor by delta, clamping to visible row bounds.
 func (m *Model) tasksViewMoveCursor(delta int) {
-	if len(m.tasksViewFiltered) == 0 {
+	if len(m.tasksViewVisibleRows) == 0 {
 		return
 	}
 	m.tasksViewCursor += delta
 	if m.tasksViewCursor < 0 {
 		m.tasksViewCursor = 0
 	}
-	if m.tasksViewCursor >= len(m.tasksViewFiltered) {
-		m.tasksViewCursor = len(m.tasksViewFiltered) - 1
+	if m.tasksViewCursor >= len(m.tasksViewVisibleRows) {
+		m.tasksViewCursor = len(m.tasksViewVisibleRows) - 1
 	}
+}
+
+// tasksViewIsExpanded returns whether an issue node is expanded.
+// Defaults to true (expanded) if not explicitly set.
+func (m *Model) tasksViewIsExpanded(id string) bool {
+	expanded, ok := m.tasksViewExpanded[id]
+	if !ok {
+		return true // default: all expanded
+	}
+	return expanded
+}
+
+// tasksViewSelectedIssue returns the currently selected issue, or nil.
+func (m *Model) tasksViewSelectedIssue() *bd.Issue {
+	if m.tasksViewCursor < len(m.tasksViewVisibleRows) {
+		return m.tasksViewVisibleRows[m.tasksViewCursor].issue
+	}
+	return nil
 }
 
 // tasksViewRefilter rebuilds the filtered issue list based on current tab and search.
 func (m *Model) tasksViewRefilter() {
 	if m.tasksViewGraph == nil {
 		m.tasksViewFiltered = nil
+		m.tasksViewVisibleRows = nil
 		return
 	}
 
@@ -287,8 +324,131 @@ func (m *Model) tasksViewRefilter() {
 	}
 
 	m.tasksViewFiltered = issues
-	if m.tasksViewCursor >= len(m.tasksViewFiltered) {
-		m.tasksViewCursor = max(0, len(m.tasksViewFiltered)-1)
+	m.tasksViewRebuildVisible()
+	if m.tasksViewCursor >= len(m.tasksViewVisibleRows) {
+		m.tasksViewCursor = max(0, len(m.tasksViewVisibleRows)-1)
+	}
+}
+
+// tasksViewRebuildVisible builds the display-ordered visible rows from the
+// filtered issue list, respecting tree/flat mode and expand/collapse state.
+func (m *Model) tasksViewRebuildVisible() {
+	// Remember current selection to preserve it after rebuild.
+	var prevID string
+	if m.tasksViewCursor < len(m.tasksViewVisibleRows) {
+		prevID = m.tasksViewVisibleRows[m.tasksViewCursor].issue.ID
+	}
+
+	if m.tasksViewFlatMode || m.tasksViewSearchActive {
+		// Flat mode: all filtered issues at depth 0, no tree prefixes.
+		rows := make([]tasksViewRow, len(m.tasksViewFiltered))
+		for i, issue := range m.tasksViewFiltered {
+			rows[i] = tasksViewRow{issue: issue, depth: 0}
+		}
+		m.tasksViewVisibleRows = rows
+	} else {
+		// Tree mode: walk from roots, respecting expansion and filter.
+		if m.tasksViewGraph == nil {
+			m.tasksViewVisibleRows = nil
+			return
+		}
+
+		filteredSet := make(map[string]bool, len(m.tasksViewFiltered))
+		for _, issue := range m.tasksViewFiltered {
+			filteredSet[issue.ID] = true
+		}
+
+		var rows []tasksViewRow
+		added := make(map[string]bool)
+
+		// markDescendants recursively marks all descendants of a collapsed parent
+		// so they are not treated as orphans.
+		var markDescendants func(parentID string, visited map[string]bool)
+		markDescendants = func(parentID string, visited map[string]bool) {
+			for _, child := range m.tasksViewGraph.Children[parentID] {
+				if !visited[child.ID] {
+					visited[child.ID] = true
+					markDescendants(child.ID, visited)
+				}
+			}
+		}
+
+		var walk func(issues []*bd.Issue, depth int, parentPrefix string)
+		walk = func(issues []*bd.Issue, depth int, parentPrefix string) {
+			// Collect only filtered issues at this level.
+			var visible []*bd.Issue
+			for _, issue := range issues {
+				if filteredSet[issue.ID] && !added[issue.ID] {
+					visible = append(visible, issue)
+				}
+			}
+
+			for i, issue := range visible {
+				added[issue.ID] = true
+				isLast := i == len(visible)-1
+
+				var prefix string
+				if depth > 0 {
+					if isLast {
+						prefix = parentPrefix + "└ "
+					} else {
+						prefix = parentPrefix + "├ "
+					}
+				}
+
+				rows = append(rows, tasksViewRow{
+					issue:  issue,
+					depth:  depth,
+					prefix: prefix,
+				})
+
+				// Recurse into children if expanded; mark as skipped if collapsed.
+				children := m.tasksViewGraph.Children[issue.ID]
+				if m.tasksViewIsExpanded(issue.ID) {
+					if len(children) > 0 {
+						var childPrefix string
+						if depth > 0 {
+							if isLast {
+								childPrefix = parentPrefix + "  "
+							} else {
+								childPrefix = parentPrefix + "│ "
+							}
+						}
+						walk(children, depth+1, childPrefix)
+					}
+				} else {
+					// Mark all descendants as added so they're not treated as orphans.
+					markDescendants(issue.ID, added)
+				}
+			}
+		}
+
+		walk(m.tasksViewGraph.Roots, 0, "")
+
+		// Add orphans: filtered issues not reached via root tree walk
+		// (e.g., children whose parents were filtered out).
+		for _, issue := range m.tasksViewFiltered {
+			if !added[issue.ID] {
+				added[issue.ID] = true
+				rows = append(rows, tasksViewRow{issue: issue, depth: 0})
+			}
+		}
+
+		m.tasksViewVisibleRows = rows
+	}
+
+	// Try to restore cursor to same issue.
+	if prevID != "" {
+		for i, row := range m.tasksViewVisibleRows {
+			if row.issue.ID == prevID {
+				m.tasksViewCursor = i
+				return
+			}
+		}
+	}
+	// Clamp cursor.
+	if m.tasksViewCursor >= len(m.tasksViewVisibleRows) {
+		m.tasksViewCursor = max(0, len(m.tasksViewVisibleRows)-1)
 	}
 }
 
@@ -460,7 +620,8 @@ func (m *Model) tasksViewTabCount(tab int) int {
 	return len(issues)
 }
 
-// renderTasksViewList renders the left pane issue list.
+// renderTasksViewList renders the left pane issue list with status icons,
+// type colors, tree connectors, and viewport scrolling.
 func (m *Model) renderTasksViewList(width, height int) string {
 	var lines []string
 	listHeight := height
@@ -469,17 +630,15 @@ func (m *Model) renderTasksViewList(width, height int) string {
 	if m.tasksViewSearchActive {
 		inputStyle := lipgloss.NewStyle().
 			Foreground(lipgloss.Color(m.theme.Foreground))
-		inputBar := inputStyle.Render("/" + m.tasksViewSearchQuery + "█")
-		// Pad to full width.
 		raw := "/" + m.tasksViewSearchQuery + "█"
 		if len(raw) < width {
-			inputBar = inputStyle.Render(raw + strings.Repeat(" ", width-len(raw)))
+			raw += strings.Repeat(" ", width-len(raw))
 		}
-		lines = append(lines, inputBar)
+		lines = append(lines, inputStyle.Render(raw))
 		listHeight--
 	}
 
-	if len(m.tasksViewFiltered) == 0 {
+	if len(m.tasksViewVisibleRows) == 0 {
 		style := lipgloss.NewStyle().
 			Foreground(lipgloss.Color(m.theme.ForegroundDim)).
 			Width(width).
@@ -492,27 +651,93 @@ func (m *Model) renderTasksViewList(width, height int) string {
 		return emptyContent
 	}
 
-	for i, issue := range m.tasksViewFiltered {
-		if i >= listHeight {
-			break
+	// Ensure cursor is visible in the list viewport.
+	if m.tasksViewListScroll > m.tasksViewCursor {
+		m.tasksViewListScroll = m.tasksViewCursor
+	}
+	if m.tasksViewCursor >= m.tasksViewListScroll+listHeight {
+		m.tasksViewListScroll = m.tasksViewCursor - listHeight + 1
+	}
+	if m.tasksViewListScroll < 0 {
+		m.tasksViewListScroll = 0
+	}
+
+	end := m.tasksViewListScroll + listHeight
+	if end > len(m.tasksViewVisibleRows) {
+		end = len(m.tasksViewVisibleRows)
+	}
+
+	dimStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(m.theme.ForegroundDim))
+
+	for i := m.tasksViewListScroll; i < end; i++ {
+		row := m.tasksViewVisibleRows[i]
+		issue := row.issue
+
+		// Build the collapse indicator for parent nodes.
+		collapse := ""
+		if !m.tasksViewFlatMode && !m.tasksViewSearchActive && m.tasksViewGraph != nil {
+			if children := m.tasksViewGraph.Children[issue.ID]; len(children) > 0 {
+				if !m.tasksViewIsExpanded(issue.ID) {
+					collapse = "▶"
+				}
+			}
 		}
+
 		icon := statusIcon(issue.Status)
-		line := fmt.Sprintf("%s %d %s  %s", icon, issue.Priority, issue.ID, issue.Title)
+		priStr := fmt.Sprintf("%d", issue.Priority)
 
-		// Truncate to fit width.
-		if len(line) > width {
-			line = line[:width-1] + "…"
+		// Calculate available width for the title.
+		// Plain-text structure: {prefix}{collapse}{icon} {pri} {id}  {title}
+		metaLen := len(row.prefix) + len(collapse) + len(icon) + 1 + len(priStr) + 1 + len(issue.ID) + 2
+		titleAvail := width - metaLen
+		title := issue.Title
+		if titleAvail <= 0 {
+			title = ""
+		} else {
+			titleRunes := []rune(title)
+			if len(titleRunes) > titleAvail {
+				if titleAvail > 1 {
+					title = string(titleRunes[:titleAvail-1]) + "…"
+				} else {
+					title = "…"
+				}
+			}
 		}
+
+		// Build styled line.
+		var sb strings.Builder
+		if row.prefix != "" {
+			sb.WriteString(dimStyle.Render(row.prefix))
+		}
+		if collapse != "" {
+			sb.WriteString(dimStyle.Render(collapse))
+		}
+		sb.WriteString(lipgloss.NewStyle().
+			Foreground(lipgloss.Color(m.statusIconColor(issue.Status))).
+			Render(icon))
+		sb.WriteString(" ")
+		sb.WriteString(priStr)
+		sb.WriteString(" ")
+		sb.WriteString(issue.ID)
+		sb.WriteString("  ")
+		sb.WriteString(lipgloss.NewStyle().
+			Foreground(lipgloss.Color(m.issueTypeColor(issue.IssueType))).
+			Render(title))
+
+		line := sb.String()
+
 		// Pad to full width.
-		for len(line) < width {
-			line += " "
+		lineWidth := lipgloss.Width(line)
+		if lineWidth < width {
+			line += strings.Repeat(" ", width-lineWidth)
 		}
 
-		if i == m.tasksViewCursor {
-			style := lipgloss.NewStyle().
+		// Highlight selected row (only when list is focused).
+		if i == m.tasksViewCursor && m.tasksViewDepth == 0 {
+			line = lipgloss.NewStyle().
 				Background(lipgloss.Color(m.theme.Highlight)).
-				Width(width)
-			line = style.Render(line)
+				Width(width).
+				Render(line)
 		}
 
 		lines = append(lines, line)
@@ -525,7 +750,6 @@ func (m *Model) renderTasksViewList(width, height int) string {
 
 	return strings.Join(lines, "\n")
 }
-
 
 // statusIcon returns the unicode status icon for an issue status.
 func statusIcon(status string) string {
@@ -540,6 +764,42 @@ func statusIcon(status string) string {
 		return "✓"
 	default:
 		return "◌"
+	}
+}
+
+// statusIconColor returns the theme color for a status icon.
+func (m *Model) statusIconColor(status string) string {
+	switch status {
+	case "open":
+		return m.theme.ForegroundDim
+	case "in_progress":
+		return m.theme.StatusRunning
+	case "blocked":
+		return m.theme.StatusError
+	case "closed":
+		return m.theme.StatusSuccess
+	default:
+		return m.theme.Foreground
+	}
+}
+
+// issueTypeColor returns the theme color for an issue type's title.
+func (m *Model) issueTypeColor(issueType string) string {
+	switch issueType {
+	case "bug":
+		return m.theme.StatusError
+	case "feature":
+		return m.theme.StatusSuccess
+	case "task":
+		return m.theme.Foreground
+	case "epic":
+		return "#d33682" // solarized magenta
+	case "chore":
+		return "#b58900" // solarized yellow
+	case "decision":
+		return "#2aa198" // solarized cyan
+	default:
+		return m.theme.Foreground
 	}
 }
 
@@ -574,8 +834,12 @@ func (m *Model) handleTasksViewMouse(msg tea.MouseMsg, paneRow int) (tea.Model, 
 			// Click in left pane selects issue.
 			// paneRow is relative to content area (after header).
 			tabHeaderHeight := 2
-			listRow := paneRow - tabHeaderHeight
-			if listRow >= 0 && listRow < len(m.tasksViewFiltered) {
+			searchBarHeight := 0
+			if m.tasksViewSearchActive {
+				searchBarHeight = 1
+			}
+			listRow := paneRow - tabHeaderHeight - searchBarHeight + m.tasksViewListScroll
+			if listRow >= 0 && listRow < len(m.tasksViewVisibleRows) {
 				m.tasksViewCursor = listRow
 				m.tasksViewDepth = 0
 			}
