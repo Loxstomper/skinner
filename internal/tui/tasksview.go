@@ -291,11 +291,10 @@ func (m *Model) renderTasksView() string {
 	contentHeight := m.height - 1 // minus header
 
 	if m.tasksViewLoading {
-		return m.renderTasksViewCentered("Loading...", contentHeight)
+		return m.renderTasksViewCentered("Loading issues...", contentHeight)
 	}
 	if m.tasksViewError != nil {
-		errMsg := fmt.Sprintf("Error: %v\nPress r to retry", m.tasksViewError)
-		return m.renderTasksViewCentered(errMsg, contentHeight)
+		return m.renderTasksViewError(contentHeight)
 	}
 	if m.tasksViewGraph == nil {
 		return m.renderTasksViewCentered("No data", contentHeight)
@@ -327,7 +326,7 @@ func (m *Model) renderTasksView() string {
 	return tabHeader + "\n" + panes
 }
 
-// renderTasksViewCentered renders centered text for loading/error states.
+// renderTasksViewCentered renders centered text for loading states.
 func (m *Model) renderTasksViewCentered(text string, height int) string {
 	style := lipgloss.NewStyle().
 		Foreground(lipgloss.Color(m.theme.ForegroundDim)).
@@ -335,6 +334,24 @@ func (m *Model) renderTasksViewCentered(text string, height int) string {
 		Height(height).
 		Align(lipgloss.Center, lipgloss.Center)
 	return style.Render(text)
+}
+
+// renderTasksViewError renders the error state with styled message and hint.
+func (m *Model) renderTasksViewError(height int) string {
+	errStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color(m.theme.StatusError))
+	hintStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color(m.theme.ForegroundDim))
+
+	errMsg := errStyle.Render(fmt.Sprintf("Could not load issues: %v", m.tasksViewError))
+	hint := hintStyle.Render("r:retry  q:back")
+	content := errMsg + "\n" + hint
+
+	container := lipgloss.NewStyle().
+		Width(m.width).
+		Height(height).
+		Align(lipgloss.Center, lipgloss.Center)
+	return container.Render(content)
 }
 
 // renderTasksViewTabHeader renders the tab bar.
