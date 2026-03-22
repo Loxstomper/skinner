@@ -16,6 +16,22 @@ type ModelPricing struct {
 	ContextWindow int
 }
 
+type HooksTimeoutConfig struct {
+	Default        int  // default timeout in seconds for all hooks
+	PreIteration   *int // override for pre-iteration hook
+	OnIterationEnd *int // override for on-iteration-end hook
+	OnError        *int // override for on-error hook
+	OnIdle         *int // override for on-idle hook
+}
+
+type HooksConfig struct {
+	PreIteration   string // shell command for pre-iteration hook
+	OnIterationEnd string // shell command for on-iteration-end hook
+	OnError        string // shell command for on-error hook
+	OnIdle         string // shell command for on-idle hook
+	Timeout        HooksTimeoutConfig
+}
+
 type Config struct {
 	ViewMode    string // "full" or "compact"
 	Layout      string // "side", "bottom", "auto"
@@ -24,6 +40,7 @@ type Config struct {
 	KeyMap      KeyMap
 	Pricing     map[string]ModelPricing
 	PlanCommand string // shell command for plan mode (run via sh -c)
+	Hooks       HooksConfig
 }
 
 func DefaultConfig() Config {
@@ -35,6 +52,11 @@ func DefaultConfig() Config {
 		KeyMap:      DefaultKeyMap(),
 		Pricing:     DefaultPricing(),
 		PlanCommand: `claude "study specs/README.md"`,
+		Hooks: HooksConfig{
+			Timeout: HooksTimeoutConfig{
+				Default: 10,
+			},
+		},
 	}
 }
 

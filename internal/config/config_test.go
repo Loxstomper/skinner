@@ -202,6 +202,43 @@ command = "claude --verbose"
 	}
 }
 
+func TestDefaultConfig_HooksConfig(t *testing.T) {
+	cfg := DefaultConfig()
+
+	// Hook commands should be empty by default
+	if cfg.Hooks.PreIteration != "" {
+		t.Errorf("expected empty PreIteration, got %q", cfg.Hooks.PreIteration)
+	}
+	if cfg.Hooks.OnIterationEnd != "" {
+		t.Errorf("expected empty OnIterationEnd, got %q", cfg.Hooks.OnIterationEnd)
+	}
+	if cfg.Hooks.OnError != "" {
+		t.Errorf("expected empty OnError, got %q", cfg.Hooks.OnError)
+	}
+	if cfg.Hooks.OnIdle != "" {
+		t.Errorf("expected empty OnIdle, got %q", cfg.Hooks.OnIdle)
+	}
+
+	// Default timeout should be 10 seconds
+	if cfg.Hooks.Timeout.Default != 10 {
+		t.Errorf("expected Timeout.Default=10, got %d", cfg.Hooks.Timeout.Default)
+	}
+
+	// Per-hook timeout overrides should be nil
+	if cfg.Hooks.Timeout.PreIteration != nil {
+		t.Errorf("expected Timeout.PreIteration=nil, got %v", cfg.Hooks.Timeout.PreIteration)
+	}
+	if cfg.Hooks.Timeout.OnIterationEnd != nil {
+		t.Errorf("expected Timeout.OnIterationEnd=nil, got %v", cfg.Hooks.Timeout.OnIterationEnd)
+	}
+	if cfg.Hooks.Timeout.OnError != nil {
+		t.Errorf("expected Timeout.OnError=nil, got %v", cfg.Hooks.Timeout.OnError)
+	}
+	if cfg.Hooks.Timeout.OnIdle != nil {
+		t.Errorf("expected Timeout.OnIdle=nil, got %v", cfg.Hooks.Timeout.OnIdle)
+	}
+}
+
 func TestLoadConfig_NoConfigFile(t *testing.T) {
 	// Create a temporary directory with no config file
 	tmpDir := t.TempDir()
