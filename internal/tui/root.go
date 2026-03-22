@@ -415,6 +415,15 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case subprocessExitMsg:
 		m.controller.CompleteIteration(msg.err)
 
+		// Fire on-iteration-end hook for every completed iteration
+		hookCtx := m.buildHookContext()
+		exitCode := 0
+		if msg.err != nil {
+			exitCode = 1
+		}
+		hookCtx.IterationExit = &exitCode
+		m.hookRunner.RunEvent("on-iteration-end", hookCtx)
+
 		if !m.quitting && m.controller.ShouldStartNext() {
 			return m, m.spawnIteration()
 		}
