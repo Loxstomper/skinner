@@ -252,6 +252,132 @@ func TestRunner_RunPre_UnrecognizedKeys(t *testing.T) {
 	}
 }
 
+func TestRunner_RunPre_Timeout(t *testing.T) {
+	one := 1
+	r := NewRunner(config.HooksConfig{
+		PreIteration: "sleep 10",
+		Timeout:      config.HooksTimeoutConfig{Default: 10, PreIteration: &one},
+	}, t.TempDir())
+
+	start := time.Now()
+	_, err := r.RunPre(context.Background(), HookContext{Iteration: 1})
+	elapsed := time.Since(start)
+
+	if err == nil {
+		t.Fatal("expected error for timeout")
+	}
+	if elapsed > 3*time.Second {
+		t.Errorf("timeout took too long: %v", elapsed)
+	}
+}
+
+func TestRunner_RunPre_EnvVars(t *testing.T) {
+	tmpDir := t.TempDir()
+	outFile := filepath.Join(tmpDir, "env.txt")
+
+	r := NewRunner(config.HooksConfig{
+		PreIteration: "env | grep SKINNER > " + outFile,
+		Timeout:      config.HooksTimeoutConfig{Default: 10},
+	}, tmpDir)
+
+	ctx := HookContext{
+		Iteration:     3,
+		PromptFile:    "PROMPT.md",
+		MaxIterations: 10,
+		RunIndex:      1,
+	}
+
+	_, err := r.RunPre(context.Background(), ctx)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	data, err := os.ReadFile(outFile)
+	if err != nil {
+		t.Fatalf("failed to read env output: %v", err)
+	}
+	output := string(data)
+
+	expected := []string{
+		"SKINNER_HOOK=pre-iteration",
+		"SKINNER_ITERATION=3",
+		"SKINNER_PROMPT_FILE=PROMPT.md",
+		"SKINNER_MAX_ITERATIONS=10",
+		"SKINNER_RUN_INDEX=1",
+	}
+	for _, exp := range expected {
+		if !containsLine(output, exp) {
+			t.Errorf("expected env to contain %q, got:\n%s", exp, output)
+		}
+	}
+}
+
+func TestRunner_RunEvent_PostIterationEnvVars(t *testing.T) {
+	tmpDir := t.TempDir()
+	outFile := filepath.Join(tmpDir, "env.txt")
+
+	r := NewRunner(config.HooksConfig{
+		OnIterationEnd: "env | grep SKINNER > " + outFile,
+		Timeout:        config.HooksTimeoutConfig{Default: 10},
+	}, tmpDir)
+
+	exitCode := 1
+	ctx := HookContext{
+		Iteration:     2,
+		IterationExit: &exitCode,
+		PromptFile:    "BUILD.md",
+		MaxIterations: 5,
+	}
+
+	r.RunEvent("on-iteration-end", ctx)
+
+	// Wait for goroutine
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		if _, err := os.Stat(outFile); err == nil {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	data, err := os.ReadFile(outFile)
+	if err != nil {
+		t.Fatalf("failed to read env output: %v", err)
+	}
+	output := string(data)
+
+	if !containsLine(output, "SKINNER_ITERATION_EXIT=1") {
+		t.Errorf("expected SKINNER_ITERATION_EXIT=1 in env, got:\n%s", output)
+	}
+	if !containsLine(output, "SKINNER_HOOK=on-iteration-end") {
+		t.Errorf("expected SKINNER_HOOK=on-iteration-end in env, got:\n%s", output)
+	}
+}
+
+func containsLine(s, substr string) bool {
+	for _, line := range splitLines(s) {
+		if line == substr {
+			return true
+		}
+	}
+	return false
+}
+
+func splitLines(s string) []string {
+	var lines []string
+	start := 0
+	for i := 0; i < len(s); i++ {
+		if s[i] == '\n' {
+			lines = append(lines, s[start:i])
+			start = i + 1
+		}
+	}
+	if start < len(s) {
+		lines = append(lines, s[start:])
+	}
+	return lines
+}
+
 func TestRunner_RunEvent_NotConfigured(t *testing.T) {
 	r := NewRunner(config.HooksConfig{}, t.TempDir())
 	// Should not panic or block
