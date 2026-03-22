@@ -1,6 +1,7 @@
 package hooks
 
 import (
+	"context"
 	"testing"
 
 	"github.com/loxstomper/skinner/internal/config"
@@ -129,6 +130,122 @@ func TestRunner_BuildEnv_NoPromptFile(t *testing.T) {
 
 	if _, ok := envMap["SKINNER_PROMPT_FILE"]; ok {
 		t.Error("SKINNER_PROMPT_FILE should not be set when empty")
+	}
+}
+
+func TestRunner_RunPre_NotConfigured(t *testing.T) {
+	r := NewRunner(config.HooksConfig{}, t.TempDir())
+	result, err := r.RunPre(context.Background(), HookContext{Iteration: 1})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.Prompt != "" || result.Done {
+		t.Errorf("expected empty result, got %+v", result)
+	}
+}
+
+func TestRunner_RunPre_Prompt(t *testing.T) {
+	r := NewRunner(config.HooksConfig{
+		PreIteration: `echo '{"prompt": "fix tests"}'`,
+		Timeout:      config.HooksTimeoutConfig{Default: 10},
+	}, t.TempDir())
+
+	result, err := r.RunPre(context.Background(), HookContext{Iteration: 1})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.Prompt != "fix tests" {
+		t.Errorf("expected Prompt=%q, got %q", "fix tests", result.Prompt)
+	}
+	if result.Done {
+		t.Error("expected Done=false")
+	}
+}
+
+func TestRunner_RunPre_Done(t *testing.T) {
+	r := NewRunner(config.HooksConfig{
+		PreIteration: `echo '{"done": true}'`,
+		Timeout:      config.HooksTimeoutConfig{Default: 10},
+	}, t.TempDir())
+
+	result, err := r.RunPre(context.Background(), HookContext{Iteration: 1})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !result.Done {
+		t.Error("expected Done=true")
+	}
+}
+
+func TestRunner_RunPre_DoneTakesPrecedence(t *testing.T) {
+	r := NewRunner(config.HooksConfig{
+		PreIteration: `echo '{"prompt": "fix tests", "done": true}'`,
+		Timeout:      config.HooksTimeoutConfig{Default: 10},
+	}, t.TempDir())
+
+	result, err := r.RunPre(context.Background(), HookContext{Iteration: 1})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !result.Done {
+		t.Error("expected Done=true when both prompt and done are set")
+	}
+}
+
+func TestRunner_RunPre_EmptyStdout(t *testing.T) {
+	r := NewRunner(config.HooksConfig{
+		PreIteration: "true", // exits 0 with no output
+		Timeout:      config.HooksTimeoutConfig{Default: 10},
+	}, t.TempDir())
+
+	result, err := r.RunPre(context.Background(), HookContext{Iteration: 1})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.Prompt != "" || result.Done {
+		t.Errorf("expected empty result for empty stdout, got %+v", result)
+	}
+}
+
+func TestRunner_RunPre_InvalidJSON(t *testing.T) {
+	r := NewRunner(config.HooksConfig{
+		PreIteration: "echo 'not json'",
+		Timeout:      config.HooksTimeoutConfig{Default: 10},
+	}, t.TempDir())
+
+	result, err := r.RunPre(context.Background(), HookContext{Iteration: 1})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.Prompt != "" || result.Done {
+		t.Errorf("expected empty result for invalid JSON, got %+v", result)
+	}
+}
+
+func TestRunner_RunPre_NonZeroExit(t *testing.T) {
+	r := NewRunner(config.HooksConfig{
+		PreIteration: "echo 'hook error' >&2; exit 1",
+		Timeout:      config.HooksTimeoutConfig{Default: 10},
+	}, t.TempDir())
+
+	_, err := r.RunPre(context.Background(), HookContext{Iteration: 1})
+	if err == nil {
+		t.Fatal("expected error for non-zero exit")
+	}
+}
+
+func TestRunner_RunPre_UnrecognizedKeys(t *testing.T) {
+	r := NewRunner(config.HooksConfig{
+		PreIteration: `echo '{"foo": "bar"}'`,
+		Timeout:      config.HooksTimeoutConfig{Default: 10},
+	}, t.TempDir())
+
+	result, err := r.RunPre(context.Background(), HookContext{Iteration: 1})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.Prompt != "" || result.Done {
+		t.Errorf("expected empty result for unrecognized keys, got %+v", result)
 	}
 }
 

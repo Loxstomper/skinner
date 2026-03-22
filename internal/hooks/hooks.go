@@ -1,8 +1,14 @@
 package hooks
 
 import (
+	"bytes"
+	"context"
+	"encoding/json"
 	"fmt"
+	"os"
+	"os/exec"
 	"strconv"
+	"time"
 
 	"github.com/loxstomper/skinner/internal/config"
 )
@@ -77,4 +83,65 @@ func (r *Runner) BuildEnv(hookName string, ctx HookContext) []string {
 	env = append(env, fmt.Sprintf("SKINNER_RUN_INDEX=%d", ctx.RunIndex))
 
 	return env
+}
+
+// PreIterationResult holds the parsed output of a pre-iteration hook.
+type PreIterationResult struct {
+	Prompt string // replacement prompt (empty = use prompt file)
+	Done   bool   // true = stop the loop
+}
+
+// RunPre executes the pre-iteration hook and parses its JSON output.
+// Returns (PreIterationResult{}, nil) if the hook is not configured or
+// stdout is empty/invalid JSON (iteration proceeds normally per spec).
+// Returns error only on non-zero exit or timeout.
+func (r *Runner) RunPre(ctx context.Context, hookCtx HookContext) (PreIterationResult, error) {
+	command := r.CommandFor("pre-iteration")
+	if command == "" {
+		return PreIterationResult{}, nil
+	}
+
+	timeout := time.Duration(r.Config.Timeout.TimeoutFor("pre-iteration")) * time.Second
+	cmdCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
+	cmd := exec.CommandContext(cmdCtx, "sh", "-c", command)
+	cmd.Dir = r.WorkDir
+	cmd.Env = append(os.Environ(), r.BuildEnv("pre-iteration", hookCtx)...)
+
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+
+	if err := cmd.Run(); err != nil {
+		return PreIterationResult{}, fmt.Errorf("pre-iteration hook failed: %s: %w", stderr.String(), err)
+	}
+
+	// Empty stdout = no effect, proceed normally
+	out := bytes.TrimSpace(stdout.Bytes())
+	if len(out) == 0 {
+		return PreIterationResult{}, nil
+	}
+
+	// Parse JSON output
+	var parsed struct {
+		Prompt string `json:"prompt"`
+		Done   *bool  `json:"done"`
+	}
+	if err := json.Unmarshal(out, &parsed); err != nil {
+		// Invalid JSON = no effect per spec
+		return PreIterationResult{}, nil
+	}
+
+	// done takes precedence over prompt
+	if parsed.Done != nil && *parsed.Done {
+		return PreIterationResult{Done: true}, nil
+	}
+
+	if parsed.Prompt != "" {
+		return PreIterationResult{Prompt: parsed.Prompt}, nil
+	}
+
+	// Valid JSON but no recognized keys = no effect
+	return PreIterationResult{}, nil
 }
