@@ -24,8 +24,9 @@ type HeaderProps struct {
 	MaxIterations   int
 	SessionStatus   model.IterationStatus
 	StatusFlash     string
-	CPUPercent      *int // nil = no data yet
-	MemPercent      *int // nil = no data yet
+	HookStatus      string // current hook activity (e.g. "hook: pre-iteration...")
+	CPUPercent      *int   // nil = no data yet
+	MemPercent      *int   // nil = no data yet
 	Width           int
 	Theme           theme.Theme
 }
@@ -34,6 +35,22 @@ type HeaderProps struct {
 // It is a pure function with no side effects.
 func RenderHeader(p HeaderProps) string {
 	dim := lipgloss.NewStyle().Foreground(lipgloss.Color(p.Theme.ForegroundDim))
+
+	// Hook status: show hook activity indicator centered in header bar
+	if p.HookStatus != "" {
+		hookStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(p.Theme.StatusRunning))
+		hookRendered := hookStyle.Render(p.HookStatus)
+		hookWidth := lipgloss.Width(hookRendered)
+		leftPad := (p.Width - hookWidth) / 2
+		if leftPad < 1 {
+			leftPad = 1
+		}
+		rightPad := p.Width - leftPad - hookWidth
+		if rightPad < 0 {
+			rightPad = 0
+		}
+		return strings.Repeat(" ", leftPad) + hookRendered + strings.Repeat(" ", rightPad)
+	}
 
 	// Status flash: show error message centered in header bar
 	if p.StatusFlash != "" {

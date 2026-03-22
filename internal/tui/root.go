@@ -189,6 +189,7 @@ type Model struct {
 
 	// Hook runner for lifecycle hooks
 	hookRunner *hooks.Runner
+	hookStatus string // current hook activity (e.g. "pre-iteration..." or "")
 
 	// Render cache for plan view and file preview
 	renderCache *RenderCache
@@ -387,6 +388,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, waitForEvent(m.eventCh)
 
 	case preIterationResultMsg:
+		m.hookStatus = ""
 		if msg.Err != nil {
 			m.statusFlash = fmt.Sprintf("pre-iteration hook failed: %v", msg.Err)
 			m.controller.Session.Phase = model.PhaseFinished
@@ -1483,6 +1485,7 @@ func (m *Model) headerProps() HeaderProps {
 		MaxIterations:   sess.MaxIterations,
 		SessionStatus:   sessionStatus,
 		StatusFlash:     m.statusFlash,
+		HookStatus:      m.hookStatus,
 		CPUPercent:      sess.CPUPercent,
 		MemPercent:      sess.MemPercent,
 		Width:           m.width,
@@ -1594,6 +1597,7 @@ func (m *Model) populateThinkingState(props *TimelineProps) {
 func (m *Model) spawnIteration() tea.Cmd {
 	// If pre-iteration hook is configured, run it first (async via Cmd)
 	if m.hookRunner.CommandFor("pre-iteration") != "" {
+		m.hookStatus = "hook: pre-iteration..."
 		hookCtx := m.buildHookContext()
 		return func() tea.Msg {
 			result, err := m.hookRunner.RunPre(context.Background(), hookCtx)
