@@ -13,6 +13,7 @@ import (
 	"github.com/loxstomper/skinner/internal/bd"
 	"github.com/loxstomper/skinner/internal/config"
 	"github.com/loxstomper/skinner/internal/executor"
+	"github.com/loxstomper/skinner/internal/hooks"
 	"github.com/loxstomper/skinner/internal/git"
 	"github.com/loxstomper/skinner/internal/model"
 	"github.com/loxstomper/skinner/internal/session"
@@ -182,6 +183,9 @@ type Model struct {
 	systemStatsAvailable bool // set to true after first successful read
 	systemStatsTick      int  // counts 1-second ticks; fires stats read every 2
 
+	// Hook runner for lifecycle hooks
+	hookRunner *hooks.Runner
+
 	// Render cache for plan view and file preview
 	renderCache *RenderCache
 
@@ -216,6 +220,7 @@ func NewModel(sess model.Session, cfg config.Config, promptContent string, th th
 		timeline:              NewTimeline(),
 		workDir:               workDir,
 		planScrollPositions:   make(map[string]int),
+		hookRunner:            hooks.NewRunner(cfg.Hooks, workDir),
 		renderCache:           &RenderCache{},
 		gitSessionStart:       time.Now(),
 	}
