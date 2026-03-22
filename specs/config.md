@@ -39,6 +39,19 @@ name = "solarized-dark"
 [plan]
 command = 'claude "study specs/README.md"'
 
+# Hooks — user-defined shell commands at lifecycle points.
+# Each key is a hook name, value is a shell command string.
+[hooks]
+# pre-iteration = "./scripts/check-ready.sh"
+# on-iteration-end = "echo 'done' >> /tmp/skinner.log"
+# on-error = "notify-send 'Skinner iteration failed'"
+# on-idle = "./scripts/cleanup.sh"
+
+# Override default timeouts per hook. Duration string: integer + unit (s or m).
+[hooks.timeout]
+# pre-iteration = "60s"    # default: 30s
+# on-error = "5s"          # default: 10s
+
 # Per-model pricing (cost per token in USD) and context window size.
 # Prices sourced from https://docs.anthropic.com/en/docs/about-claude/models
 # Update these when pricing changes.
@@ -72,6 +85,14 @@ context_window = 200000
 | `view`  | `layout` | `"side"`, `"bottom"`, `"auto"` | `"auto"`    |
 | `view`  | `line_numbers` | `true`, `false`  | `true`             |
 | `theme` | `name` | Any built-in theme name | `"solarized-dark"`  |
+| `hooks` | `pre-iteration` | Shell command string | *(not set)* |
+| `hooks` | `on-iteration-end` | Shell command string | *(not set)* |
+| `hooks` | `on-error` | Shell command string | *(not set)* |
+| `hooks` | `on-idle` | Shell command string | *(not set)* |
+| `hooks.timeout` | `pre-iteration` | Duration string (`"30s"`, `"2m"`) | `"30s"` |
+| `hooks.timeout` | `on-iteration-end` | Duration string | `"10s"` |
+| `hooks.timeout` | `on-error` | Duration string | `"10s"` |
+| `hooks.timeout` | `on-idle` | Duration string | `"10s"` |
 
 ### Keybindings
 
@@ -127,6 +148,23 @@ If the model from a stream event is not found in the pricing table, tokens are t
 
 The command is executed via `sh -c`, so shell quoting, environment variables, and pipes are supported. See [plan-mode.md](plan-mode.md).
 
+### Hooks
+
+The `[hooks]` section defines shell commands that run at specific points in the iteration lifecycle. Each key is a hook name, and its value is a shell command string executed via `sh -c`.
+
+| Key | Type | Description |
+|-----|------|-------------|
+| `pre-iteration` | `pre-*` | Blocking. Runs before each iteration; stdout parsed as JSON. |
+| `on-iteration-end` | `on-*` | Fire-and-forget. Runs after each iteration's subprocess exits. |
+| `on-error` | `on-*` | Fire-and-forget. Runs after a non-zero exit (in addition to `on-iteration-end`). |
+| `on-idle` | `on-*` | Fire-and-forget. Runs when the session enters Idle or Finished phase. |
+
+Hooks not defined in the config are simply not fired. There are no built-in default hooks.
+
+The `[hooks.timeout]` section overrides the default timeout per hook. Values are duration strings: an integer followed by a unit suffix (`s` for seconds, `m` for minutes). Default timeouts: `pre-*` hooks = `30s`, `on-*` hooks = `10s`. If a hook exceeds its timeout, the process is killed.
+
+See [hooks.md](hooks.md) for the full specification including the pre-iteration JSON contract, environment variables, error handling, and interaction with `--exit`.
+
 ## Defaults
 
 - `view.mode` = `"full"` — show icon + tool name + summary; text blocks up to 3 lines.
@@ -135,6 +173,8 @@ The command is executed via `sh -c`, so shell quoting, environment variables, an
 - `theme.name` = `"solarized-dark"` — see [theme.md](theme.md) for available themes.
 - `plan.command` = `'claude "study specs/README.md"'` — see [plan-mode.md](plan-mode.md).
 - `keybindings` — all actions use hardcoded defaults. See [keybindings.md](keybindings.md).
+- `hooks` — no hooks configured by default. See [hooks.md](hooks.md).
+- `hooks.timeout` — `pre-*` = `30s`, `on-*` = `10s`.
 - `pricing` — see below for defaults.
 
 ## CLI Overrides
