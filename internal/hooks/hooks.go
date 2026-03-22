@@ -145,3 +145,26 @@ func (r *Runner) RunPre(ctx context.Context, hookCtx HookContext) (PreIterationR
 	// Valid JSON but no recognized keys = no effect
 	return PreIterationResult{}, nil
 }
+
+// RunEvent launches a fire-and-forget on-* hook in a goroutine.
+// Returns immediately. Errors, timeouts, and output are silently ignored.
+// No-op if the hook is not configured.
+func (r *Runner) RunEvent(hookName string, hookCtx HookContext) {
+	command := r.CommandFor(hookName)
+	if command == "" {
+		return
+	}
+
+	timeout := time.Duration(r.Config.Timeout.TimeoutFor(hookName)) * time.Second
+	env := r.BuildEnv(hookName, hookCtx)
+
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), timeout)
+		defer cancel()
+
+		cmd := exec.CommandContext(ctx, "sh", "-c", command)
+		cmd.Dir = r.WorkDir
+		cmd.Env = append(os.Environ(), env...)
+		_ = cmd.Run()
+	}()
+}

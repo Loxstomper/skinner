@@ -2,7 +2,10 @@ package hooks
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/loxstomper/skinner/internal/config"
 )
@@ -247,6 +250,45 @@ func TestRunner_RunPre_UnrecognizedKeys(t *testing.T) {
 	if result.Prompt != "" || result.Done {
 		t.Errorf("expected empty result for unrecognized keys, got %+v", result)
 	}
+}
+
+func TestRunner_RunEvent_NotConfigured(t *testing.T) {
+	r := NewRunner(config.HooksConfig{}, t.TempDir())
+	// Should not panic or block
+	r.RunEvent("on-idle", HookContext{})
+}
+
+func TestRunner_RunEvent_FireAndForget(t *testing.T) {
+	tmpDir := t.TempDir()
+	marker := filepath.Join(tmpDir, "hook-ran")
+
+	r := NewRunner(config.HooksConfig{
+		OnIdle:  "touch " + marker,
+		Timeout: config.HooksTimeoutConfig{Default: 10},
+	}, tmpDir)
+
+	r.RunEvent("on-idle", HookContext{})
+
+	// Wait for the goroutine to complete
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		if _, err := os.Stat(marker); err == nil {
+			return // success
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatal("hook did not run within timeout")
+}
+
+func TestRunner_RunEvent_NonZeroExitIgnored(t *testing.T) {
+	r := NewRunner(config.HooksConfig{
+		OnError: "exit 1",
+		Timeout: config.HooksTimeoutConfig{Default: 10},
+	}, t.TempDir())
+
+	// Should not panic
+	r.RunEvent("on-error", HookContext{Iteration: 1})
+	time.Sleep(50 * time.Millisecond) // let goroutine finish
 }
 
 // envToMap converts a slice of "KEY=VALUE" strings to a map.
