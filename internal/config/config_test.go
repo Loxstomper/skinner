@@ -239,6 +239,125 @@ func TestDefaultConfig_HooksConfig(t *testing.T) {
 	}
 }
 
+func TestLoadConfig_HooksFromTOML(t *testing.T) {
+	tmpDir := t.TempDir()
+	configDir := filepath.Join(tmpDir, ".config", "skinner")
+	if err := os.MkdirAll(configDir, 0755); err != nil {
+		t.Fatalf("failed to create config dir: %v", err)
+	}
+
+	configContent := `[hooks]
+pre-iteration = "./scripts/check-ready.sh"
+on-iteration-end = "echo done >> /tmp/log"
+on-error = "notify-send Skinner failed"
+on-idle = "./scripts/cleanup.sh"
+
+[hooks.timeout]
+pre-iteration = "60s"
+on-error = "5s"
+on-idle = "2m"
+`
+	if err := os.WriteFile(filepath.Join(configDir, "config.toml"), []byte(configContent), 0644); err != nil {
+		t.Fatalf("failed to write config file: %v", err)
+	}
+
+	t.Setenv("HOME", tmpDir)
+	cfg := LoadConfig()
+
+	// Hook commands
+	if cfg.Hooks.PreIteration != "./scripts/check-ready.sh" {
+		t.Errorf("expected PreIteration=%q, got %q", "./scripts/check-ready.sh", cfg.Hooks.PreIteration)
+	}
+	if cfg.Hooks.OnIterationEnd != "echo done >> /tmp/log" {
+		t.Errorf("expected OnIterationEnd=%q, got %q", "echo done >> /tmp/log", cfg.Hooks.OnIterationEnd)
+	}
+	if cfg.Hooks.OnError != "notify-send Skinner failed" {
+		t.Errorf("expected OnError=%q, got %q", "notify-send Skinner failed", cfg.Hooks.OnError)
+	}
+	if cfg.Hooks.OnIdle != "./scripts/cleanup.sh" {
+		t.Errorf("expected OnIdle=%q, got %q", "./scripts/cleanup.sh", cfg.Hooks.OnIdle)
+	}
+
+	// Timeout overrides
+	if cfg.Hooks.Timeout.PreIteration == nil || *cfg.Hooks.Timeout.PreIteration != 60 {
+		t.Errorf("expected Timeout.PreIteration=60, got %v", cfg.Hooks.Timeout.PreIteration)
+	}
+	if cfg.Hooks.Timeout.OnError == nil || *cfg.Hooks.Timeout.OnError != 5 {
+		t.Errorf("expected Timeout.OnError=5, got %v", cfg.Hooks.Timeout.OnError)
+	}
+	if cfg.Hooks.Timeout.OnIdle == nil || *cfg.Hooks.Timeout.OnIdle != 120 {
+		t.Errorf("expected Timeout.OnIdle=120 (2m), got %v", cfg.Hooks.Timeout.OnIdle)
+	}
+	// on-iteration-end not set in config, should be nil
+	if cfg.Hooks.Timeout.OnIterationEnd != nil {
+		t.Errorf("expected Timeout.OnIterationEnd=nil, got %v", cfg.Hooks.Timeout.OnIterationEnd)
+	}
+	// Default timeout should be unchanged
+	if cfg.Hooks.Timeout.Default != 10 {
+		t.Errorf("expected Timeout.Default=10, got %d", cfg.Hooks.Timeout.Default)
+	}
+}
+
+func TestLoadConfig_HooksUnknownKeysIgnored(t *testing.T) {
+	tmpDir := t.TempDir()
+	configDir := filepath.Join(tmpDir, ".config", "skinner")
+	if err := os.MkdirAll(configDir, 0755); err != nil {
+		t.Fatalf("failed to create config dir: %v", err)
+	}
+
+	configContent := `[hooks]
+pre-iteration = "./scripts/check.sh"
+unknown-hook = "should be ignored"
+
+[hooks.timeout]
+unknown-hook = "30s"
+`
+	if err := os.WriteFile(filepath.Join(configDir, "config.toml"), []byte(configContent), 0644); err != nil {
+		t.Fatalf("failed to write config file: %v", err)
+	}
+
+	t.Setenv("HOME", tmpDir)
+	cfg := LoadConfig()
+
+	// Known hook should be parsed
+	if cfg.Hooks.PreIteration != "./scripts/check.sh" {
+		t.Errorf("expected PreIteration=%q, got %q", "./scripts/check.sh", cfg.Hooks.PreIteration)
+	}
+	// Unknown hooks silently ignored — no error, other fields unchanged
+	if cfg.Hooks.OnError != "" {
+		t.Errorf("expected empty OnError, got %q", cfg.Hooks.OnError)
+	}
+}
+
+func TestParseDuration(t *testing.T) {
+	tests := []struct {
+		input   string
+		wantSec int
+		wantOK  bool
+	}{
+		{"30s", 30, true},
+		{"2m", 120, true},
+		{"5s", 5, true},
+		{"0s", 0, true},
+		{"", 0, false},
+		{"s", 0, false},
+		{"30", 0, false},
+		{"abc", 0, false},
+		{"30x", 0, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			got, ok := parseDuration(tt.input)
+			if ok != tt.wantOK {
+				t.Errorf("parseDuration(%q): ok=%v, want %v", tt.input, ok, tt.wantOK)
+			}
+			if got != tt.wantSec {
+				t.Errorf("parseDuration(%q)=%d, want %d", tt.input, got, tt.wantSec)
+			}
+		})
+	}
+}
+
 func TestLoadConfig_NoConfigFile(t *testing.T) {
 	// Create a temporary directory with no config file
 	tmpDir := t.TempDir()

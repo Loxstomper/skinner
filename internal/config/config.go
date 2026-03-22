@@ -86,6 +86,27 @@ func DefaultPricing() map[string]ModelPricing {
 	}
 }
 
+// parseDuration converts a duration string like "30s" or "2m" to seconds.
+// Returns the value and true on success, or 0 and false on failure.
+func parseDuration(s string) (int, bool) {
+	if len(s) < 2 {
+		return 0, false
+	}
+	unit := s[len(s)-1]
+	num, err := strconv.Atoi(s[:len(s)-1])
+	if err != nil || num < 0 {
+		return 0, false
+	}
+	switch unit {
+	case 's':
+		return num, true
+	case 'm':
+		return num * 60, true
+	default:
+		return 0, false
+	}
+}
+
 // LoadConfig reads ~/.config/skinner/config.toml and returns a Config
 // with defaults for any missing values. If the file does not exist or
 // cannot be read, defaults are returned with no error.
@@ -152,6 +173,31 @@ func LoadConfig() Config {
 		case section == "plan":
 			if key == "command" && value != "" {
 				cfg.PlanCommand = value
+			}
+		case section == "hooks":
+			switch key {
+			case "pre-iteration":
+				cfg.Hooks.PreIteration = value
+			case "on-iteration-end":
+				cfg.Hooks.OnIterationEnd = value
+			case "on-error":
+				cfg.Hooks.OnError = value
+			case "on-idle":
+				cfg.Hooks.OnIdle = value
+			}
+		case section == "hooks.timeout":
+			if secs, ok := parseDuration(value); ok {
+				v := secs
+				switch key {
+				case "pre-iteration":
+					cfg.Hooks.Timeout.PreIteration = &v
+				case "on-iteration-end":
+					cfg.Hooks.Timeout.OnIterationEnd = &v
+				case "on-error":
+					cfg.Hooks.Timeout.OnError = &v
+				case "on-idle":
+					cfg.Hooks.Timeout.OnIdle = &v
+				}
 			}
 		case strings.HasPrefix(section, "pricing."):
 			modelName := strings.TrimPrefix(section, "pricing.")
