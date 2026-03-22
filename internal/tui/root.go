@@ -424,9 +424,18 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		hookCtx.IterationExit = &exitCode
 		m.hookRunner.RunEvent("on-iteration-end", hookCtx)
 
+		// Fire on-error if iteration failed (after on-iteration-end per spec)
+		if msg.err != nil {
+			m.hookRunner.RunEvent("on-error", hookCtx)
+		}
+
 		if !m.quitting && m.controller.ShouldStartNext() {
 			return m, m.spawnIteration()
 		}
+
+		// Loop stopped — fire on-idle
+		m.hookRunner.RunEvent("on-idle", m.buildHookContext())
+
 		if m.exitOnComplete {
 			m.quitting = true
 			return m, tea.Quit
