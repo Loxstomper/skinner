@@ -29,6 +29,10 @@ type usageMsg struct{ session.UsageEvent }
 type iterationEndMsg struct{}
 type subprocessExitMsg struct{ err error }
 type tickMsg time.Time
+type preIterationResultMsg struct {
+	Result hooks.PreIterationResult
+	Err    error
+}
 type promptEditorDoneMsg struct{ err error }
 type planEditorDoneMsg struct{ err error }
 type planModeDoneMsg struct{ err error }
@@ -381,6 +385,32 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case iterationEndMsg:
 		return m, waitForEvent(m.eventCh)
+
+	case preIterationResultMsg:
+		if msg.Err != nil {
+			m.statusFlash = fmt.Sprintf("pre-iteration hook failed: %v", msg.Err)
+			m.controller.Session.Phase = model.PhaseFinished
+			m.hookRunner.RunEvent("on-idle", m.buildHookContext())
+			if m.exitOnComplete {
+				m.quitting = true
+				return m, tea.Quit
+			}
+			return m, nil
+		}
+		if msg.Result.Done {
+			m.controller.Session.Phase = model.PhaseFinished
+			m.hookRunner.RunEvent("on-idle", m.buildHookContext())
+			if m.exitOnComplete {
+				m.quitting = true
+				return m, tea.Quit
+			}
+			return m, nil
+		}
+		prompt := m.promptContent
+		if msg.Result.Prompt != "" {
+			prompt = msg.Result.Prompt
+		}
+		return m, m.startIteration(prompt)
 
 	case subprocessExitMsg:
 		m.controller.CompleteIteration(msg.err)
@@ -1544,6 +1574,20 @@ func (m *Model) populateThinkingState(props *TimelineProps) {
 // Subprocess management — delegates to executor
 
 func (m *Model) spawnIteration() tea.Cmd {
+	// If pre-iteration hook is configured, run it first (async via Cmd)
+	if m.hookRunner.CommandFor("pre-iteration") != "" {
+		hookCtx := m.buildHookContext()
+		return func() tea.Msg {
+			result, err := m.hookRunner.RunPre(context.Background(), hookCtx)
+			return preIterationResultMsg{Result: result, Err: err}
+		}
+	}
+
+	return m.startIteration(m.promptContent)
+}
+
+// startIteration begins the actual iteration with the given prompt content.
+func (m *Model) startIteration(prompt string) tea.Cmd {
 	m.controller.StartIteration()
 	m.iterList.OnNewIteration(len(m.controller.Session.Iterations), m.iterListHeight(), m.controller.Session.Runs)
 	if m.iterList.AutoFollow.Following() {
@@ -1552,7 +1596,7 @@ func (m *Model) spawnIteration() tea.Cmd {
 
 	ch := m.eventCh
 
-	eventCh, err := m.exec.Start(context.Background(), m.promptContent)
+	eventCh, err := m.exec.Start(context.Background(), prompt)
 	if err != nil {
 		return func() tea.Msg {
 			return subprocessExitMsg{err: err}
@@ -1577,6 +1621,23 @@ func (m *Model) spawnIteration() tea.Cmd {
 	}()
 
 	return waitForEvent(ch)
+}
+
+// buildHookContext constructs a HookContext from the current session state.
+func (m *Model) buildHookContext() hooks.HookContext {
+	runs := m.controller.Session.Runs
+	ctx := hooks.HookContext{}
+
+	if len(runs) > 0 {
+		currentRun := runs[len(runs)-1]
+		ctx.PromptFile = currentRun.PromptFile
+		ctx.MaxIterations = currentRun.MaxIterations
+		ctx.RunIndex = len(runs) - 1
+		// Iteration about to start = iterations so far in this run + 1
+		ctx.Iteration = len(m.controller.Session.Iterations) - currentRun.StartIndex + 1
+	}
+
+	return ctx
 }
 
 func waitForEvent(ch <-chan tea.Msg) tea.Cmd {
