@@ -32,6 +32,36 @@ type HooksConfig struct {
 	Timeout        HooksTimeoutConfig
 }
 
+// TimeoutFor returns the timeout in seconds for the given hook name.
+// Per-hook overrides take precedence over defaults. Default timeouts
+// are 30s for pre-* hooks and 10s for on-* hooks.
+func (h HooksTimeoutConfig) TimeoutFor(hookName string) int {
+	switch hookName {
+	case "pre-iteration":
+		if h.PreIteration != nil {
+			return *h.PreIteration
+		}
+		return 30
+	case "on-iteration-end":
+		if h.OnIterationEnd != nil {
+			return *h.OnIterationEnd
+		}
+		return h.Default
+	case "on-error":
+		if h.OnError != nil {
+			return *h.OnError
+		}
+		return h.Default
+	case "on-idle":
+		if h.OnIdle != nil {
+			return *h.OnIdle
+		}
+		return h.Default
+	default:
+		return h.Default
+	}
+}
+
 type Config struct {
 	ViewMode    string // "full" or "compact"
 	Layout      string // "side", "bottom", "auto"

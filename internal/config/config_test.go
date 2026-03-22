@@ -329,6 +329,65 @@ unknown-hook = "30s"
 	}
 }
 
+func TestLoadConfig_HooksPartial(t *testing.T) {
+	tmpDir := t.TempDir()
+	configDir := filepath.Join(tmpDir, ".config", "skinner")
+	if err := os.MkdirAll(configDir, 0755); err != nil {
+		t.Fatalf("failed to create config dir: %v", err)
+	}
+
+	configContent := `[hooks]
+pre-iteration = "./scripts/check.sh"
+`
+	if err := os.WriteFile(filepath.Join(configDir, "config.toml"), []byte(configContent), 0644); err != nil {
+		t.Fatalf("failed to write config file: %v", err)
+	}
+
+	t.Setenv("HOME", tmpDir)
+	cfg := LoadConfig()
+
+	if cfg.Hooks.PreIteration != "./scripts/check.sh" {
+		t.Errorf("expected PreIteration=%q, got %q", "./scripts/check.sh", cfg.Hooks.PreIteration)
+	}
+	if cfg.Hooks.OnIterationEnd != "" {
+		t.Errorf("expected empty OnIterationEnd, got %q", cfg.Hooks.OnIterationEnd)
+	}
+	if cfg.Hooks.OnError != "" {
+		t.Errorf("expected empty OnError, got %q", cfg.Hooks.OnError)
+	}
+	if cfg.Hooks.OnIdle != "" {
+		t.Errorf("expected empty OnIdle, got %q", cfg.Hooks.OnIdle)
+	}
+}
+
+func TestHooksTimeoutConfig_TimeoutFor(t *testing.T) {
+	five := 5
+	sixty := 60
+
+	tests := []struct {
+		name     string
+		config   HooksTimeoutConfig
+		hookName string
+		want     int
+	}{
+		{"pre-iteration default", HooksTimeoutConfig{Default: 10}, "pre-iteration", 30},
+		{"on-iteration-end default", HooksTimeoutConfig{Default: 10}, "on-iteration-end", 10},
+		{"on-error default", HooksTimeoutConfig{Default: 10}, "on-error", 10},
+		{"on-idle default", HooksTimeoutConfig{Default: 10}, "on-idle", 10},
+		{"unknown hook", HooksTimeoutConfig{Default: 10}, "unknown", 10},
+		{"pre-iteration override", HooksTimeoutConfig{Default: 10, PreIteration: &sixty}, "pre-iteration", 60},
+		{"on-error override", HooksTimeoutConfig{Default: 10, OnError: &five}, "on-error", 5},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := tt.config.TimeoutFor(tt.hookName)
+			if got != tt.want {
+				t.Errorf("TimeoutFor(%q)=%d, want %d", tt.hookName, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestParseDuration(t *testing.T) {
 	tests := []struct {
 		input   string
