@@ -137,21 +137,12 @@ func parseDuration(s string) (int, bool) {
 	}
 }
 
-// LoadConfig reads ~/.config/skinner/config.toml and returns a Config
-// with defaults for any missing values. If the file does not exist or
-// cannot be read, defaults are returned with no error.
-func LoadConfig() Config {
-	cfg := DefaultConfig()
-
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return cfg
-	}
-
-	path := filepath.Join(home, ".config", "skinner", "config.toml")
+// applyFile reads a TOML config file at path and applies its values
+// to cfg. If the file does not exist or cannot be read, cfg is unchanged.
+func applyFile(cfg *Config, path string) {
 	f, err := os.Open(path)
 	if err != nil {
-		return cfg
+		return
 	}
 	defer func() { _ = f.Close() }()
 
@@ -253,6 +244,24 @@ func LoadConfig() Config {
 			}
 			cfg.Pricing[modelName] = mp
 		}
+	}
+}
+
+// LoadConfig reads config from defaults, then overlays
+// ~/.config/skinner/config.toml (global), then .skinner.toml in the
+// current working directory (local). If either file does not exist,
+// it is silently skipped.
+func LoadConfig() Config {
+	cfg := DefaultConfig()
+
+	// Global config
+	if home, err := os.UserHomeDir(); err == nil {
+		applyFile(&cfg, filepath.Join(home, ".config", "skinner", "config.toml"))
+	}
+
+	// Local config (CWD)
+	if cwd, err := os.Getwd(); err == nil {
+		applyFile(&cfg, filepath.Join(cwd, ".skinner.toml"))
 	}
 
 	return cfg

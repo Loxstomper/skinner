@@ -1,10 +1,17 @@
 # Configuration
 
-## Config File
+## Config Files
 
-Path: `~/.config/skinner/config.toml`
+Skinner loads configuration from two optional files, applied in order:
 
-The config file is optional. If missing or incomplete, defaults apply for all values.
+1. **Global**: `~/.config/skinner/config.toml` — user-wide defaults
+2. **Local**: `.skinner.toml` in the current working directory — per-project overrides
+
+Both files use the same TOML format. The local file overlays the global file: any key set in `.skinner.toml` overrides the corresponding global value. Keys not present in the local file retain their global (or default) value. Map sections like `[pricing.*]` and `[keybindings]` merge per-key — a local entry adds to or overrides individual keys without replacing the entire map.
+
+The local config can be committed to a repository to share project-specific settings (hooks, plan command) with a team, or added to `.gitignore` for personal overrides.
+
+If either file is missing or incomplete, defaults apply for all unset values.
 
 ### Format
 

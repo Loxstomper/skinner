@@ -417,6 +417,114 @@ func TestParseDuration(t *testing.T) {
 	}
 }
 
+func TestLoadConfig_LocalOverlaysGlobal(t *testing.T) {
+	// Set up global config
+	tmpHome := t.TempDir()
+	configDir := filepath.Join(tmpHome, ".config", "skinner")
+	if err := os.MkdirAll(configDir, 0755); err != nil {
+		t.Fatalf("failed to create config dir: %v", err)
+	}
+	globalContent := `[view]
+mode = "compact"
+layout = "side"
+
+[theme]
+name = "global-theme"
+
+[hooks]
+pre-iteration = "./global-hook.sh"
+on-error = "echo global-error"
+`
+	if err := os.WriteFile(filepath.Join(configDir, "config.toml"), []byte(globalContent), 0644); err != nil {
+		t.Fatalf("failed to write global config: %v", err)
+	}
+
+	// Set up local config in a temp CWD
+	tmpCWD := t.TempDir()
+	localContent := `[view]
+mode = "full"
+
+[hooks]
+pre-iteration = "./local-hook.sh"
+`
+	if err := os.WriteFile(filepath.Join(tmpCWD, ".skinner.toml"), []byte(localContent), 0644); err != nil {
+		t.Fatalf("failed to write local config: %v", err)
+	}
+
+	t.Setenv("HOME", tmpHome)
+	origDir, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("failed to get working directory: %v", err)
+	}
+	if err := os.Chdir(tmpCWD); err != nil {
+		t.Fatalf("failed to chdir: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(origDir) })
+
+	cfg := LoadConfig()
+
+	// Local overrides global for view.mode
+	if cfg.ViewMode != "full" {
+		t.Errorf("expected ViewMode=%q (local override), got %q", "full", cfg.ViewMode)
+	}
+	// Global value preserved when local doesn't set it
+	if cfg.Layout != "side" {
+		t.Errorf("expected Layout=%q (from global), got %q", "side", cfg.Layout)
+	}
+	// Local overrides global for hooks.pre-iteration
+	if cfg.Hooks.PreIteration != "./local-hook.sh" {
+		t.Errorf("expected PreIteration=%q (local override), got %q", "./local-hook.sh", cfg.Hooks.PreIteration)
+	}
+	// Global hook preserved when local doesn't set it
+	if cfg.Hooks.OnError != "echo global-error" {
+		t.Errorf("expected OnError=%q (from global), got %q", "echo global-error", cfg.Hooks.OnError)
+	}
+	// Theme from global preserved (local didn't set it)
+	if cfg.ThemeName != "global-theme" {
+		t.Errorf("expected ThemeName=%q (from global), got %q", "global-theme", cfg.ThemeName)
+	}
+}
+
+func TestLoadConfig_LocalOnlyNoGlobal(t *testing.T) {
+	// No global config
+	tmpHome := t.TempDir()
+
+	// Local config in CWD
+	tmpCWD := t.TempDir()
+	localContent := `[view]
+mode = "compact"
+
+[plan]
+command = "claude --local"
+`
+	if err := os.WriteFile(filepath.Join(tmpCWD, ".skinner.toml"), []byte(localContent), 0644); err != nil {
+		t.Fatalf("failed to write local config: %v", err)
+	}
+
+	t.Setenv("HOME", tmpHome)
+	origDir, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("failed to get working directory: %v", err)
+	}
+	if err := os.Chdir(tmpCWD); err != nil {
+		t.Fatalf("failed to chdir: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(origDir) })
+
+	cfg := LoadConfig()
+
+	if cfg.ViewMode != "compact" {
+		t.Errorf("expected ViewMode=%q, got %q", "compact", cfg.ViewMode)
+	}
+	if cfg.PlanCommand != "claude --local" {
+		t.Errorf("expected PlanCommand=%q, got %q", "claude --local", cfg.PlanCommand)
+	}
+	// Defaults still apply for unset values
+	if cfg.ThemeName != "solarized-dark" {
+		t.Errorf("expected default ThemeName=%q, got %q", "solarized-dark", cfg.ThemeName)
+	}
+}
+
 func TestLoadConfig_NoConfigFile(t *testing.T) {
 	// Create a temporary directory with no config file
 	tmpDir := t.TempDir()
