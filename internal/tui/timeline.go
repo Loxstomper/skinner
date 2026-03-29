@@ -49,6 +49,7 @@ type TimelineProps struct {
 	WorkDir           string    // CWD for path trimming in tool call summaries
 	IsThinking        bool      // true when the iteration is thinking (no visible activity)
 	ThinkingStartTime time.Time // when the thinking state began; zero means not thinking
+	Title             string    // optional title displayed as a styled bar above timeline items
 }
 
 // renderedLine pairs a rendered text line with its flat cursor index.
@@ -307,12 +308,59 @@ func (tl *Timeline) handleEnter(props TimelineProps) {
 // gutterWidth is the width of the line number gutter (3-char number + 1 space).
 const gutterWidth = 4
 
+// renderTitleBar renders a styled title bar line: "── Title ────────".
+// Returns an empty string if title is empty.
+func renderTitleBar(title string, width int, th theme.Theme) string {
+	if title == "" {
+		return ""
+	}
+
+	dimStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(th.ForegroundDim))
+	titleStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color(th.Foreground))
+
+	prefix := "── " // 3 chars
+	suffix := " "   // 1 char
+
+	// Check if title needs truncation: prefix(3) + title + suffix(1) + at least 1 dash
+	maxTitleWidth := width - lipgloss.Width(prefix) - lipgloss.Width(suffix) - 1
+	if maxTitleWidth < 1 {
+		maxTitleWidth = 1
+	}
+	if len(title) > maxTitleWidth {
+		title = title[:maxTitleWidth-1] + "…"
+	}
+
+	styledTitle := titleStyle.Render(title)
+	usedWidth := lipgloss.Width(prefix) + lipgloss.Width(styledTitle) + lipgloss.Width(suffix)
+	trailing := width - usedWidth
+	if trailing < 0 {
+		trailing = 0
+	}
+
+	return dimStyle.Render(prefix) + styledTitle + dimStyle.Render(suffix+strings.Repeat("─", trailing))
+}
+
 // View renders the timeline.
 func (tl *Timeline) View(props TimelineProps) string {
 	style := lipgloss.NewStyle().Width(props.Width).Height(props.Height)
 
+	// Render title bar if present, consuming one row of height.
+	var titleLine string
+	effectiveHeight := props.Height
+	if props.Title != "" {
+		titleLine = renderTitleBar(props.Title, props.Width, props.Theme)
+		effectiveHeight--
+		if effectiveHeight < 1 {
+			effectiveHeight = 1
+		}
+	}
+
 	if len(props.Items) == 0 {
-		return style.Render("  No activity yet...")
+		content := "  No activity yet..."
+		if titleLine != "" {
+			content = titleLine + "\n" + content
+		}
+		return style.Render(content)
 	}
 
 	// Reserve gutter space when line numbers are enabled.
@@ -352,8 +400,11 @@ func (tl *Timeline) View(props TimelineProps) string {
 	// Two-phase rendering: phase 1 computes the visible window cheaply (zero styling),
 	// phase 2 renders only visible items. Sub-scroll capping is handled by visibleRange
 	// via itemLineCountForSubScroll.
-	vw := visibleRange(props.Items, tl.Scroll, props.Height, tl.Cursor, props.Width, props.CompactView, tl.SubScrollIdx)
+	vw := visibleRange(props.Items, tl.Scroll, effectiveHeight, tl.Cursor, props.Width, props.CompactView, tl.SubScrollIdx)
 	if vw.StartItem == -1 {
+		if titleLine != "" {
+			return style.Render(titleLine)
+		}
 		return style.Render("")
 	}
 	startIdx := vw.StartItem
@@ -429,11 +480,19 @@ func (tl *Timeline) View(props TimelineProps) string {
 	if startLineOffset > 0 && startLineOffset < len(lines) {
 		lines = lines[startLineOffset:]
 	}
-	if len(lines) > props.Height {
-		lines = lines[:props.Height]
+	if len(lines) > effectiveHeight {
+		lines = lines[:effectiveHeight]
 	}
 
-	return tl.renderVisibleLines(lines, props)
+	renderProps := props
+	if titleLine != "" {
+		renderProps.Height = effectiveHeight
+	}
+	result := tl.renderVisibleLines(lines, renderProps)
+	if titleLine != "" {
+		result = titleLine + "\n" + result
+	}
+	return result
 }
 
 // appendExpandedLines adds expanded content lines for a tool call, applying

@@ -2460,3 +2460,88 @@ func TestTimeline_ThinkingRowDoesNotAffectCursorCount(t *testing.T) {
 		t.Errorf("thinking row should not affect cursor count: got %d, want %d", countWith, countWithout)
 	}
 }
+
+// --- Title bar tests ---
+
+func TestRenderTitleBar_Basic(t *testing.T) {
+	lipgloss.SetColorProfile(termenv.TrueColor)
+	defer lipgloss.SetColorProfile(termenv.Ascii)
+
+	th := testTheme()
+	result := renderTitleBar("Fix parser", 40, th)
+
+	if result == "" {
+		t.Fatal("expected non-empty title bar")
+	}
+	if !strings.Contains(result, "Fix parser") {
+		t.Error("title bar should contain the title text")
+	}
+	w := lipgloss.Width(result)
+	if w != 40 {
+		t.Errorf("expected width=40, got %d", w)
+	}
+}
+
+func TestRenderTitleBar_Truncation(t *testing.T) {
+	lipgloss.SetColorProfile(termenv.TrueColor)
+	defer lipgloss.SetColorProfile(termenv.Ascii)
+
+	th := testTheme()
+	longTitle := "This is a very long title that should be truncated"
+	result := renderTitleBar(longTitle, 30, th)
+
+	if !strings.Contains(result, "…") {
+		t.Error("long title should be truncated with ellipsis")
+	}
+	w := lipgloss.Width(result)
+	if w != 30 {
+		t.Errorf("expected width=30, got %d", w)
+	}
+}
+
+func TestRenderTitleBar_Empty(t *testing.T) {
+	th := testTheme()
+	result := renderTitleBar("", 40, th)
+	if result != "" {
+		t.Errorf("empty title should return empty string, got %q", result)
+	}
+}
+
+func TestTimeline_ViewWithTitle(t *testing.T) {
+	lipgloss.SetColorProfile(termenv.TrueColor)
+	defer lipgloss.SetColorProfile(termenv.Ascii)
+
+	tl := NewTimeline()
+	items := makeTimelineItems()
+	props := timelineProps(items)
+	props.Title = "Fix parser type mismatch"
+
+	output := tl.View(props)
+
+	if !strings.Contains(output, "Fix parser type mismatch") {
+		t.Error("View output should contain the title text")
+	}
+	// Title consumes one line, so the output should still fit in Height
+	lines := strings.Split(output, "\n")
+	if len(lines) > props.Height {
+		t.Errorf("output lines (%d) should not exceed height (%d)", len(lines), props.Height)
+	}
+}
+
+func TestTimeline_ViewWithoutTitle(t *testing.T) {
+	lipgloss.SetColorProfile(termenv.TrueColor)
+	defer lipgloss.SetColorProfile(termenv.Ascii)
+
+	tl := NewTimeline()
+	items := makeTimelineItems()
+	props := timelineProps(items)
+	props.Title = ""
+
+	output := tl.View(props)
+
+	// Should not contain any separator dashes at the top (no title bar)
+	lines := strings.Split(output, "\n")
+	if len(lines) > 0 && strings.HasPrefix(strings.TrimSpace(lines[0]), "──") {
+		t.Error("View without title should not have a title bar line")
+	}
+}
