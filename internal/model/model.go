@@ -131,6 +131,7 @@ type Iteration struct {
 	StartTime         time.Time
 	Duration          time.Duration
 	ThinkingStartTime time.Time // zero value = not thinking
+	Title             string    // optional title from pre-iteration hook
 }
 
 // HasRunningToolCall returns true if any tool call in the iteration is still running.
