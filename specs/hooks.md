@@ -40,6 +40,12 @@ When a `pre-iteration` hook fails or signals done:
 
 The `pre-iteration` hook's stdout is read in full after the process exits and parsed as a single JSON object. The hook communicates intent through the following keys:
 
+| Key | Type | Description |
+|-----|------|-------------|
+| `prompt` | string | Replacement prompt for this iteration. |
+| `title` | string | Header text displayed in the timeline pane. |
+| `done` | bool | When `true`, stop the loop. |
+
 ### Provide a prompt
 
 ```json
@@ -47,6 +53,20 @@ The `pre-iteration` hook's stdout is read in full after the process exits and pa
 ```
 
 When `prompt` is present, its value replaces the prompt file content for this iteration only. The prompt file on disk is not modified. The next iteration re-reads the prompt file as usual.
+
+### Set a title
+
+```json
+{"title": "Fixing auth tests"}
+```
+
+When `title` is present, its value appears as a header in the timeline pane for this iteration. The title is optional — if omitted, no header is shown. When `done` is `true`, `title` is ignored (the iteration never starts, so there is nothing to display).
+
+`title` can be combined with `prompt` to label the work being done:
+
+```json
+{"title": "Auth test fixes", "prompt": "Fix the failing tests in auth_test.go"}
+```
 
 ### Signal completion
 
@@ -60,9 +80,9 @@ When `done` is `true`, the loop stops. No more iterations are started. The sessi
 
 If stdout is empty or is not valid JSON, the iteration proceeds normally using the prompt file content. This means a hook that simply exits 0 with no output has no effect on the iteration.
 
-### Invalid combinations
+### Precedence
 
-If both `prompt` and `done` are present, `done` takes precedence — the loop stops.
+If `done` is `true`, the loop stops — `prompt` and `title` are ignored.
 
 ## Execution Model
 
