@@ -88,6 +88,7 @@ func (r *Runner) BuildEnv(hookName string, ctx HookContext) []string {
 // PreIterationResult holds the parsed output of a pre-iteration hook.
 type PreIterationResult struct {
 	Prompt string // replacement prompt (empty = use prompt file)
+	Title  string // optional header text for the timeline pane
 	Done   bool   // true = stop the loop
 }
 
@@ -126,6 +127,7 @@ func (r *Runner) RunPre(ctx context.Context, hookCtx HookContext) (PreIterationR
 	// Parse JSON output
 	var parsed struct {
 		Prompt string `json:"prompt"`
+		Title  string `json:"title"`
 		Done   *bool  `json:"done"`
 	}
 	if err := json.Unmarshal(out, &parsed); err != nil {
@@ -133,13 +135,18 @@ func (r *Runner) RunPre(ctx context.Context, hookCtx HookContext) (PreIterationR
 		return PreIterationResult{}, nil
 	}
 
-	// done takes precedence over prompt
+	// done takes precedence over prompt and title
 	if parsed.Done != nil && *parsed.Done {
 		return PreIterationResult{Done: true}, nil
 	}
 
-	if parsed.Prompt != "" {
-		return PreIterationResult{Prompt: parsed.Prompt}, nil
+	result := PreIterationResult{
+		Prompt: parsed.Prompt,
+		Title:  parsed.Title,
+	}
+
+	if result.Prompt != "" || result.Title != "" {
+		return result, nil
 	}
 
 	// Valid JSON but no recognized keys = no effect

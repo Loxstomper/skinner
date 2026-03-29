@@ -412,7 +412,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.Result.Prompt != "" {
 			prompt = msg.Result.Prompt
 		}
-		return m, m.startIteration(prompt)
+		return m, m.startIteration(prompt, msg.Result.Title)
 
 	case subprocessExitMsg:
 		m.controller.CompleteIteration(msg.err)
@@ -1605,12 +1605,16 @@ func (m *Model) spawnIteration() tea.Cmd {
 		}
 	}
 
-	return m.startIteration(m.promptContent)
+	return m.startIteration(m.promptContent, "")
 }
 
 // startIteration begins the actual iteration with the given prompt content.
-func (m *Model) startIteration(prompt string) tea.Cmd {
+func (m *Model) startIteration(prompt string, title string) tea.Cmd {
 	m.controller.StartIteration()
+	if title != "" {
+		iters := m.controller.Session.Iterations
+		iters[len(iters)-1].Title = title
+	}
 	m.iterList.OnNewIteration(len(m.controller.Session.Iterations), m.iterListHeight(), m.controller.Session.Runs)
 	if m.iterList.AutoFollow.Following() {
 		m.timeline.ResetPosition()

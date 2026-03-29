@@ -195,6 +195,60 @@ func TestRunner_RunPre_DoneTakesPrecedence(t *testing.T) {
 	}
 }
 
+func TestRunner_RunPre_Title(t *testing.T) {
+	r := NewRunner(config.HooksConfig{
+		PreIteration: `echo '{"title": "Auth fixes"}'`,
+		Timeout:      config.HooksTimeoutConfig{Default: 10},
+	}, t.TempDir())
+
+	result, err := r.RunPre(context.Background(), HookContext{Iteration: 1})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.Title != "Auth fixes" {
+		t.Errorf("expected Title=%q, got %q", "Auth fixes", result.Title)
+	}
+	if result.Prompt != "" {
+		t.Errorf("expected empty Prompt, got %q", result.Prompt)
+	}
+}
+
+func TestRunner_RunPre_TitleWithPrompt(t *testing.T) {
+	r := NewRunner(config.HooksConfig{
+		PreIteration: `echo '{"title": "Auth fixes", "prompt": "fix auth"}'`,
+		Timeout:      config.HooksTimeoutConfig{Default: 10},
+	}, t.TempDir())
+
+	result, err := r.RunPre(context.Background(), HookContext{Iteration: 1})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.Title != "Auth fixes" {
+		t.Errorf("expected Title=%q, got %q", "Auth fixes", result.Title)
+	}
+	if result.Prompt != "fix auth" {
+		t.Errorf("expected Prompt=%q, got %q", "fix auth", result.Prompt)
+	}
+}
+
+func TestRunner_RunPre_DoneIgnoresTitle(t *testing.T) {
+	r := NewRunner(config.HooksConfig{
+		PreIteration: `echo '{"title": "Auth fixes", "done": true}'`,
+		Timeout:      config.HooksTimeoutConfig{Default: 10},
+	}, t.TempDir())
+
+	result, err := r.RunPre(context.Background(), HookContext{Iteration: 1})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !result.Done {
+		t.Error("expected Done=true")
+	}
+	if result.Title != "" {
+		t.Errorf("expected empty Title when done=true, got %q", result.Title)
+	}
+}
+
 func TestRunner_RunPre_EmptyStdout(t *testing.T) {
 	r := NewRunner(config.HooksConfig{
 		PreIteration: "true", // exits 0 with no output
