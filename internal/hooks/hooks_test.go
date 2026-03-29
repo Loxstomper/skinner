@@ -249,6 +249,48 @@ func TestRunner_RunPre_DoneIgnoresTitle(t *testing.T) {
 	}
 }
 
+func TestRunner_RunPre_EmptyTitle(t *testing.T) {
+	r := NewRunner(config.HooksConfig{
+		PreIteration: `echo '{"title": ""}'`,
+		Timeout:      config.HooksTimeoutConfig{Default: 10},
+	}, t.TempDir())
+
+	result, err := r.RunPre(context.Background(), HookContext{Iteration: 1})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.Title != "" {
+		t.Errorf("expected empty Title, got %q", result.Title)
+	}
+	if result.Prompt != "" {
+		t.Errorf("expected empty Prompt, got %q", result.Prompt)
+	}
+	if result.Done {
+		t.Error("expected Done=false")
+	}
+}
+
+func TestRunner_RunPre_TitleWithUnknownKeys(t *testing.T) {
+	r := NewRunner(config.HooksConfig{
+		PreIteration: `echo '{"title": "T", "foo": 1}'`,
+		Timeout:      config.HooksTimeoutConfig{Default: 10},
+	}, t.TempDir())
+
+	result, err := r.RunPre(context.Background(), HookContext{Iteration: 1})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.Title != "T" {
+		t.Errorf("expected Title=%q, got %q", "T", result.Title)
+	}
+	if result.Prompt != "" {
+		t.Errorf("expected empty Prompt, got %q", result.Prompt)
+	}
+	if result.Done {
+		t.Error("expected Done=false")
+	}
+}
+
 func TestRunner_RunPre_EmptyStdout(t *testing.T) {
 	r := NewRunner(config.HooksConfig{
 		PreIteration: "true", // exits 0 with no output
