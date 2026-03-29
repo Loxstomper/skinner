@@ -1363,6 +1363,7 @@ func (m *Model) View() string {
 			LineNumbers: m.lineNumbers,
 			Theme:       m.theme,
 			WorkDir:     m.workDir,
+			Title:       m.selectedIterationTitle(),
 		}
 		m.populateThinkingState(&tlProps)
 		right = m.timeline.View(tlProps)
@@ -1573,6 +1574,7 @@ func (m *Model) timelineProps(items []model.TimelineItem) TimelineProps {
 		LineNumbers: m.lineNumbers,
 		Theme:       m.theme,
 		WorkDir:     m.workDir,
+		Title:       m.selectedIterationTitle(),
 	}
 	m.populateThinkingState(&props)
 	return props
@@ -1811,6 +1813,15 @@ func (m *Model) selectedItems() []model.TimelineItem {
 		return nil
 	}
 	return m.controller.Session.Iterations[idx].Items
+}
+
+// selectedIterationTitle returns the Title of the currently selected iteration.
+func (m *Model) selectedIterationTitle() string {
+	idx := m.iterList.SelectedIndex()
+	if idx >= len(m.controller.Session.Iterations) {
+		return ""
+	}
+	return m.controller.Session.Iterations[idx].Title
 }
 
 // isCursorOnGroup returns true if the timeline cursor is on the group header or any of its children.
