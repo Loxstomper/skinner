@@ -2473,12 +2473,29 @@ func TestRenderTitleBar_Basic(t *testing.T) {
 	if result == "" {
 		t.Fatal("expected non-empty title bar")
 	}
+
+	// Starts with dim dashes (prefix "── ")
+	stripped := stripAnsi(result)
+	if !strings.HasPrefix(stripped, "──") {
+		t.Errorf("title bar should start with dim dashes, got %q", stripped[:min(10, len(stripped))])
+	}
+
+	// Contains bold title text
 	if !strings.Contains(result, "Fix parser") {
 		t.Error("title bar should contain the title text")
 	}
+
+	// Fills to exact width (ANSI-aware measurement)
 	w := lipgloss.Width(result)
 	if w != 40 {
 		t.Errorf("expected width=40, got %d", w)
+	}
+
+	// Trailing fill dashes exist after the title
+	titleIdx := strings.Index(stripped, "Fix parser")
+	afterTitle := stripped[titleIdx+len("Fix parser"):]
+	if !strings.Contains(afterTitle, "─") {
+		t.Error("title bar should have trailing dash fill after the title")
 	}
 }
 
@@ -2490,9 +2507,17 @@ func TestRenderTitleBar_Truncation(t *testing.T) {
 	longTitle := "This is a very long title that should be truncated"
 	result := renderTitleBar(longTitle, 30, th)
 
+	// Title truncated with ellipsis
 	if !strings.Contains(result, "…") {
 		t.Error("long title should be truncated with ellipsis")
 	}
+
+	// Full title should NOT appear (it was truncated)
+	if strings.Contains(result, longTitle) {
+		t.Error("full title should not appear when truncated")
+	}
+
+	// Fills to exact width (ANSI-aware measurement)
 	w := lipgloss.Width(result)
 	if w != 30 {
 		t.Errorf("expected width=30, got %d", w)
@@ -2518,13 +2543,23 @@ func TestTimeline_ViewWithTitle(t *testing.T) {
 
 	output := tl.View(props)
 
+	// Output contains the title text
 	if !strings.Contains(output, "Fix parser type mismatch") {
 		t.Error("View output should contain the title text")
 	}
+
 	// Title consumes one line, so the output should still fit in Height
 	lines := strings.Split(output, "\n")
-	if len(lines) > props.Height {
-		t.Errorf("output lines (%d) should not exceed height (%d)", len(lines), props.Height)
+	if len(lines) != props.Height {
+		t.Errorf("output lines (%d) should equal height (%d)", len(lines), props.Height)
+	}
+
+	// First line should be the title bar (starts with dashes)
+	if len(lines) > 0 {
+		firstLine := stripAnsi(lines[0])
+		if !strings.HasPrefix(firstLine, "──") {
+			t.Errorf("first line should be the title bar, got %q", firstLine[:min(20, len(firstLine))])
+		}
 	}
 }
 
@@ -2543,5 +2578,10 @@ func TestTimeline_ViewWithoutTitle(t *testing.T) {
 	lines := strings.Split(output, "\n")
 	if len(lines) > 0 && strings.HasPrefix(strings.TrimSpace(lines[0]), "──") {
 		t.Error("View without title should not have a title bar line")
+	}
+
+	// Full height used for items (no row consumed by title bar)
+	if len(lines) != props.Height {
+		t.Errorf("without title: output lines (%d) should equal full height (%d)", len(lines), props.Height)
 	}
 }
