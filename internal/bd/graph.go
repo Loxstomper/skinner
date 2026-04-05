@@ -142,6 +142,24 @@ func (g *Graph) FilterByStatus(status string) []*Issue {
 	return result
 }
 
+// FilterBlocked returns non-closed issues that have at least one unresolved
+// (non-closed) blocking dependency.
+func (g *Graph) FilterBlocked() []*Issue {
+	var result []*Issue
+	for _, issue := range g.Issues {
+		if issue.Status == "closed" {
+			continue
+		}
+		for _, depID := range g.blockingDeps[issue.ID] {
+			if dep := g.ByID[depID]; dep != nil && dep.Status != "closed" {
+				result = append(result, issue)
+				break
+			}
+		}
+	}
+	return result
+}
+
 // FuzzySearch returns issues whose title, ID, or description contain the query
 // as a case-insensitive substring.
 func (g *Graph) FuzzySearch(query string) []*Issue {

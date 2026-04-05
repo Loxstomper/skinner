@@ -289,9 +289,14 @@ func (m *Model) tasksViewRefilter() {
 
 	var issues []*bd.Issue
 	switch m.tasksViewTab {
-	case 0: // Ready - open issues (for now, all open; proper ready filtering requires bd ready data)
+	case 0: // Ready - open issues with no unresolved blocking dependencies
+		blocked := m.tasksViewGraph.FilterBlocked()
+		blockedSet := make(map[string]bool, len(blocked))
+		for _, b := range blocked {
+			blockedSet[b.ID] = true
+		}
 		for _, issue := range m.tasksViewGraph.Issues {
-			if issue.Status == "open" {
+			if issue.Status == "open" && !blockedSet[issue.ID] {
 				issues = append(issues, issue)
 			}
 		}
@@ -299,7 +304,7 @@ func (m *Model) tasksViewRefilter() {
 		issues = make([]*bd.Issue, len(m.tasksViewGraph.Issues))
 		copy(issues, m.tasksViewGraph.Issues)
 	case 2: // Blocked
-		issues = m.tasksViewGraph.FilterByStatus("blocked")
+		issues = m.tasksViewGraph.FilterBlocked()
 	case 3: // In Progress
 		issues = m.tasksViewGraph.FilterByStatus("in_progress")
 	}
@@ -580,9 +585,14 @@ func (m *Model) tasksViewTabCount(tab int) int {
 	// Build the base set of issues for this tab.
 	var issues []*bd.Issue
 	switch tab {
-	case 0: // Ready (open status)
+	case 0: // Ready - open issues with no unresolved blocking dependencies
+		blocked := m.tasksViewGraph.FilterBlocked()
+		blockedSet := make(map[string]bool, len(blocked))
+		for _, b := range blocked {
+			blockedSet[b.ID] = true
+		}
 		for _, issue := range m.tasksViewGraph.Issues {
-			if issue.Status == "open" {
+			if issue.Status == "open" && !blockedSet[issue.ID] {
 				issues = append(issues, issue)
 			}
 		}
@@ -590,7 +600,7 @@ func (m *Model) tasksViewTabCount(tab int) int {
 		issues = make([]*bd.Issue, len(m.tasksViewGraph.Issues))
 		copy(issues, m.tasksViewGraph.Issues)
 	case 2: // Blocked
-		issues = m.tasksViewGraph.FilterByStatus("blocked")
+		issues = m.tasksViewGraph.FilterBlocked()
 	case 3: // In Progress
 		issues = m.tasksViewGraph.FilterByStatus("in_progress")
 	}

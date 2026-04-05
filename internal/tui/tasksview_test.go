@@ -221,7 +221,9 @@ func TestTasksViewRefilterByTab(t *testing.T) {
 	issues := []bd.Issue{
 		{ID: "t-1", Status: "open", Priority: 1},
 		{ID: "t-2", Status: "in_progress", Priority: 2},
-		{ID: "t-3", Status: "blocked", Priority: 1},
+		{ID: "t-3", Status: "open", Priority: 1, Dependencies: []bd.Dependency{
+			{DependsOnID: "t-2", Type: "blocks", IssueID: "t-3"},
+		}},
 		{ID: "t-4", Status: "closed", Priority: 3},
 	}
 	m.tasksViewGraph = bd.NewGraph(issues)

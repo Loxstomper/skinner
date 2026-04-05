@@ -290,6 +290,26 @@ func TestFilterByStatus(t *testing.T) {
 	}
 }
 
+func TestFilterBlocked(t *testing.T) {
+	g := NewGraph(makeIssues())
+
+	// root-2 has a blocking dep on child-1 (in_progress, not closed) → blocked.
+	blocked := g.FilterBlocked()
+	if len(blocked) != 1 {
+		t.Fatalf("len(blocked) = %d, want 1", len(blocked))
+	}
+	if blocked[0].ID != "root-2" {
+		t.Errorf("blocked[0].ID = %q, want root-2", blocked[0].ID)
+	}
+
+	// If the blocker is closed, the issue is no longer blocked.
+	g.ByID["child-1"].Status = "closed"
+	blocked = g.FilterBlocked()
+	if len(blocked) != 0 {
+		t.Errorf("len(blocked) after closing blocker = %d, want 0", len(blocked))
+	}
+}
+
 func TestFuzzySearch(t *testing.T) {
 	g := NewGraph(makeIssues())
 

@@ -1,0 +1,6 @@
+[hooks]
+pre-iteration = "./scripts/pre-iteration.sh"
+on-idle = "./scripts/on-idle.sh"
+
+[hooks.timeout]
+pre-iteration = "60s"
